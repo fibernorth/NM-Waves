@@ -1,0 +1,111 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "players",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lastName", "order": "ASCENDING" },
+        { "fieldPath": "firstName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "players",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "lastName", "order": "ASCENDING" },
+        { "fieldPath": "firstName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "players",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "teamId", "order": "ASCENDING" },
+        { "fieldPath": "lastName", "order": "ASCENDING" },
+        { "fieldPath": "firstName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "playerFinances",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "season", "order": "DESCENDING" },
+        { "fieldPath": "playerName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "playerFinances",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "playerId", "order": "ASCENDING" },
+        { "fieldPath": "season", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "playerFinances",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "teamId", "order": "ASCENDING" },
+        { "fieldPath": "playerName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "playerFinances",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "season", "order": "ASCENDING" },
+        { "fieldPath": "playerName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sponsors",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "displayOnPublicSite", "order": "ASCENDING" },
+        { "fieldPath": "businessName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sponsors",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "season", "order": "ASCENDING" },
+        { "fieldPath": "businessName", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "schedules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "teamId", "order": "ASCENDING" },
+        { "fieldPath": "startTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "income",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "season", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "expenses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "season", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "playerMetrics",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "playerId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
