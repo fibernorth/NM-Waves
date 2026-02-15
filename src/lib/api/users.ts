@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  setDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -10,6 +11,8 @@ import {
   orderBy,
   Timestamp
 } from 'firebase/firestore';
+import { initializeApp, getApps, deleteApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { db } from '@/lib/firebase/config';
 import type { User, UserRole } from '@/types/models';
 
@@ -68,6 +71,67 @@ export const usersApi = {
       ...userData,
       updatedAt: Timestamp.now(),
     });
+  },
+
+  // Create a new user (auth account + Firestore doc)
+  // Uses a secondary Firebase app so the current admin session is not affected
+  create: async (data: {
+    email: string;
+    password: string;
+    displayName: string;
+    role: UserRole;
+    permissions?: User['permissions'];
+    teamIds?: string[];
+  }): Promise<string> => {
+    const firebaseConfig = {
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+      appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    };
+
+    // Create secondary app to avoid signing out the current admin
+    const existing = getApps().find(a => a.name === 'userCreator');
+    if (existing) await deleteApp(existing);
+    const secondaryApp = initializeApp(firebaseConfig, 'userCreator');
+    const secondaryAuth = getAuth(secondaryApp);
+
+    try {
+      const cred = await createUserWithEmailAndPassword(secondaryAuth, data.email, data.password);
+      const uid = cred.user.uid;
+
+      // Create user doc in Firestore
+      await setDoc(doc(db, COLLECTION, uid), {
+        email: data.email,
+        displayName: data.displayName,
+        role: data.role,
+        teamIds: data.teamIds || [],
+        linkedPlayerIds: [],
+        permissions: data.permissions || {
+          canEditRosters: false,
+          canViewFinancials: false,
+          canManageSchedules: false,
+          canUploadMedia: false,
+        },
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+
+      // Sign out and clean up the secondary app
+      await secondaryAuth.signOut();
+      await deleteApp(secondaryApp);
+
+      return uid;
+    } catch (error) {
+      // Clean up on failure
+      try {
+        await secondaryAuth.signOut();
+        await deleteApp(secondaryApp);
+      } catch { /* ignore cleanup errors */ }
+      throw error;
+    }
   },
 
   // Delete user document

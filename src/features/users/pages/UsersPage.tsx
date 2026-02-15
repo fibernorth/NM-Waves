@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { usersApi } from '@/lib/api/users';
@@ -18,6 +19,7 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
 import UserEditDialog from '../components/UserEditDialog';
+import UserAddDialog from '../components/UserAddDialog';
 
 const ROLE_CHIP_COLORS: Record<UserRole, 'default' | 'info' | 'success' | 'warning' | 'error'> = {
   visitor: 'default',
@@ -49,6 +51,7 @@ const UsersPage = () => {
   const { user } = useAuthStore();
   const isSuperAdmin = user?.role === 'master-admin';
   const [openDialog, setOpenDialog] = useState(false);
+  const [openAddDialog, setOpenAddDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [roleFilter, setRoleFilter] = useState<string>('all');
 
@@ -176,6 +179,9 @@ const UsersPage = () => {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">User Management</Typography>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpenAddDialog(true)}>
+          Add User
+        </Button>
       </Box>
 
       <Box sx={{ mb: 2 }}>
@@ -213,6 +219,11 @@ const UsersPage = () => {
         open={openDialog}
         onClose={handleCloseDialog}
         user={selectedUser}
+      />
+
+      <UserAddDialog
+        open={openAddDialog}
+        onClose={() => setOpenAddDialog(false)}
       />
     </Box>
   );
