@@ -15,6 +15,7 @@ import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { incomeApi } from '@/lib/api/accounting';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -24,7 +25,7 @@ import toast from 'react-hot-toast';
 const IncomePage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
 
   const [selectedSeason, setSelectedSeason] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -91,6 +92,12 @@ const IncomePage = () => {
       renderCell: (params) => (
         <Chip label={params.value.replace('_', ' ')} size="small" color="success" variant="outlined" />
       ),
+    },
+    {
+      field: 'payerName',
+      headerName: 'Payer',
+      width: 140,
+      renderCell: (params) => params.value || '--',
     },
     {
       field: 'description',

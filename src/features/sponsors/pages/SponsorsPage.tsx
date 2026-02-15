@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Box, Typography, Button, Paper, Chip, Link } from '@mui/material';
+import { useState, useMemo } from 'react';
+import { Box, Typography, Button, Paper, Chip, Link, Grid, Card, CardContent } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AddIcon from '@mui/icons-material/Add';
@@ -9,6 +9,7 @@ import { sponsorsApi } from '@/lib/api/sponsors';
 import { Sponsor } from '@/types/models';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import SponsorFormDialog from '../components/SponsorFormDialog';
 
 const levelColorMap: Record<string, string> = {
@@ -21,7 +22,7 @@ const levelColorMap: Record<string, string> = {
 const SponsorsPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedSponsor, setSelectedSponsor] = useState<Sponsor | null>(null);
 
@@ -29,6 +30,13 @@ const SponsorsPage = () => {
     queryKey: ['sponsors'],
     queryFn: () => sponsorsApi.getAll(),
   });
+
+  const totalSponsored = useMemo(() => {
+    return sponsors.reduce((sum, s) => {
+      const playerTotal = (s.sponsoredPlayers || []).reduce((ps: number, sp: any) => ps + sp.amount, 0);
+      return sum + playerTotal;
+    }, 0);
+  }, [sponsors]);
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => sponsorsApi.delete(id),
@@ -176,6 +184,33 @@ const SponsorsPage = () => {
           </Button>
         )}
       </Box>
+
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} sm={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary">Total Sponsors</Typography>
+              <Typography variant="h4">{sponsors.length}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary">Total Sponsored Amount</Typography>
+              <Typography variant="h4" color="success.main">${totalSponsored.toFixed(2)}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary">Public Sponsors</Typography>
+              <Typography variant="h4">{sponsors.filter(s => s.displayOnPublicSite).length}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
 
       <Paper sx={{ height: 600, width: '100%' }}>
         <DataGrid

@@ -36,6 +36,9 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
+import GCStatsPanel from '@/features/gamechanger/components/GCStatsPanel';
+import GCGamesPanel from '@/features/gamechanger/components/GCGamesPanel';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import TeamFormDialog from '../components/TeamFormDialog';
@@ -46,7 +49,7 @@ const TeamDetailsPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
 
   // Dialog states
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -70,8 +73,8 @@ const TeamDetailsPage = () => {
     isLoading: playersLoading,
   } = useQuery({
     queryKey: ['players', 'team', id],
-    queryFn: () => playersApi.getByTeam(id!),
-    enabled: !!id,
+    queryFn: () => playersApi.getByTeam(id!, team?.name),
+    enabled: !!id && !!team,
   });
 
   const { data: allPlayers = [] } = useQuery({
@@ -211,23 +214,35 @@ const TeamDetailsPage = () => {
     },
     {
       field: 'parentName',
-      headerName: 'Parent Name',
+      headerName: 'Primary Contact',
       flex: 1,
       minWidth: 130,
-      renderCell: (params) => params.value || '--',
+      renderCell: (params) => {
+        const player = params.row as Player;
+        const primary = player.contacts?.find(c => c.isPrimaryContact) || player.contacts?.[0];
+        return primary?.name || player.parentName || '--';
+      },
     },
     {
       field: 'parentEmail',
-      headerName: 'Parent Email',
+      headerName: 'Contact Email',
       flex: 1,
       minWidth: 180,
-      renderCell: (params) => params.value || '--',
+      renderCell: (params) => {
+        const player = params.row as Player;
+        const primary = player.contacts?.find(c => c.isPrimaryContact) || player.contacts?.[0];
+        return primary?.email || player.parentEmail || '--';
+      },
     },
     {
       field: 'parentPhone',
-      headerName: 'Parent Phone',
+      headerName: 'Contact Phone',
       width: 130,
-      renderCell: (params) => params.value || '--',
+      renderCell: (params) => {
+        const player = params.row as Player;
+        const primary = player.contacts?.find(c => c.isPrimaryContact) || player.contacts?.[0];
+        return primary?.phone || player.parentPhone || '--';
+      },
     },
     {
       field: 'actions',
@@ -542,6 +557,14 @@ const TeamDetailsPage = () => {
             />
           </Box>
         </Paper>
+      )}
+
+      {/* ===== GameChanger Synced Data ===== */}
+      {team.gcTeamId && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mb: 4 }}>
+          <GCGamesPanel teamId={team.id} gcTeamId={team.gcTeamId} />
+          <GCStatsPanel teamId={team.id} />
+        </Box>
       )}
 
       {/* ===== Edit Team Dialog ===== */}

@@ -18,25 +18,30 @@ import { useQuery } from '@tanstack/react-query';
 import { playerFinancesApi } from '@/lib/api/finances';
 import { teamsApi } from '@/lib/api/teams';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import PaymentIcon from '@mui/icons-material/Payment';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import PeopleIcon from '@mui/icons-material/People';
 import BusinessIcon from '@mui/icons-material/Business';
+import QrCodeIcon from '@mui/icons-material/QrCode';
 import PaymentDialog from '../components/PaymentDialog';
 import SponsorPaymentDialog from '../components/SponsorPaymentDialog';
+import InvoiceQRCard from '../components/InvoiceQRCard';
 import { PlayerFinance } from '@/types/models';
 
 const BillingPage = () => {
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
 
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [balanceFilter, setBalanceFilter] = useState<string>('all');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [sponsorPaymentDialogOpen, setSponsorPaymentDialogOpen] = useState(false);
   const [selectedFinance, setSelectedFinance] = useState<PlayerFinance | null>(null);
+  const [qrDialogOpen, setQrDialogOpen] = useState(false);
+  const [qrFinance, setQrFinance] = useState<PlayerFinance | null>(null);
 
   const { data: allFinances = [], isLoading } = useQuery({
     queryKey: ['playerFinances'],
@@ -155,6 +160,19 @@ const BillingPage = () => {
       valueGetter: (params) => params.value?.length || 0,
     },
     {
+      field: 'lastPayer',
+      headerName: 'Last Payer',
+      width: 140,
+      valueGetter: (params) => {
+        const payments = params.row.payments || [];
+        if (payments.length === 0) return '--';
+        const last = payments[payments.length - 1];
+        if (last.isAnonymous && !isAdmin) return 'Anonymous Sponsor';
+        if (last.isAnonymous) return `${last.payerName || last.sponsorName || '--'} (Anon)`;
+        return last.payerName || last.sponsorName || '--';
+      },
+    },
+    {
       field: 'actions',
       headerName: 'Actions',
       width: 150,
@@ -167,15 +185,29 @@ const BillingPage = () => {
             </IconButton>
           </Tooltip>
           {isAdmin && (
-            <Tooltip title="Record Payment">
-              <IconButton
-                size="small"
-                color="success"
-                onClick={() => handleRecordPayment(params.row)}
-              >
-                <PaymentIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            <>
+              <Tooltip title="Record Payment">
+                <IconButton
+                  size="small"
+                  color="success"
+                  onClick={() => handleRecordPayment(params.row)}
+                >
+                  <PaymentIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="QR Invoice">
+                <IconButton
+                  size="small"
+                  color="info"
+                  onClick={() => {
+                    setQrFinance(params.row);
+                    setQrDialogOpen(true);
+                  }}
+                >
+                  <QrCodeIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </>
           )}
         </Box>
       ),
@@ -355,6 +387,22 @@ const BillingPage = () => {
         onClose={() => setSponsorPaymentDialogOpen(false)}
         finances={allFinances}
       />
+
+      {/* QR Invoice Dialog */}
+      {qrFinance && (
+        <InvoiceQRCard
+          open={qrDialogOpen}
+          onClose={() => {
+            setQrDialogOpen(false);
+            setQrFinance(null);
+          }}
+          financeId={qrFinance.id}
+          playerId={qrFinance.playerId}
+          playerName={qrFinance.playerName}
+          teamName={qrFinance.teamName}
+          amountDue={Math.max(0, Math.abs(qrFinance.balance))}
+        />
+      )}
     </Box>
   );
 };

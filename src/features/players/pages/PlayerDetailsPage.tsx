@@ -26,8 +26,11 @@ import { playersApi } from '@/lib/api/players';
 import { equipmentApi } from '@/lib/api/equipment';
 import { playerFinancesApi } from '@/lib/api/finances';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
+import GCStatsPanel from '@/features/gamechanger/components/GCStatsPanel';
 import { format, differenceInYears } from 'date-fns';
 import PlayerFormDialog from '../components/PlayerFormDialog';
+import PlayerDocumentsCard from '../components/PlayerDocumentsCard';
 
 /**
  * Derives a softball age group label from a date of birth.
@@ -74,7 +77,7 @@ const PlayerDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
@@ -283,16 +286,45 @@ const PlayerDetailsPage = () => {
               </Typography>
               <Divider sx={{ mb: 2 }} />
 
-              <Typography
-                variant="subtitle2"
-                color="primary"
-                sx={{ mb: 1, fontWeight: 600 }}
-              >
-                Parent / Guardian
-              </Typography>
-              <InfoRow label="Name" value={player.parentName} />
-              <InfoRow label="Email" value={player.parentEmail} />
-              <InfoRow label="Phone" value={player.parentPhone} />
+              {player.contacts.length > 0 ? (
+                <>
+                  <Typography variant="subtitle2" color="primary" sx={{ mb: 1, fontWeight: 600 }}>
+                    Contacts
+                  </Typography>
+                  {player.contacts.map((contact, index) => (
+                    <Box key={index} sx={{ mb: index < player.contacts.length - 1 ? 2 : 0, pl: 1, borderLeft: '3px solid', borderColor: 'divider' }}>
+                      <InfoRow
+                        label="Name"
+                        value={
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {contact.name}
+                            {contact.relationship && (
+                              <Chip label={contact.relationship} size="small" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />
+                            )}
+                            {contact.isPrimaryContact && (
+                              <Chip label="Primary" size="small" color="primary" sx={{ height: 20, fontSize: '0.7rem' }} />
+                            )}
+                            {contact.isFinancialParty && (
+                              <Chip label="Financial" size="small" color="warning" sx={{ height: 20, fontSize: '0.7rem' }} />
+                            )}
+                          </Box>
+                        }
+                      />
+                      <InfoRow label="Email" value={contact.email} />
+                      <InfoRow label="Phone" value={contact.phone} />
+                    </Box>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <Typography variant="subtitle2" color="primary" sx={{ mb: 1, fontWeight: 600 }}>
+                    Parent / Guardian
+                  </Typography>
+                  <InfoRow label="Name" value={player.parentName} />
+                  <InfoRow label="Email" value={player.parentEmail} />
+                  <InfoRow label="Phone" value={player.parentPhone} />
+                </>
+              )}
 
               <Divider sx={{ my: 2 }} />
 
@@ -305,49 +337,6 @@ const PlayerDetailsPage = () => {
               </Typography>
               <InfoRow label="Name" value={player.emergencyContact} />
               <InfoRow label="Phone" value={player.emergencyPhone} />
-
-              {player.contacts.length > 0 && (
-                <>
-                  <Divider sx={{ my: 2 }} />
-                  <Typography
-                    variant="subtitle2"
-                    color="text.secondary"
-                    sx={{ mb: 1, fontWeight: 600 }}
-                  >
-                    Additional Contacts
-                  </Typography>
-                  {player.contacts.map((contact, index) => (
-                    <Box
-                      key={index}
-                      sx={{
-                        mb: index < player.contacts.length - 1 ? 2 : 0,
-                        pl: 1,
-                        borderLeft: '3px solid',
-                        borderColor: 'divider',
-                      }}
-                    >
-                      <InfoRow
-                        label="Name"
-                        value={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            {contact.name}
-                            {contact.relationship && (
-                              <Chip
-                                label={contact.relationship}
-                                size="small"
-                                variant="outlined"
-                                sx={{ height: 20, fontSize: '0.7rem' }}
-                              />
-                            )}
-                          </Box>
-                        }
-                      />
-                      <InfoRow label="Email" value={contact.email} />
-                      <InfoRow label="Phone" value={contact.phone} />
-                    </Box>
-                  ))}
-                </>
-              )}
             </CardContent>
           </Card>
         </Grid>
@@ -404,6 +393,11 @@ const PlayerDetailsPage = () => {
               </Paper>
             </CardContent>
           </Card>
+        </Grid>
+
+        {/* Player Documents (birth certificates, etc.) */}
+        <Grid item xs={12} md={6}>
+          <PlayerDocumentsCard player={player} />
         </Grid>
 
         {/* Equipment */}
@@ -678,6 +672,11 @@ const PlayerDetailsPage = () => {
             </Card>
           </Grid>
         )}
+
+        {/* GameChanger Stats */}
+        <Grid item xs={12}>
+          <GCStatsPanel playerId={id} />
+        </Grid>
       </Grid>
 
       {/* Edit Dialog */}

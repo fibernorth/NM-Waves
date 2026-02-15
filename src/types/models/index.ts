@@ -1,12 +1,12 @@
 // User Roles
-export type UserRole = 'visitor' | 'parent' | 'coach' | 'admin' | 'master-admin';
+export type UserRole = 'visitor' | 'parent' | 'coach' | 'admin' | 'master-admin' | 'sponsor';
 
 // User Model
 export interface User {
   uid: string;
   email: string;
   displayName: string;
-  role: UserRole;
+  roles: UserRole[];
   teamIds: string[];
   linkedPlayerIds: string[];
   permissions: {
@@ -39,9 +39,26 @@ export interface Team {
 // Player Contact
 export interface PlayerContact {
   name: string;
-  relationship: string;
+  relationship: 'Mother' | 'Father' | 'Stepmother' | 'Stepfather' | 'Guardian' | 'Other' | string;
   email: string;
   phone: string;
+  isPrimaryContact?: boolean;
+  isFinancialParty?: boolean;
+}
+
+// Player Document (birth certificate, etc.)
+export type PlayerDocumentType = 'birth_certificate' | 'medical_form' | 'waiver' | 'report_card' | 'other';
+
+export interface PlayerDocument {
+  id: string;
+  type: PlayerDocumentType;
+  label: string;
+  fileUrl: string;
+  fileName: string;
+  fileSize: number;
+  uploadedBy: string;
+  uploadedByName?: string;
+  uploadedAt: Date;
 }
 
 // Player Model
@@ -66,6 +83,7 @@ export interface Player {
   notes?: string;
   dateOfBirth?: Date;
   playingUpFrom?: string;
+  documents?: PlayerDocument[];
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -121,17 +139,40 @@ export interface Payment {
   id: string;
   amount: number;
   date: Date;
-  method: 'cash' | 'check' | 'venmo' | 'zelle' | 'card' | 'credit_card' | 'bank_transfer' | 'sponsor' | 'other';
+  method: 'cash' | 'check' | 'venmo' | 'zelle' | 'card' | 'credit_card' | 'bank_transfer' | 'sponsor' | 'stripe' | 'other';
   reference?: string;
   note?: string;
   notes?: string;
+  payerName?: string;
+  payerEmail?: string;
   sponsorId?: string;
   sponsorName?: string;
+  stripeSessionId?: string;
+  isAnonymous?: boolean;
+  processingFee?: number;
   reconciled?: boolean;
   reconciledAt?: Date;
   reconciledBy?: string;
   recordedBy: string;
   recordedAt: Date;
+}
+
+// Invoice Token Model (for QR code payments)
+export interface InvoiceToken {
+  id: string;
+  financeId: string;
+  playerId: string;
+  playerName: string;
+  teamName: string;
+  season: string;
+  amountDue: number;
+  token: string;
+  expiresAt: Date;
+  createdBy: string;
+  createdAt: Date;
+  used: boolean;
+  usedAt?: Date;
+  usedBy?: string;
 }
 
 // Announcement Model
@@ -250,6 +291,8 @@ export interface SponsoredPlayer {
   date: Date;
 }
 
+export type SponsorshipType = 'player_sponsor' | 'team_sponsor' | 'general';
+
 export interface Sponsor {
   id: string;
   businessName: string;
@@ -259,10 +302,14 @@ export interface Sponsor {
   contactEmail?: string;
   contactPhone?: string;
   level: 'gold' | 'silver' | 'bronze' | 'custom';
+  sponsorshipType?: SponsorshipType;
   amount?: number;
   displayOnPublicSite: boolean;
   season: string;
   sponsoredPlayers?: SponsoredPlayer[];
+  userId?: string;
+  stripeCustomerId?: string;
+  totalSponsored?: number;
   createdAt?: Date;
 }
 
@@ -370,6 +417,7 @@ export interface Income {
   amount: number;
   source: string;
   description: string;
+  payerName?: string;
   paymentMethod: 'cash' | 'check' | 'credit_card' | 'bank_transfer' | 'venmo' | 'zelle' | 'other';
   checkNumber?: string;
   referenceNumber?: string;
@@ -491,6 +539,37 @@ export interface FinancialSummary {
 }
 
 // ============================================
+// HOMEPAGE POSTS
+// ============================================
+
+export type HomepagePostType = 'news' | 'announcement' | 'photo' | 'video' | 'score' | 'highlight';
+
+export interface HomepagePost {
+  id: string;
+  type: HomepagePostType;
+  title: string;
+  body?: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  // Score fields
+  teamId?: string;
+  teamName?: string;
+  opponent?: string;
+  scoreUs?: number;
+  scoreThem?: number;
+  gameDate?: Date;
+  result?: 'W' | 'L' | 'T';
+  // Highlight fields
+  statHighlights?: { playerName: string; stat: string; value: string }[];
+  pinned: boolean;
+  published: boolean;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ============================================
 // EQUIPMENT MANAGEMENT
 // ============================================
 
@@ -512,4 +591,36 @@ export interface Equipment {
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// ============================================
+// GAMECHANGER INTEGRATION
+// ============================================
+
+export type GCStatType = 'batting' | 'pitching' | 'fielding';
+
+export interface GCStats {
+  id: string;
+  playerId: string;
+  playerName?: string;
+  teamId: string;
+  gcTeamId: string;
+  season: string;
+  statType: GCStatType;
+  stats: Record<string, number>;
+  scrapedAt: Date;
+}
+
+export interface GCGame {
+  id: string;
+  gcTeamId: string;
+  teamId: string;
+  opponent: string;
+  date: Date;
+  location: string;
+  scoreUs: number;
+  scoreThem: number;
+  result: 'W' | 'L' | 'T';
+  season: string;
+  scrapedAt: Date;
 }

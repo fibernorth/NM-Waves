@@ -10,6 +10,7 @@ import { Tournament } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import TournamentFormDialog from '../components/TournamentFormDialog';
 
 const statusColorMap: Record<string, 'info' | 'warning' | 'success'> = {
@@ -27,7 +28,7 @@ const statusLabelMap: Record<string, string> = {
 const TournamentsPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
 

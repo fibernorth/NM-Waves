@@ -9,14 +9,15 @@ import {
   FormControlLabel,
   Checkbox,
   Box,
-  MenuItem,
   Typography,
+  Autocomplete,
 } from '@mui/material';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { usersApi } from '@/lib/api/users';
+import { teamsApi } from '@/lib/api/teams';
 import type { User, UserRole } from '@/types/models';
 import toast from 'react-hot-toast';
 
@@ -26,15 +27,16 @@ const ROLES: { value: UserRole; label: string }[] = [
   { value: 'coach', label: 'Coach' },
   { value: 'admin', label: 'Admin' },
   { value: 'master-admin', label: 'Super Admin' },
+  { value: 'sponsor', label: 'Sponsor' },
 ];
 
 const userEditSchema = z.object({
-  role: z.enum(['visitor', 'parent', 'coach', 'admin', 'master-admin']),
+  roles: z.array(z.enum(['visitor', 'parent', 'coach', 'admin', 'master-admin', 'sponsor'])).min(1, 'At least one role is required'),
   canEditRosters: z.boolean(),
   canViewFinancials: z.boolean(),
   canManageSchedules: z.boolean(),
   canUploadMedia: z.boolean(),
-  teamIds: z.string(),
+  teamIds: z.array(z.string()),
 });
 
 type UserEditFormData = z.infer<typeof userEditSchema>;
@@ -48,8 +50,13 @@ interface UserEditDialogProps {
 const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
   const queryClient = useQueryClient();
 
+  const { data: teams = [] } = useQuery({
+    queryKey: ['teams'],
+    queryFn: () => teamsApi.getAll(),
+    enabled: open,
+  });
+
   const {
-    register,
     handleSubmit,
     reset,
     control,
@@ -57,53 +64,48 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
   } = useForm<UserEditFormData>({
     resolver: zodResolver(userEditSchema),
     defaultValues: {
-      role: 'visitor',
+      roles: ['visitor'],
       canEditRosters: false,
       canViewFinancials: false,
       canManageSchedules: false,
       canUploadMedia: false,
-      teamIds: '',
+      teamIds: [],
     },
   });
 
   useEffect(() => {
     if (user) {
       reset({
-        role: user.role,
+        roles: user.roles?.length ? user.roles : ['visitor'],
         canEditRosters: user.permissions?.canEditRosters ?? false,
         canViewFinancials: user.permissions?.canViewFinancials ?? false,
         canManageSchedules: user.permissions?.canManageSchedules ?? false,
         canUploadMedia: user.permissions?.canUploadMedia ?? false,
-        teamIds: (user.teamIds || []).join(', '),
+        teamIds: user.teamIds || [],
       });
     } else {
       reset({
-        role: 'visitor',
+        roles: ['visitor'],
         canEditRosters: false,
         canViewFinancials: false,
         canManageSchedules: false,
         canUploadMedia: false,
-        teamIds: '',
+        teamIds: [],
       });
     }
   }, [user, reset]);
 
   const updateMutation = useMutation({
     mutationFn: (data: UserEditFormData) => {
-      const teamIdsArray = data.teamIds
-        .split(',')
-        .map(id => id.trim())
-        .filter(id => id.length > 0);
-
       return usersApi.update(user!.uid, {
-        role: data.role,
+        roles: data.roles,
         permissions: {
           canEditRosters: data.canEditRosters,
           canViewFinancials: data.canViewFinancials,
           canManageSchedules: data.canManageSchedules,
           canUploadMedia: data.canUploadMedia,
         },
-        teamIds: teamIdsArray,
+        teamIds: data.teamIds,
       });
     },
     onSuccess: () => {
@@ -121,6 +123,8 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
   };
 
   const isSubmitting = updateMutation.isPending;
+
+  const teamOptions = teams.map(t => ({ id: t.id, label: `${t.name} (${t.ageGroup})` }));
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -142,26 +146,40 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
               <Typography variant="body1">{user?.email || '-'}</Typography>
             </Box>
 
-            <Controller
-              name="role"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  select
-                  label="Role"
-                  error={!!errors.role}
-                  helperText={errors.role?.message}
-                  fullWidth
-                >
-                  {ROLES.map(role => (
-                    <MenuItem key={role.value} value={role.value}>
-                      {role.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Roles
+              </Typography>
+              {errors.roles && (
+                <Typography variant="caption" color="error">{errors.roles.message}</Typography>
               )}
-            />
+              <Box sx={{ display: 'flex', flexDirection: 'column', pl: 1 }}>
+                {ROLES.map(role => (
+                  <Controller
+                    key={role.value}
+                    name="roles"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={field.value.includes(role.value)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                field.onChange([...field.value, role.value]);
+                              } else {
+                                field.onChange(field.value.filter((r: string) => r !== role.value));
+                              }
+                            }}
+                          />
+                        }
+                        label={role.label}
+                      />
+                    )}
+                  />
+                ))}
+              </Box>
+            </Box>
 
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -219,13 +237,29 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
               </Box>
             </Box>
 
-            <TextField
-              label="Team IDs"
-              placeholder="Comma-separated team IDs"
-              {...register('teamIds')}
-              error={!!errors.teamIds}
-              helperText={errors.teamIds?.message || 'Enter team IDs separated by commas'}
-              fullWidth
+            <Controller
+              name="teamIds"
+              control={control}
+              render={({ field }) => (
+                <Autocomplete
+                  multiple
+                  options={teamOptions}
+                  getOptionLabel={(option) => option.label}
+                  value={teamOptions.filter(t => field.value.includes(t.id))}
+                  onChange={(_, newValue) => {
+                    field.onChange(newValue.map(v => v.id));
+                  }}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Teams"
+                      placeholder="Select teams"
+                      helperText="Assign user to one or more teams"
+                    />
+                  )}
+                />
+              )}
             />
           </Box>
         </DialogContent>

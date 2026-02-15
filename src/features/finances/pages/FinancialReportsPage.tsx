@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -19,8 +19,10 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { reportsApi } from '@/lib/api/accounting';
+import { playerFinancesApi } from '@/lib/api/finances';
 import { teamsApi } from '@/lib/api/teams';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import PrintIcon from '@mui/icons-material/Print';
@@ -28,7 +30,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 
 const FinancialReportsPage = () => {
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
 
   const [selectedSeason, setSelectedSeason] = useState<string>('2024 Summer');
   const [selectedTeam, setSelectedTeam] = useState<string | undefined>(undefined);
@@ -43,6 +45,18 @@ const FinancialReportsPage = () => {
     queryFn: () => reportsApi.generateSummary(selectedSeason, selectedTeam),
     enabled: !!selectedSeason,
   });
+
+  const { data: playerFinances = [] } = useQuery({
+    queryKey: ['playerFinances', selectedSeason],
+    queryFn: () => playerFinancesApi.getBySeason(selectedSeason),
+    enabled: !!selectedSeason,
+  });
+
+  const outstandingReceivables = useMemo(() => {
+    return playerFinances
+      .filter(pf => pf.balance < 0)
+      .reduce((sum, pf) => sum + Math.abs(pf.balance), 0);
+  }, [playerFinances]);
 
   if (!isAdmin) {
     return (
@@ -161,6 +175,52 @@ const FinancialReportsPage = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Cash Flow Summary */}
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Cash Flow Summary
+        </Typography>
+        <Typography variant="caption" color="text.secondary" gutterBottom>
+          Cash-basis: counts income when received, expenses when paid
+        </Typography>
+        <TableContainer sx={{ mt: 2 }}>
+          <Table size="small">
+            <TableBody>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 600 }}>Cash In (Total Income Received)</TableCell>
+                <TableCell align="right" sx={{ color: 'success.main', fontWeight: 600 }}>
+                  ${report?.income.total.toFixed(2) || '0.00'}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 600 }}>Cash Out (Total Expenses Paid)</TableCell>
+                <TableCell align="right" sx={{ color: 'error.main', fontWeight: 600 }}>
+                  ${report?.expenses.total.toFixed(2) || '0.00'}
+                </TableCell>
+              </TableRow>
+              <TableRow sx={{ bgcolor: 'action.hover' }}>
+                <TableCell sx={{ fontWeight: 700 }}>Net Cash Flow</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: (report?.netIncome || 0) >= 0 ? 'success.main' : 'error.main' }}>
+                  ${report?.netIncome.toFixed(2) || '0.00'}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 600 }}>Outstanding Receivables (Player Balances)</TableCell>
+                <TableCell align="right" sx={{ color: 'info.main', fontWeight: 600 }}>
+                  ${outstandingReceivables.toFixed(2)}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 600 }}>Outstanding Payables (Unpaid Expenses)</TableCell>
+                <TableCell align="right" sx={{ color: 'warning.main', fontWeight: 600 }}>
+                  ${report?.outstandingPayables.toFixed(2) || '0.00'}
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
 
       {/* Income Statement (P&L) */}
       <Paper sx={{ p: 3, mb: 3 }}>
@@ -340,7 +400,7 @@ const FinancialReportsPage = () => {
             <Typography variant="h6" gutterBottom color="info.main">
               Outstanding Receivables
             </Typography>
-            <Typography variant="h4">${report?.outstandingReceivables.toFixed(2) || '0.00'}</Typography>
+            <Typography variant="h4">${outstandingReceivables.toFixed(2)}</Typography>
             <Typography variant="caption" color="text.secondary">
               Unpaid player balances
             </Typography>

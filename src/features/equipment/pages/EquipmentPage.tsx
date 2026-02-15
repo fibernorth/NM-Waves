@@ -21,6 +21,7 @@ import { equipmentApi } from '@/lib/api/equipment';
 import { teamsApi } from '@/lib/api/teams';
 import { Equipment } from '@/types/models';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import toast from 'react-hot-toast';
 import EquipmentFormDialog from '../components/EquipmentFormDialog';
 import AssignEquipmentDialog from '../components/AssignEquipmentDialog';
@@ -52,7 +53,7 @@ const conditionColors: Record<string, 'success' | 'info' | 'warning' | 'error'> 
 const EquipmentPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
 
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);

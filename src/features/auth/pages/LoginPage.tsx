@@ -30,7 +30,13 @@ const LoginPage = () => {
     try {
       await signIn(email, password);
       toast.success('Signed in successfully');
-      navigate('/dashboard');
+      // Check role for redirect
+      const { user } = useAuthStore.getState();
+      if (user?.roles?.includes('sponsor')) {
+        navigate('/sponsor/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
       toast.error('Failed to sign in');

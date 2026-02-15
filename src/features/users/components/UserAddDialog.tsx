@@ -6,8 +6,10 @@ import {
   DialogActions,
   Button,
   TextField,
+  FormControlLabel,
+  Checkbox,
   Box,
-  MenuItem,
+  Typography,
 } from '@mui/material';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,13 +25,14 @@ const ROLES: { value: UserRole; label: string }[] = [
   { value: 'coach', label: 'Coach' },
   { value: 'admin', label: 'Admin' },
   { value: 'master-admin', label: 'Super Admin' },
+  { value: 'sponsor', label: 'Sponsor' },
 ];
 
 const userAddSchema = z.object({
   email: z.string().email('Valid email is required'),
   displayName: z.string().min(1, 'Display name is required'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
-  role: z.enum(['visitor', 'parent', 'coach', 'admin', 'master-admin']),
+  roles: z.array(z.enum(['visitor', 'parent', 'coach', 'admin', 'master-admin', 'sponsor'])).min(1, 'At least one role is required'),
 });
 
 type UserAddFormData = z.infer<typeof userAddSchema>;
@@ -54,7 +57,7 @@ const UserAddDialog = ({ open, onClose }: UserAddDialogProps) => {
       email: '',
       displayName: '',
       password: '',
-      role: 'parent',
+      roles: ['parent'],
     },
   });
 
@@ -64,7 +67,7 @@ const UserAddDialog = ({ open, onClose }: UserAddDialogProps) => {
         email: '',
         displayName: '',
         password: '',
-        role: 'parent',
+        roles: ['parent'],
       });
     }
   }, [open, reset]);
@@ -75,7 +78,7 @@ const UserAddDialog = ({ open, onClose }: UserAddDialogProps) => {
         email: data.email,
         password: data.password,
         displayName: data.displayName,
-        role: data.role,
+        roles: data.roles,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -125,26 +128,40 @@ const UserAddDialog = ({ open, onClose }: UserAddDialogProps) => {
               helperText={errors.password?.message || 'User can change this after first login'}
               fullWidth
             />
-            <Controller
-              name="role"
-              control={control}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  select
-                  label="Role"
-                  error={!!errors.role}
-                  helperText={errors.role?.message}
-                  fullWidth
-                >
-                  {ROLES.map(role => (
-                    <MenuItem key={role.value} value={role.value}>
-                      {role.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Roles
+              </Typography>
+              {errors.roles && (
+                <Typography variant="caption" color="error">{errors.roles.message}</Typography>
               )}
-            />
+              <Box sx={{ display: 'flex', flexDirection: 'column', pl: 1 }}>
+                {ROLES.map(role => (
+                  <Controller
+                    key={role.value}
+                    name="roles"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={field.value.includes(role.value)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                field.onChange([...field.value, role.value]);
+                              } else {
+                                field.onChange(field.value.filter((r: string) => r !== role.value));
+                              }
+                            }}
+                          />
+                        }
+                        label={role.label}
+                      />
+                    )}
+                  />
+                ))}
+              </Box>
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>

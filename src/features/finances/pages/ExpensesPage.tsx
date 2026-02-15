@@ -16,6 +16,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { expensesApi } from '@/lib/api/accounting';
 import { teamsApi } from '@/lib/api/teams';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -26,7 +27,7 @@ import toast from 'react-hot-toast';
 const ExpensesPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
 
   const [selectedSeason, setSelectedSeason] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -125,6 +126,17 @@ const ExpensesPage = () => {
       field: 'paymentMethod',
       headerName: 'Method',
       width: 110,
+    },
+    {
+      field: 'paidDate',
+      headerName: 'Paid Date',
+      width: 120,
+      renderCell: (params) => {
+        if (!params.value) return <Chip label="Unpaid" size="small" color="error" variant="outlined" />;
+        try {
+          return format(new Date(params.value), 'MM/dd/yyyy');
+        } catch { return '--'; }
+      },
     },
     {
       field: 'isPaid',

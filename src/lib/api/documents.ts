@@ -50,17 +50,17 @@ export const documentsApi = {
     return snapshot.docs.map((d) => convertDocument(d.id, d.data()));
   },
 
-  // Get documents filtered by user role
-  getForRole: async (role: string): Promise<AppDocument[]> => {
+  // Get documents filtered by user roles
+  getForRoles: async (roles: string[]): Promise<AppDocument[]> => {
     const q = query(collection(db, COLLECTION), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
     const allDocs = snapshot.docs.map((d) => convertDocument(d.id, d.data()));
 
-    // Filter based on role visibility
+    // Filter based on role visibility (highest privilege wins)
     return allDocs.filter((doc) => {
-      if (role === 'admin' || role === 'master-admin') return true;
-      if (role === 'coach') return ['public', 'parent', 'coach', 'team'].includes(doc.visibility);
-      if (role === 'parent') return ['public', 'parent'].includes(doc.visibility);
+      if (roles.includes('admin') || roles.includes('master-admin')) return true;
+      if (roles.includes('coach')) return ['public', 'parent', 'coach', 'team'].includes(doc.visibility);
+      if (roles.includes('parent')) return ['public', 'parent'].includes(doc.visibility);
       return doc.visibility === 'public';
     });
   },

@@ -19,6 +19,7 @@ import { volunteersApi } from '@/lib/api/volunteers';
 import { schedulesApi } from '@/lib/api/schedules';
 import { teamsApi } from '@/lib/api/teams';
 import { useAuthStore } from '@/stores/authStore';
+import { isCoach as checkIsCoach } from '@/lib/auth/roles';
 import type { Volunteer } from '@/types/models';
 import toast from 'react-hot-toast';
 import VolunteerFormDialog from '../components/VolunteerFormDialog';
@@ -35,8 +36,7 @@ const STATUS_CONFIG: Record<
 const VolunteersPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
-  const isCoach = user?.role === 'coach' || isAdmin;
+  const isCoach = checkIsCoach(user);
 
   const [teamFilter, setTeamFilter] = useState('all');
   const [eventFilter, setEventFilter] = useState('all');

@@ -18,13 +18,13 @@ import type { PlayerMetric } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { isCoach as checkIsCoach } from '@/lib/auth/roles';
 import MetricFormDialog from '../components/MetricFormDialog';
 
 const MetricsPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isCoachOrAdmin =
-    user?.role === 'coach' || user?.role === 'admin' || user?.role === 'master-admin';
+  const isCoachOrAdmin = checkIsCoach(user);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedMetric, setSelectedMetric] = useState<PlayerMetric | null>(null);
   const [playerFilter, setPlayerFilter] = useState<string>('all');

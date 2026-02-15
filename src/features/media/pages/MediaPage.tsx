@@ -33,6 +33,7 @@ import { MediaItem } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin, isCoach as checkIsCoach } from '@/lib/auth/roles';
 
 const MediaPage = () => {
   const queryClient = useQueryClient();
@@ -41,8 +42,8 @@ const MediaPage = () => {
   const isSmDown = useMediaQuery(theme.breakpoints.down('sm'));
   const isMdDown = useMediaQuery(theme.breakpoints.down('md'));
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
-  const isCoach = user?.role === 'coach' || isAdmin;
+  const isAdmin = checkIsAdmin(user);
+  const isCoach = checkIsCoach(user);
   const canUpload = isCoach || user?.permissions?.canUploadMedia;
 
   const [filterTeam, setFilterTeam] = useState<string>('all');

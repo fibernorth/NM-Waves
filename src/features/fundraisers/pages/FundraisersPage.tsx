@@ -33,13 +33,14 @@ import { Fundraiser } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import FundraiserFormDialog from '../components/FundraiserFormDialog';
 import DonationDialog from '../components/DonationDialog';
 
 const FundraisersPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
   const [openFormDialog, setOpenFormDialog] = useState(false);
   const [selectedFundraiser, setSelectedFundraiser] = useState<Fundraiser | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);

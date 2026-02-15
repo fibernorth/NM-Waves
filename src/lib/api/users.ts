@@ -22,7 +22,7 @@ const convertUser = (id: string, data: any): User => ({
   uid: id,
   email: data.email,
   displayName: data.displayName,
-  role: data.role,
+  roles: data.roles || (data.role ? [data.role] : ['visitor']),
   teamIds: data.teamIds || [],
   linkedPlayerIds: data.linkedPlayerIds || [],
   permissions: {
@@ -43,11 +43,11 @@ export const usersApi = {
     return snapshot.docs.map(doc => convertUser(doc.id, doc.data()));
   },
 
-  // Get users by role
+  // Get users by role (uses array-contains for the roles array)
   getByRole: async (role: UserRole): Promise<User[]> => {
     const q = query(
       collection(db, COLLECTION),
-      where('role', '==', role),
+      where('roles', 'array-contains', role),
       orderBy('displayName')
     );
     const snapshot = await getDocs(q);
@@ -61,10 +61,10 @@ export const usersApi = {
     return docSnap.exists() ? convertUser(docSnap.id, docSnap.data()) : null;
   },
 
-  // Update user (role, permissions, teamIds)
+  // Update user (roles, permissions, teamIds)
   update: async (
     uid: string,
-    userData: Partial<Pick<User, 'role' | 'permissions' | 'teamIds'>>
+    userData: Partial<Pick<User, 'roles' | 'permissions' | 'teamIds'>>
   ): Promise<void> => {
     const docRef = doc(db, COLLECTION, uid);
     await updateDoc(docRef, {
@@ -79,7 +79,7 @@ export const usersApi = {
     email: string;
     password: string;
     displayName: string;
-    role: UserRole;
+    roles: UserRole[];
     permissions?: User['permissions'];
     teamIds?: string[];
   }): Promise<string> => {
@@ -106,7 +106,7 @@ export const usersApi = {
       await setDoc(doc(db, COLLECTION, uid), {
         email: data.email,
         displayName: data.displayName,
-        role: data.role,
+        roles: data.roles,
         teamIds: data.teamIds || [],
         linkedPlayerIds: [],
         permissions: data.permissions || {

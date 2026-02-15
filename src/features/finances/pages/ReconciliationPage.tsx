@@ -16,6 +16,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { incomeApi, expensesApi, reconciliationApi } from '@/lib/api/accounting';
 import { playerFinancesApi } from '@/lib/api/finances';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import { format } from 'date-fns';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -41,7 +42,7 @@ interface ReconciliationRow {
 const ReconciliationPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
 
   const [filterMethod, setFilterMethod] = useState<string>('all');
   const [filterReconciled, setFilterReconciled] = useState<string>('all');

@@ -23,6 +23,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { announcementsApi } from '@/lib/api/announcements';
 import { teamsApi } from '@/lib/api/teams';
 import { useAuthStore } from '@/stores/authStore';
+import { isCoach as checkIsCoach } from '@/lib/auth/roles';
 import type { Announcement } from '@/types/models';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -31,8 +32,7 @@ import AnnouncementFormDialog from '../components/AnnouncementFormDialog';
 const AnnouncementsPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
-  const isCoach = user?.role === 'coach' || isAdmin;
+  const isCoach = checkIsCoach(user);
 
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedAnnouncement, setSelectedAnnouncement] =

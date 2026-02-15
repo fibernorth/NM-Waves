@@ -18,6 +18,7 @@ import type { User, UserRole } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { isMasterAdmin } from '@/lib/auth/roles';
 import UserEditDialog from '../components/UserEditDialog';
 import UserAddDialog from '../components/UserAddDialog';
 
@@ -27,6 +28,7 @@ const ROLE_CHIP_COLORS: Record<UserRole, 'default' | 'info' | 'success' | 'warni
   coach: 'success',
   admin: 'warning',
   'master-admin': 'error',
+  sponsor: 'info',
 };
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -35,6 +37,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   coach: 'Coach',
   admin: 'Admin',
   'master-admin': 'Master Admin',
+  sponsor: 'Sponsor',
 };
 
 const ROLE_FILTER_OPTIONS: { value: string; label: string }[] = [
@@ -49,7 +52,7 @@ const ROLE_FILTER_OPTIONS: { value: string; label: string }[] = [
 const UsersPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isSuperAdmin = user?.role === 'master-admin';
+  const isSuperAdmin = isMasterAdmin(user);
   const [openDialog, setOpenDialog] = useState(false);
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -90,22 +93,30 @@ const UsersPage = () => {
 
   const filteredUsers = roleFilter === 'all'
     ? users
-    : users.filter(u => u.role === roleFilter);
+    : users.filter(u => u.roles?.includes(roleFilter as UserRole));
 
   const columns: GridColDef[] = [
     { field: 'displayName', headerName: 'Name', flex: 1, minWidth: 180 },
     { field: 'email', headerName: 'Email', flex: 1, minWidth: 220 },
     {
-      field: 'role',
-      headerName: 'Role',
-      width: 140,
-      renderCell: (params) => (
-        <Chip
-          label={ROLE_LABELS[params.value as UserRole] || params.value}
-          color={ROLE_CHIP_COLORS[params.value as UserRole] || 'default'}
-          size="small"
-        />
-      ),
+      field: 'roles',
+      headerName: 'Roles',
+      width: 200,
+      renderCell: (params) => {
+        const roles: UserRole[] = params.value || [];
+        return (
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+            {roles.map((role: UserRole) => (
+              <Chip
+                key={role}
+                label={ROLE_LABELS[role] || role}
+                color={ROLE_CHIP_COLORS[role] || 'default'}
+                size="small"
+              />
+            ))}
+          </Box>
+        );
+      },
     },
     {
       field: 'teamIds',

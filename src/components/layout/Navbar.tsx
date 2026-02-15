@@ -2,6 +2,7 @@ import { AppBar, Toolbar, IconButton, Typography, Box, Button } from '@mui/mater
 import MenuIcon from '@mui/icons-material/Menu';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuthStore } from '@/stores/authStore';
+import { primaryRole } from '@/lib/auth/roles';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -56,7 +57,7 @@ const Navbar = ({ drawerWidth, onMenuClick }: NavbarProps) => {
               borderRadius: 1,
             }}
           >
-            {user?.role}
+            {primaryRole(user)}
           </Typography>
           <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleSignOut}>
             Sign Out

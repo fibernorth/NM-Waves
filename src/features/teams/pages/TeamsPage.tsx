@@ -7,24 +7,38 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import SyncIcon from '@mui/icons-material/Sync';
 import { teamsApi } from '@/lib/api/teams';
 import { Team } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import TeamFormDialog from '../components/TeamFormDialog';
 
 const TeamsPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
 
   const { data: teams = [], isLoading } = useQuery({
     queryKey: ['teams'],
     queryFn: () => teamsApi.getAll(),
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: () => teamsApi.syncRosters(),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['teams'] });
+      queryClient.invalidateQueries({ queryKey: ['players'] });
+      toast.success(`Synced ${result.updated} players across ${result.teams} teams`);
+    },
+    onError: () => {
+      toast.error('Failed to sync rosters');
+    },
   });
 
   const deleteMutation = useMutation({
@@ -132,9 +146,19 @@ const TeamsPage = () => {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Teams</Typography>
         {isAdmin && (
-          <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
-            Add Team
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<SyncIcon />}
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending}
+            >
+              {syncMutation.isPending ? 'Syncing...' : 'Sync Rosters'}
+            </Button>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
+              Add Team
+            </Button>
+          </Box>
         )}
       </Box>
 

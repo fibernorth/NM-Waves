@@ -5,6 +5,7 @@ import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
 import { playerFinancesApi } from '@/lib/api/finances';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import GroupsIcon from '@mui/icons-material/Groups';
 import PersonIcon from '@mui/icons-material/Person';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
@@ -39,7 +40,7 @@ const eventTypeIcons: Record<string, JSX.Element> = {
 const DashboardPage = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
 
   const { data: teams = [] } = useQuery({
     queryKey: ['teams'],

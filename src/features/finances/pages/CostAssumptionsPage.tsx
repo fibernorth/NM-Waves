@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { costAssumptionsApi } from '@/lib/api/finances';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import toast from 'react-hot-toast';
 import SaveIcon from '@mui/icons-material/Save';
 
@@ -32,7 +33,7 @@ type CostFormData = z.infer<typeof costSchema>;
 const CostAssumptionsPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
 
   const { data: costs, isLoading } = useQuery({
     queryKey: ['costAssumptions'],

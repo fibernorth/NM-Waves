@@ -23,6 +23,7 @@ import { AppDocument } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import DocumentFormDialog from '../components/DocumentFormDialog';
 
 const formatFileSize = (bytes?: number): string => {
@@ -43,7 +44,7 @@ const visibilityColorMap: Record<string, 'success' | 'info' | 'warning' | 'secon
 const DocumentsPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
+  const isAdmin = checkIsAdmin(user);
 
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<AppDocument | null>(null);
@@ -51,10 +52,10 @@ const DocumentsPage = () => {
   const [filterVisibility, setFilterVisibility] = useState<string>('all');
 
   const { data: documents = [], isLoading } = useQuery({
-    queryKey: ['documents', user?.role],
+    queryKey: ['documents', user?.roles],
     queryFn: () => {
       if (isAdmin) return documentsApi.getAll();
-      return documentsApi.getForRole(user?.role || 'visitor');
+      return documentsApi.getForRoles(user?.roles || ['visitor']);
     },
   });
 

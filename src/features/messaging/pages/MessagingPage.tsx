@@ -17,6 +17,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { conversationsApi } from '@/lib/api/conversations';
 import { teamsApi } from '@/lib/api/teams';
 import { useAuthStore } from '@/stores/authStore';
+import { isCoach as checkIsCoach } from '@/lib/auth/roles';
 import type { Conversation, Message } from '@/types/models';
 import { format, isToday, isYesterday } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -30,8 +31,7 @@ const formatMessageDate = (date: Date): string => {
 const MessagingPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin' || user?.role === 'master-admin';
-  const isCoach = user?.role === 'coach' || isAdmin;
+  const isCoach = checkIsCoach(user);
 
   const [selectedConversation, setSelectedConversation] =
     useState<Conversation | null>(null);
