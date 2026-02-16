@@ -148,6 +148,7 @@ const PostFormDialog = ({ open, onClose, post }: PostFormDialogProps) => {
     const file = e.target.files?.[0];
     if (file) {
       setImageFile(file);
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
       setImagePreview(URL.createObjectURL(file));
     }
   };

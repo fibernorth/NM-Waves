@@ -28,6 +28,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import type { Team } from '@/types/models';
+import SponsorBanner from '@/components/common/SponsorBanner';
 
 interface PublicPlayer {
   firstName: string;
@@ -400,6 +401,8 @@ const PublicTeamDetailPage = () => {
           )}
         </Paper>
       </Container>
+
+      <SponsorBanner mode="carousel" />
     </Box>
   );
 };

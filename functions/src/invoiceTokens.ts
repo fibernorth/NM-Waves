@@ -24,7 +24,7 @@ export const generateInvoiceToken = functions.https.onCall(
     // Check admin role
     const userDoc = await db.collection('users').doc(context.auth.uid).get();
     const userData = userDoc.data();
-    if (!userData || !['admin', 'master-admin'].includes(userData.role)) {
+    if (!userData || !(userData.roles?.some((r: string) => ['admin', 'master-admin'].includes(r)) || ['admin', 'master-admin'].includes(userData.role))) {
       throw new functions.https.HttpsError('permission-denied', 'Admin access required');
     }
 

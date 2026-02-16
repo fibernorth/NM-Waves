@@ -34,8 +34,8 @@ Your system has Node.js 22.17.0 which has an OpenSSL cipher compatibility issue 
 **CRITICAL**: You MUST close and reopen your terminal/command prompt/PowerShell for the new Node version to be recognized.
 
 1. Close ALL terminal windows
-2. Close Claude Code if it's open
-3. Reopen Claude Code or your terminal
+2. Close your code editor if it's open
+3. Reopen your code editor or terminal
 
 ### Step 4: Verify Installation
 

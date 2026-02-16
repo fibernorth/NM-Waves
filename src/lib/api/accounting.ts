@@ -114,6 +114,17 @@ export const expensesApi = {
     return snapshot.docs.map(doc => convertExpense(doc.id, doc.data()));
   },
 
+  getByDateRange: async (from: Date, to: Date): Promise<Expense[]> => {
+    const q = query(
+      collection(db, EXPENSES_COLLECTION),
+      where('date', '>=', Timestamp.fromDate(from)),
+      where('date', '<=', Timestamp.fromDate(to)),
+      orderBy('date', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => convertExpense(doc.id, doc.data()));
+  },
+
   getById: async (id: string): Promise<Expense | null> => {
     const docRef = doc(db, EXPENSES_COLLECTION, id);
     const docSnap = await getDoc(docRef);
@@ -173,6 +184,7 @@ const convertIncome = (id: string, data: any): Income => ({
   category: data.category,
   amount: data.amount,
   source: data.source,
+  payerName: data.payerName || '',
   description: data.description,
   paymentMethod: data.paymentMethod,
   checkNumber: data.checkNumber,
@@ -232,6 +244,17 @@ export const incomeApi = {
         orderBy('date', 'desc')
       );
     }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => convertIncome(doc.id, doc.data()));
+  },
+
+  getByDateRange: async (from: Date, to: Date): Promise<Income[]> => {
+    const q = query(
+      collection(db, INCOME_COLLECTION),
+      where('date', '>=', Timestamp.fromDate(from)),
+      where('date', '<=', Timestamp.fromDate(to)),
+      orderBy('date', 'desc')
+    );
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => convertIncome(doc.id, doc.data()));
   },

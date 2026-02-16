@@ -59,6 +59,19 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
     if (!financeId || !playerId || !amount || !returnUrl) {
         throw new functions.https.HttpsError('invalid-argument', 'Missing required fields');
     }
+    // Validate returnUrl to prevent open redirect
+    const allowedHosts = ['localhost', '127.0.0.1', 'tcwavesballclub.com', 'www.tcwavesballclub.com'];
+    try {
+        const urlObj = new URL(returnUrl);
+        if (!allowedHosts.some(h => urlObj.hostname === h || urlObj.hostname.endsWith(`.${h}`))) {
+            throw new functions.https.HttpsError('invalid-argument', 'Invalid return URL');
+        }
+    }
+    catch (e) {
+        if (e instanceof functions.https.HttpsError)
+            throw e;
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid return URL format');
+    }
     if (amount < 0.5) {
         throw new functions.https.HttpsError('invalid-argument', 'Amount must be at least $0.50');
     }
@@ -127,14 +140,14 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
     const stripe = getStripe();
     const webhookSecret = ((_a = functions.config().stripe) === null || _a === void 0 ? void 0 : _a.webhook_secret) || process.env.STRIPE_WEBHOOK_SECRET;
     let event;
+    if (!webhookSecret) {
+        console.error('Stripe webhook secret not configured');
+        res.status(500).send('Webhook secret not configured');
+        return;
+    }
     try {
-        if (webhookSecret) {
-            const sig = req.headers['stripe-signature'];
-            event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
-        }
-        else {
-            event = req.body;
-        }
+        const sig = req.headers['stripe-signature'];
+        event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
     }
     catch (err) {
         console.error('Webhook signature verification failed:', err.message);

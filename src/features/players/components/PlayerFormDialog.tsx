@@ -10,13 +10,19 @@ import {
   Checkbox,
   Box,
   MenuItem,
+  IconButton,
+  Typography,
+  Divider,
 } from '@mui/material';
-import { useForm, Controller } from 'react-hook-form';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { useForm, Controller, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { playersApi } from '@/lib/api/players';
 import { teamsApi } from '@/lib/api/teams';
+import { userProvisioningApi } from '@/lib/api/userProvisioning';
 import { Player } from '@/types/models';
 import toast from 'react-hot-toast';
 
@@ -29,9 +35,14 @@ const playerSchema = z.object({
   positions: z.string().optional(),
   bats: z.string().optional(),
   throws: z.string().optional(),
-  parentName: z.string().min(1, 'Parent name is required'),
-  parentEmail: z.string().email('Invalid email address'),
-  parentPhone: z.string().min(1, 'Parent phone is required'),
+  contacts: z.array(z.object({
+    name: z.string().min(1, 'Contact name is required'),
+    relationship: z.string().min(1, 'Relationship is required'),
+    email: z.string().email('Invalid email'),
+    phone: z.string().min(1, 'Phone is required'),
+    isPrimaryContact: z.boolean(),
+    isFinancialParty: z.boolean(),
+  })).min(1, 'At least one contact is required'),
   emergencyContact: z.string().min(1, 'Emergency contact is required'),
   emergencyPhone: z.string().min(1, 'Emergency phone is required'),
   medicalNotes: z.string().optional(),
@@ -47,6 +58,26 @@ interface PlayerFormDialogProps {
   onClose: () => void;
   player: Player | null;
 }
+
+const RELATIONSHIP_OPTIONS = [
+  'Mother',
+  'Father',
+  'Stepmother',
+  'Stepfather',
+  'Guardian',
+  'Other',
+];
+
+const MAX_CONTACTS = 6;
+
+const defaultContact = {
+  name: '',
+  relationship: '',
+  email: '',
+  phone: '',
+  isPrimaryContact: true,
+  isFinancialParty: false,
+};
 
 const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
   const queryClient = useQueryClient();
@@ -73,9 +104,7 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
       positions: '',
       bats: '',
       throws: '',
-      parentName: '',
-      parentEmail: '',
-      parentPhone: '',
+      contacts: [{ ...defaultContact }],
       emergencyContact: '',
       emergencyPhone: '',
       medicalNotes: '',
@@ -85,8 +114,37 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
     },
   });
 
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: 'contacts',
+  });
+
   useEffect(() => {
     if (player) {
+      // Build contacts from player.contacts if available, otherwise fall back to parentName/Email/Phone
+      let contacts: PlayerFormData['contacts'];
+      if (player.contacts && player.contacts.length > 0) {
+        contacts = player.contacts.map((c) => ({
+          name: c.name || '',
+          relationship: c.relationship || '',
+          email: c.email || '',
+          phone: c.phone || '',
+          isPrimaryContact: c.isPrimaryContact || false,
+          isFinancialParty: c.isFinancialParty || false,
+        }));
+      } else {
+        contacts = [
+          {
+            name: player.parentName || '',
+            relationship: '',
+            email: player.parentEmail || '',
+            phone: player.parentPhone || '',
+            isPrimaryContact: true,
+            isFinancialParty: false,
+          },
+        ];
+      }
+
       reset({
         firstName: player.firstName,
         lastName: player.lastName,
@@ -96,9 +154,7 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
         positions: Array.isArray(player.positions) ? player.positions.join(', ') : '',
         bats: player.bats || '',
         throws: player.throws || '',
-        parentName: player.parentName,
-        parentEmail: player.parentEmail,
-        parentPhone: player.parentPhone,
+        contacts,
         emergencyContact: player.emergencyContact,
         emergencyPhone: player.emergencyPhone,
         medicalNotes: player.medicalNotes || '',
@@ -116,9 +172,7 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
         positions: '',
         bats: '',
         throws: '',
-        parentName: '',
-        parentEmail: '',
-        parentPhone: '',
+        contacts: [{ ...defaultContact }],
         emergencyContact: '',
         emergencyPhone: '',
         medicalNotes: '',
@@ -129,20 +183,43 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
     }
   }, [player, reset]);
 
+  const buildPlayerPayload = (data: PlayerFormData) => {
+    const primaryContact = data.contacts.find((c) => c.isPrimaryContact) || data.contacts[0];
+    const team = teams.find((t) => t.id === data.teamId);
+    return {
+      firstName: data.firstName,
+      lastName: data.lastName,
+      dateOfBirth: new Date(data.dateOfBirth),
+      teamId: data.teamId || undefined,
+      teamName: team?.name,
+      jerseyNumber: data.jerseyNumber ? parseInt(data.jerseyNumber) : undefined,
+      positions: data.positions ? data.positions.split(',').map((p) => p.trim()).filter(Boolean) : [],
+      bats: (data.bats as 'L' | 'R' | 'S') || undefined,
+      throws: (data.throws as 'L' | 'R') || undefined,
+      contacts: data.contacts,
+      parentName: primaryContact.name,
+      parentEmail: primaryContact.email,
+      parentPhone: primaryContact.phone,
+      emergencyContact: data.emergencyContact,
+      emergencyPhone: data.emergencyPhone,
+      medicalNotes: data.medicalNotes || undefined,
+      notes: data.notes || undefined,
+      playingUpFrom: data.playingUpFrom || undefined,
+      active: data.active,
+    };
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: PlayerFormData) => {
-      const team = teams.find(t => t.id === data.teamId);
-      return playersApi.create({
-        ...data,
-        dateOfBirth: new Date(data.dateOfBirth),
-        teamName: team?.name,
-        jerseyNumber: data.jerseyNumber ? parseInt(data.jerseyNumber) : undefined,
-        positions: data.positions ? data.positions.split(',').map(p => p.trim()).filter(Boolean) : [],
-        bats: (data.bats as 'L' | 'R' | 'S') || undefined,
-        throws: (data.throws as 'L' | 'R') || undefined,
-        notes: data.notes || undefined,
-        playingUpFrom: data.playingUpFrom || undefined,
-      } as any);
+      const payload = buildPlayerPayload(data);
+      const playerId = await playersApi.create(payload as any);
+
+      // Auto-provision parent accounts for contacts
+      const createdPlayer = await playersApi.getById(playerId);
+      if (createdPlayer) {
+        await userProvisioningApi.provisionAllContacts(createdPlayer).catch(console.error);
+      }
+      return playerId;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['players'] });
@@ -156,18 +233,14 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
 
   const updateMutation = useMutation({
     mutationFn: async (data: PlayerFormData) => {
-      const team = teams.find(t => t.id === data.teamId);
-      return playersApi.update(player!.id, {
-        ...data,
-        dateOfBirth: new Date(data.dateOfBirth),
-        teamName: team?.name,
-        jerseyNumber: data.jerseyNumber ? parseInt(data.jerseyNumber) : undefined,
-        positions: data.positions ? data.positions.split(',').map(p => p.trim()).filter(Boolean) : [],
-        bats: (data.bats as 'L' | 'R' | 'S') || undefined,
-        throws: (data.throws as 'L' | 'R') || undefined,
-        notes: data.notes || undefined,
-        playingUpFrom: data.playingUpFrom || undefined,
-      });
+      const payload = buildPlayerPayload(data);
+      await playersApi.update(player!.id, payload);
+
+      // Auto-provision parent accounts for any new contacts
+      const updatedPlayer = await playersApi.getById(player!.id);
+      if (updatedPlayer) {
+        await userProvisioningApi.provisionAllContacts(updatedPlayer).catch(console.error);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['players'] });
@@ -180,6 +253,13 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
   });
 
   const onSubmit = (data: PlayerFormData) => {
+    // Validate at least one primary contact
+    const hasPrimary = data.contacts.some((c) => c.isPrimaryContact);
+    if (!hasPrimary) {
+      toast.error('At least one contact must be marked as Primary');
+      return;
+    }
+
     if (player) {
       updateMutation.mutate(data);
     } else {
@@ -231,7 +311,7 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
                 <MenuItem value="">
                   <em>No Team</em>
                 </MenuItem>
-                {teams.filter(t => t.active).map(team => (
+                {teams.filter((t) => t.active).map((team) => (
                   <MenuItem key={team.id} value={team.id}>
                     {team.name}
                   </MenuItem>
@@ -297,32 +377,148 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
               fullWidth
             />
 
-            <TextField
-              label="Parent/Guardian Name"
-              {...register('parentName')}
-              error={!!errors.parentName}
-              helperText={errors.parentName?.message}
-              fullWidth
-            />
-
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-              <TextField
-                label="Parent Email"
-                type="email"
-                {...register('parentEmail')}
-                error={!!errors.parentEmail}
-                helperText={errors.parentEmail?.message}
-                fullWidth
-              />
-              <TextField
-                label="Parent Phone"
-                {...register('parentPhone')}
-                error={!!errors.parentPhone}
-                helperText={errors.parentPhone?.message}
-                fullWidth
-              />
+            {/* Parent/Guardian Contacts Section */}
+            <Divider />
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                Parent/Guardian Contacts
+              </Typography>
+              {fields.length < MAX_CONTACTS && (
+                <Button
+                  size="small"
+                  startIcon={<AddIcon />}
+                  onClick={() =>
+                    append({
+                      name: '',
+                      relationship: '',
+                      email: '',
+                      phone: '',
+                      isPrimaryContact: false,
+                      isFinancialParty: false,
+                    })
+                  }
+                >
+                  Add Contact
+                </Button>
+              )}
             </Box>
+            {errors.contacts?.message && (
+              <Typography variant="body2" color="error">
+                {errors.contacts.message}
+              </Typography>
+            )}
 
+            {fields.map((field, index) => (
+              <Box
+                key={field.id}
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 2,
+                  position: 'relative',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Contact {index + 1}
+                  </Typography>
+                  {fields.length > 1 && (
+                    <IconButton size="small" color="error" onClick={() => remove(index)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                </Box>
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+                  <TextField
+                    label="Name"
+                    {...register(`contacts.${index}.name`)}
+                    error={!!errors.contacts?.[index]?.name}
+                    helperText={errors.contacts?.[index]?.name?.message}
+                    fullWidth
+                    size="small"
+                  />
+                  <TextField
+                    label="Relationship"
+                    select
+                    {...register(`contacts.${index}.relationship`)}
+                    error={!!errors.contacts?.[index]?.relationship}
+                    helperText={errors.contacts?.[index]?.relationship?.message}
+                    fullWidth
+                    size="small"
+                  >
+                    {RELATIONSHIP_OPTIONS.map((rel) => (
+                      <MenuItem key={rel} value={rel}>
+                        {rel}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Box>
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 1 }}>
+                  <TextField
+                    label="Email"
+                    type="email"
+                    {...register(`contacts.${index}.email`)}
+                    error={!!errors.contacts?.[index]?.email}
+                    helperText={errors.contacts?.[index]?.email?.message}
+                    fullWidth
+                    size="small"
+                  />
+                  <TextField
+                    label="Phone"
+                    {...register(`contacts.${index}.phone`)}
+                    error={!!errors.contacts?.[index]?.phone}
+                    helperText={errors.contacts?.[index]?.phone?.message}
+                    fullWidth
+                    size="small"
+                  />
+                </Box>
+
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <FormControlLabel
+                    control={
+                      <Controller
+                        name={`contacts.${index}.isPrimaryContact`}
+                        control={control}
+                        render={({ field: checkField }) => (
+                          <Checkbox
+                            {...checkField}
+                            checked={checkField.value}
+                            size="small"
+                          />
+                        )}
+                      />
+                    }
+                    label="Primary Contact"
+                  />
+                  <FormControlLabel
+                    control={
+                      <Controller
+                        name={`contacts.${index}.isFinancialParty`}
+                        control={control}
+                        render={({ field: checkField }) => (
+                          <Checkbox
+                            {...checkField}
+                            checked={checkField.value}
+                            size="small"
+                          />
+                        )}
+                      />
+                    }
+                    label="Financial Party"
+                  />
+                </Box>
+              </Box>
+            ))}
+
+            <Divider />
+
+            {/* Emergency Contact */}
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+              Emergency Contact
+            </Typography>
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
               <TextField
                 label="Emergency Contact"

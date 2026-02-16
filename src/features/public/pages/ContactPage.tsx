@@ -288,8 +288,7 @@ const ContactPage = () => {
               <Divider sx={{ my: 3 }} />
 
               <Typography variant="body2" color="text.secondary">
-                We typically respond to inquiries within 24-48 hours. For urgent matters,
-                please call us directly.
+                We typically respond to inquiries within 24-48 hours.
               </Typography>
             </Paper>
           </Grid>

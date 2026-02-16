@@ -149,19 +149,30 @@ function App() {
               <Route path="/sponsor/account" element={<SponsorAccountPage />} />
             </Route>
 
-            {/* Protected Routes */}
+            {/* Protected Routes - All authenticated users */}
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/announcements" element={<AnnouncementsPage />} />
+              <Route path="/messaging" element={<MessagingPage />} />
+            </Route>
 
-              {/* Teams */}
+            {/* Protected Routes - Coach and above */}
+            <Route element={<ProtectedRoute requiredRole={['coach', 'admin', 'master-admin']}><AppLayout /></ProtectedRoute>}>
               <Route path="/teams" element={<TeamsPage />} />
               <Route path="/teams/:id" element={<TeamDetailsPage />} />
-
-              {/* Players */}
               <Route path="/players" element={<PlayersPage />} />
               <Route path="/players/:id" element={<PlayerDetailsPage />} />
+              <Route path="/schedules" element={<SchedulesPage />} />
+              <Route path="/volunteers" element={<VolunteersPage />} />
+              <Route path="/equipment" element={<EquipmentPage />} />
+              <Route path="/documents" element={<DocumentsPage />} />
+              <Route path="/media" element={<MediaPage />} />
+              <Route path="/tournaments" element={<TournamentsPage />} />
+              <Route path="/metrics" element={<MetricsPage />} />
+            </Route>
 
-              {/* Finances */}
+            {/* Protected Routes - Admin and above */}
+            <Route element={<ProtectedRoute requiredRole={['admin', 'master-admin']}><AppLayout /></ProtectedRoute>}>
               <Route path="/finances/assumptions" element={<CostAssumptionsPage />} />
               <Route path="/finances/billing" element={<BillingPage />} />
               <Route path="/finances/expenses" element={<ExpensesPage />} />
@@ -169,35 +180,14 @@ function App() {
               <Route path="/finances/reports" element={<FinancialReportsPage />} />
               <Route path="/finances/reconciliation" element={<ReconciliationPage />} />
               <Route path="/finances/invoices" element={<InvoiceManagementPage />} />
-
-              {/* Phase 2 - Communication & Scheduling */}
-              <Route path="/announcements" element={<AnnouncementsPage />} />
-              <Route path="/messaging" element={<MessagingPage />} />
-              <Route path="/schedules" element={<SchedulesPage />} />
-              <Route path="/volunteers" element={<VolunteersPage />} />
-
-              {/* Equipment */}
-              <Route path="/equipment" element={<EquipmentPage />} />
-
-              {/* Phase 3 - Content & Public */}
-              <Route path="/documents" element={<DocumentsPage />} />
-              <Route path="/media" element={<MediaPage />} />
-              <Route path="/tournaments" element={<TournamentsPage />} />
               <Route path="/sponsors/manage" element={<SponsorsPage />} />
-
-              {/* Homepage Manager */}
-              <Route path="/homepage-manager" element={<HomepageManagerPage />} />
-
-              {/* Admin Tools */}
-              <Route path="/admin/zip-upload" element={<ZipUploadPage />} />
-              <Route path="/admin/settings" element={<AdminSettingsPage />} />
-
-              {/* Phase 4 - Growth */}
               <Route path="/fundraisers" element={<FundraisersPage />} />
-              <Route path="/metrics" element={<MetricsPage />} />
               <Route path="/scholarships" element={<ScholarshipsPage />} />
               <Route path="/users" element={<UsersPage />} />
               <Route path="/account-provisioning" element={<UserManagementPage />} />
+              <Route path="/homepage-manager" element={<HomepageManagerPage />} />
+              <Route path="/admin/zip-upload" element={<ZipUploadPage />} />
+              <Route path="/admin/settings" element={<AdminSettingsPage />} />
             </Route>
 
             {/* 404 - Redirect to public home */}

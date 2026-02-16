@@ -65,6 +65,8 @@ const convertPlayerFinance = (id: string, data: any): PlayerFinance => {
     method: p.method,
     reference: p.reference,
     notes: p.notes,
+    payerName: p.payerName || '',
+    payerEmail: p.payerEmail || '',
     sponsorId: p.sponsorId,
     sponsorName: p.sponsorName,
     reconciled: p.reconciled || false,
@@ -174,8 +176,16 @@ export const playerFinancesApi = {
   // Update finance record
   update: async (id: string, financeData: Partial<PlayerFinance>): Promise<void> => {
     const docRef = doc(db, FINANCES_COLLECTION, id);
+    const updateData: any = { ...financeData };
+    if (updateData.payments) {
+      updateData.payments = updateData.payments.map((p: any) => ({
+        ...p,
+        date: p.date instanceof Date ? Timestamp.fromDate(p.date) : p.date,
+        recordedAt: p.recordedAt instanceof Date ? Timestamp.fromDate(p.recordedAt) : p.recordedAt,
+      }));
+    }
     await updateDoc(docRef, {
-      ...financeData,
+      ...updateData,
       updatedAt: Timestamp.now(),
     });
   },

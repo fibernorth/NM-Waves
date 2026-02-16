@@ -9,7 +9,7 @@ import {
   query,
   where,
   orderBy,
-  Timestamp
+  Timestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import type { Team } from '@/types/models';
@@ -102,5 +102,61 @@ export const teamsApi = {
       coachName: null,
       updatedAt: Timestamp.now(),
     });
+  },
+
+  // Sync rosters: match players to teams by teamName and fix teamId references
+  syncRosters: async (): Promise<{ updated: number; teams: number }> => {
+    // Get all teams
+    const teamsSnap = await getDocs(collection(db, COLLECTION));
+    const teams = teamsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Get all players
+    const playersSnap = await getDocs(collection(db, 'players'));
+    const players = playersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // Build a map of teamName -> team doc ID
+    const teamNameToId: Record<string, string> = {};
+    for (const t of teams) {
+      if ((t as any).name) {
+        teamNameToId[(t as any).name] = t.id;
+      }
+    }
+
+    let updated = 0;
+    const teamPlayerMap: Record<string, string[]> = {};
+
+    for (const player of players) {
+      const p = player as any;
+      const teamName = p.teamName;
+      if (!teamName) continue;
+
+      const correctTeamId = teamNameToId[teamName];
+      if (!correctTeamId) continue;
+
+      // Track players per team
+      if (!teamPlayerMap[correctTeamId]) teamPlayerMap[correctTeamId] = [];
+      teamPlayerMap[correctTeamId].push(player.id);
+
+      // Fix player's teamId if it doesn't match
+      if (p.teamId !== correctTeamId) {
+        await updateDoc(doc(db, 'players', player.id), {
+          teamId: correctTeamId,
+          updatedAt: Timestamp.now(),
+        });
+        updated++;
+      }
+    }
+
+    // Update each team's playerIds array
+    let teamsUpdated = 0;
+    for (const [teamId, playerIds] of Object.entries(teamPlayerMap)) {
+      await updateDoc(doc(db, COLLECTION, teamId), {
+        playerIds,
+        updatedAt: Timestamp.now(),
+      });
+      teamsUpdated++;
+    }
+
+    return { updated, teams: teamsUpdated };
   },
 };

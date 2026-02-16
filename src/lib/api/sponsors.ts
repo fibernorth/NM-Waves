@@ -75,7 +75,17 @@ export const sponsorsApi = {
 
   update: async (id: string, data: Partial<Sponsor>): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
-    await updateDoc(docRef, { ...data });
+    const updateData: any = { ...data };
+    if (updateData.createdAt instanceof Date) {
+      updateData.createdAt = Timestamp.fromDate(updateData.createdAt);
+    }
+    if (updateData.sponsoredPlayers) {
+      updateData.sponsoredPlayers = updateData.sponsoredPlayers.map((sp: any) => ({
+        ...sp,
+        date: sp.date instanceof Date ? Timestamp.fromDate(sp.date) : sp.date,
+      }));
+    }
+    await updateDoc(docRef, updateData);
   },
 
   delete: async (id: string): Promise<void> => {

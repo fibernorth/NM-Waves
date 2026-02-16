@@ -40,5 +40,5 @@ imports/
 *.xlsx
 *.msi
 
-# Claude settings
+# IDE/Tool settings
 .claude/

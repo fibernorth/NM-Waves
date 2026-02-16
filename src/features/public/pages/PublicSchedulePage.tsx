@@ -27,6 +27,7 @@ import {
 import { db } from '@/lib/firebase/config';
 import { format, isToday, isTomorrow } from 'date-fns';
 import type { ScheduleEvent } from '@/types/models';
+import SponsorBanner from '@/components/common/SponsorBanner';
 
 const EVENT_TYPE_COLORS: Record<string, 'primary' | 'success' | 'secondary' | 'warning' | 'info'> = {
   game: 'primary',
@@ -212,6 +213,8 @@ const PublicSchedulePage = () => {
           ))
         )}
       </Container>
+
+      <SponsorBanner mode="carousel" />
     </Box>
   );
 };

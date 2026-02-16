@@ -43,6 +43,7 @@ const db = admin.firestore();
  * Admin only. Creates a token doc in the invoiceTokens collection.
  */
 exports.generateInvoiceToken = functions.https.onCall(async (data, context) => {
+    var _a;
     // Auth check
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
@@ -50,7 +51,7 @@ exports.generateInvoiceToken = functions.https.onCall(async (data, context) => {
     // Check admin role
     const userDoc = await db.collection('users').doc(context.auth.uid).get();
     const userData = userDoc.data();
-    if (!userData || !['admin', 'master-admin'].includes(userData.role)) {
+    if (!userData || !(((_a = userData.roles) === null || _a === void 0 ? void 0 : _a.some((r) => ['admin', 'master-admin'].includes(r))) || ['admin', 'master-admin'].includes(userData.role))) {
         throw new functions.https.HttpsError('permission-denied', 'Admin access required');
     }
     const { financeId, playerId, expiryDays = 30 } = data;

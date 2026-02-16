@@ -29,6 +29,7 @@ const sponsorSchema = z.object({
   amount: z.number().min(0, 'Amount must be 0 or greater').optional(),
   season: z.string().min(1, 'Season is required'),
   displayOnPublicSite: z.boolean(),
+  sponsorshipType: z.string().optional(),
 });
 
 type SponsorFormData = z.infer<typeof sponsorSchema>;
@@ -59,6 +60,7 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
       amount: 0,
       season: '',
       displayOnPublicSite: false,
+      sponsorshipType: '',
     },
   });
 
@@ -74,6 +76,7 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
         amount: sponsor.amount || 0,
         season: sponsor.season,
         displayOnPublicSite: sponsor.displayOnPublicSite,
+        sponsorshipType: sponsor.sponsorshipType || '',
       });
     } else {
       reset({
@@ -86,6 +89,7 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
         amount: 0,
         season: '',
         displayOnPublicSite: false,
+        sponsorshipType: '',
       });
     }
   }, [sponsor, reset]);
@@ -102,6 +106,7 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
         amount: data.amount,
         season: data.season,
         displayOnPublicSite: data.displayOnPublicSite,
+        sponsorshipType: (data.sponsorshipType as 'player_sponsor' | 'team_sponsor' | 'general') || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sponsors'] });
@@ -125,6 +130,7 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
         amount: data.amount,
         season: data.season,
         displayOnPublicSite: data.displayOnPublicSite,
+        sponsorshipType: (data.sponsorshipType as 'player_sponsor' | 'team_sponsor' | 'general') || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sponsors'] });
@@ -172,6 +178,18 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
               <MenuItem value="silver">Silver</MenuItem>
               <MenuItem value="bronze">Bronze</MenuItem>
               <MenuItem value="custom">Custom</MenuItem>
+            </TextField>
+            <TextField
+              label="Sponsorship Type"
+              select
+              {...register('sponsorshipType')}
+              fullWidth
+              defaultValue={sponsor?.sponsorshipType || ''}
+            >
+              <MenuItem value="">Not specified</MenuItem>
+              <MenuItem value="player_sponsor">Player Sponsor</MenuItem>
+              <MenuItem value="team_sponsor">Team Sponsor</MenuItem>
+              <MenuItem value="general">General Sponsor</MenuItem>
             </TextField>
             <TextField
               label="Contact Name"

@@ -9,11 +9,19 @@ import {
   CardMedia,
   Grid,
   Stack,
+  Chip,
+  CircularProgress,
 } from '@mui/material';
+import SponsorBanner from '@/components/common/SponsorBanner';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import SchoolIcon from '@mui/icons-material/School';
 import GroupsIcon from '@mui/icons-material/Groups';
 import SportsBaseballIcon from '@mui/icons-material/SportsBaseball';
+import StarIcon from '@mui/icons-material/Star';
+import { useQuery } from '@tanstack/react-query';
+import { homepagePostsApi } from '@/lib/api/homepagePosts';
+import type { HomepagePost } from '@/types/models';
+import { format } from 'date-fns';
 
 const features = [
   {
@@ -49,7 +57,123 @@ const teamPhotos = [
   { src: '/images/2023_13u_sault_champions.jpg', label: '13U Sault Champions' },
 ];
 
+const getYouTubeEmbedUrl = (url: string): string | null => {
+  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\s]+)/);
+  return match ? `https://www.youtube.com/embed/${match[1]}` : null;
+};
+
+const NewsCard = ({ post }: { post: HomepagePost }) => (
+  <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    {post.imageUrl && (
+      <CardMedia component="img" height="180" image={post.imageUrl} alt={post.title} sx={{ objectFit: 'cover' }} />
+    )}
+    <CardContent sx={{ flexGrow: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        {post.pinned && <StarIcon sx={{ fontSize: 16, color: 'warning.main' }} />}
+        <Chip
+          label={post.type === 'news' ? 'News' : 'Announcement'}
+          size="small"
+          color={post.type === 'news' ? 'primary' : 'warning'}
+          variant="outlined"
+        />
+      </Box>
+      <Typography variant="h6" gutterBottom sx={{ fontSize: '1rem', fontWeight: 600 }}>
+        {post.title}
+      </Typography>
+      {post.body && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          {post.body.length > 150 ? post.body.substring(0, 150) + '...' : post.body}
+        </Typography>
+      )}
+      <Typography variant="caption" color="text.secondary">
+        {format(post.createdAt, 'MMM d, yyyy')}
+      </Typography>
+    </CardContent>
+  </Card>
+);
+
+const ScoreCard = ({ post }: { post: HomepagePost }) => (
+  <Card sx={{ textAlign: 'center' }}>
+    <CardContent sx={{ py: 2 }}>
+      {post.pinned && <StarIcon sx={{ fontSize: 14, color: 'warning.main', mb: 0.5 }} />}
+      <Typography variant="caption" color="text.secondary" display="block">
+        {post.gameDate ? format(post.gameDate, 'MMM d, yyyy') : ''}
+      </Typography>
+      <Typography variant="subtitle2" sx={{ mt: 0.5 }}>
+        {post.teamName || 'TC Waves'}
+      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, my: 1 }}>
+        <Typography variant="h4" fontWeight={700} color={post.result === 'W' ? 'success.main' : post.result === 'L' ? 'error.main' : 'text.primary'}>
+          {post.scoreUs ?? '-'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">vs</Typography>
+        <Typography variant="h4" fontWeight={700} color="text.secondary">
+          {post.scoreThem ?? '-'}
+        </Typography>
+      </Box>
+      <Typography variant="body2">vs {post.opponent || 'TBD'}</Typography>
+      {post.result && (
+        <Chip
+          label={post.result === 'W' ? 'Win' : post.result === 'L' ? 'Loss' : 'Tie'}
+          size="small"
+          color={post.result === 'W' ? 'success' : post.result === 'L' ? 'error' : 'default'}
+          sx={{ mt: 1 }}
+        />
+      )}
+    </CardContent>
+  </Card>
+);
+
+const MediaCard = ({ post }: { post: HomepagePost }) => {
+  const embedUrl = post.videoUrl ? getYouTubeEmbedUrl(post.videoUrl) : null;
+
+  return (
+    <Card sx={{ height: '100%' }}>
+      {post.type === 'video' && embedUrl ? (
+        <Box sx={{ position: 'relative', paddingTop: '56.25%' }}>
+          <Box
+            component="iframe"
+            src={embedUrl}
+            title={post.title}
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              border: 'none',
+            }}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </Box>
+      ) : post.imageUrl ? (
+        <CardMedia component="img" height="200" image={post.imageUrl} alt={post.title} sx={{ objectFit: 'cover' }} />
+      ) : null}
+      <CardContent sx={{ py: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {post.pinned && <StarIcon sx={{ fontSize: 14, color: 'warning.main' }} />}
+          <Typography variant="body2" fontWeight={500}>
+            {post.title}
+          </Typography>
+        </Box>
+      </CardContent>
+    </Card>
+  );
+};
+
 const HomePage = () => {
+  const { data: allPosts = [], isLoading } = useQuery({
+    queryKey: ['homepagePosts', 'published'],
+    queryFn: () => homepagePostsApi.getPublished(),
+    staleTime: 60_000,
+  });
+
+  const newsPosts = allPosts.filter((p) => p.type === 'news' || p.type === 'announcement');
+  const scorePosts = allPosts.filter((p) => p.type === 'score');
+  const mediaPosts = allPosts.filter((p) => p.type === 'photo' || p.type === 'video');
+  const highlightPosts = allPosts.filter((p) => p.type === 'highlight');
+
   return (
     <Box>
       {/* Hero Section */}
@@ -149,6 +273,96 @@ const HomePage = () => {
         </Container>
       </Box>
 
+      {/* Latest News & Updates */}
+      {!isLoading && newsPosts.length > 0 && (
+        <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
+          <Typography
+            variant="h4"
+            fontWeight={600}
+            gutterBottom
+            sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, mb: 3 }}
+          >
+            Latest News & Updates
+          </Typography>
+          <Grid container spacing={3}>
+            {newsPosts.slice(0, 6).map((post) => (
+              <Grid item xs={12} sm={6} md={4} key={post.id}>
+                <NewsCard post={post} />
+              </Grid>
+            ))}
+          </Grid>
+        </Container>
+      )}
+
+      {/* Recent Scores */}
+      {!isLoading && scorePosts.length > 0 && (
+        <Box sx={{ backgroundColor: 'grey.50', py: { xs: 4, md: 6 } }}>
+          <Container maxWidth="lg">
+            <Typography
+              variant="h4"
+              fontWeight={600}
+              gutterBottom
+              sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, mb: 3 }}
+            >
+              Recent Scores
+            </Typography>
+            <Grid container spacing={2}>
+              {scorePosts.slice(0, 8).map((post) => (
+                <Grid item xs={6} sm={4} md={3} key={post.id}>
+                  <ScoreCard post={post} />
+                </Grid>
+              ))}
+            </Grid>
+          </Container>
+        </Box>
+      )}
+
+      {/* Stat Highlights */}
+      {!isLoading && highlightPosts.length > 0 && (
+        <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
+          <Typography
+            variant="h4"
+            fontWeight={600}
+            gutterBottom
+            sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, mb: 3 }}
+          >
+            Player Highlights
+          </Typography>
+          <Grid container spacing={2}>
+            {highlightPosts.slice(0, 4).map((post) => (
+              <Grid item xs={12} sm={6} key={post.id}>
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                      {post.pinned && <StarIcon sx={{ fontSize: 14, color: 'warning.main' }} />}
+                      <Typography variant="h6" sx={{ fontSize: '1rem' }}>
+                        {post.title}
+                      </Typography>
+                    </Box>
+                    {post.body && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        {post.body}
+                      </Typography>
+                    )}
+                    {post.statHighlights && post.statHighlights.length > 0 && (
+                      <Stack spacing={0.5}>
+                        {post.statHighlights.map((h, i) => (
+                          <Box key={i} sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                            <Typography variant="body2" fontWeight={600}>{h.playerName}</Typography>
+                            <Typography variant="body2" color="text.secondary">—</Typography>
+                            <Typography variant="body2">{h.stat}: {h.value}</Typography>
+                          </Box>
+                        ))}
+                      </Stack>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Container>
+      )}
+
       {/* Team Photos Section */}
       <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
         <Grid container spacing={2}>
@@ -173,8 +387,39 @@ const HomePage = () => {
         </Grid>
       </Container>
 
+      {/* Photo/Video Highlights */}
+      {!isLoading && mediaPosts.length > 0 && (
+        <Box sx={{ backgroundColor: 'grey.50', py: { xs: 4, md: 6 } }}>
+          <Container maxWidth="lg">
+            <Typography
+              variant="h4"
+              fontWeight={600}
+              gutterBottom
+              sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, mb: 3 }}
+            >
+              Photos & Videos
+            </Typography>
+            <Grid container spacing={2}>
+              {mediaPosts.slice(0, 8).map((post) => (
+                <Grid item xs={12} sm={6} md={3} key={post.id}>
+                  <MediaCard post={post} />
+                </Grid>
+              ))}
+            </Grid>
+          </Container>
+        </Box>
+      )}
+
+      {isLoading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress size={28} />
+        </Box>
+      )}
+
+      <SponsorBanner mode="carousel" />
+
       {/* Why Join Us Section */}
-      <Box sx={{ backgroundColor: 'grey.50', py: { xs: 6, md: 10 } }}>
+      <Box sx={{ backgroundColor: mediaPosts.length > 0 ? 'white' : 'grey.50', py: { xs: 6, md: 10 } }}>
         <Container maxWidth="lg">
           <Typography
             variant="h3"
@@ -310,6 +555,7 @@ const HomePage = () => {
           </Grid>
         </Grid>
       </Container>
+
     </Box>
   );
 };

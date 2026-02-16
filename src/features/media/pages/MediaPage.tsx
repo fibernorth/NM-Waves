@@ -527,6 +527,7 @@ const UploadDialog = ({ open, onClose, teams }: UploadDialogProps) => {
 
   const resetForm = () => {
     setSelectedFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
     setTeamId('all');
     setCaption('');
@@ -546,6 +547,7 @@ const UploadDialog = ({ open, onClose, teams }: UploadDialogProps) => {
     if (file) {
       setSelectedFile(file);
       // Create preview for images
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       if (file.type.startsWith('image/')) {
         const url = URL.createObjectURL(file);
         setPreviewUrl(url);

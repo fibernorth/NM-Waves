@@ -1,0 +1,53 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper functions
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Media uploads - authenticated users can upload images/videos
+    match /media/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuth()
+                   && request.resource.size < 50 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*|video/.*');
+    }
+
+    // Player documents - coaches+ can upload
+    match /players/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isAuth()
+                   && request.resource.size < 20 * 1024 * 1024;
+    }
+
+    // Organization documents
+    match /documents/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isAuth()
+                   && request.resource.size < 20 * 1024 * 1024;
+    }
+
+    // Homepage post images
+    match /homepage/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuth()
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Sponsor logos
+    match /sponsors/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuth()
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Default deny
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

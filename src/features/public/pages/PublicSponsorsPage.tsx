@@ -11,6 +11,7 @@ import {
   Chip,
   CircularProgress,
   Alert,
+  Button,
   Divider,
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -210,10 +211,13 @@ const PublicSponsorsPage = () => {
             <Typography variant="h5" fontWeight={600} gutterBottom>
               Interested in Sponsoring TC Waves?
             </Typography>
-            <Typography variant="body1" color="text.secondary">
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
               Contact us to learn about sponsorship opportunities and how your business can
               support youth athletics in Traverse City.
             </Typography>
+            <Button variant="contained" href="/become-sponsor">
+              Become a Sponsor
+            </Button>
           </Box>
         )}
       </Container>

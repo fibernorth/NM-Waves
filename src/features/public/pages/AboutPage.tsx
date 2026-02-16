@@ -1,4 +1,5 @@
 import { Container, Typography, Paper, Box, Divider, Grid } from '@mui/material';
+import SponsorBanner from '@/components/common/SponsorBanner';
 
 const AboutPage = () => {
   return (
@@ -130,6 +131,8 @@ const AboutPage = () => {
           </Grid>
         </Paper>
       </Container>
+
+      <SponsorBanner mode="carousel" />
     </Box>
   );
 };

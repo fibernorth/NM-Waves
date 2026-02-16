@@ -23,10 +23,11 @@ import toast from 'react-hot-toast';
 
 const sponsorPaymentSchema = z.object({
   sponsorId: z.string().min(1, 'Sponsor is required'),
-  financeId: z.string().min(1, 'Player is required'),
+  financeIds: z.array(z.string()).min(1, 'Select at least one player'),
   amount: z.number().min(0.01, 'Amount must be greater than 0'),
   date: z.string().min(1, 'Date is required'),
   notes: z.string().optional(),
+  invoiceReference: z.string().optional(),
 });
 
 type SponsorPaymentFormData = z.infer<typeof sponsorPaymentSchema>;
@@ -57,52 +58,57 @@ const SponsorPaymentDialog = ({ open, onClose, finances }: SponsorPaymentDialogP
     resolver: zodResolver(sponsorPaymentSchema),
     defaultValues: {
       sponsorId: '',
-      financeId: '',
+      financeIds: [],
       amount: 0,
       date: new Date().toISOString().split('T')[0],
       notes: '',
+      invoiceReference: '',
     },
   });
 
   const mutation = useMutation({
     mutationFn: async (data: SponsorPaymentFormData) => {
       const sponsor = sponsors.find((s) => s.id === data.sponsorId);
-      const finance = finances.find((f) => f.id === data.financeId);
-      if (!sponsor || !finance) throw new Error('Invalid sponsor or player');
+      if (!sponsor) throw new Error('Invalid sponsor');
 
-      // 1. Record payment on player finance
-      const paymentId = await playerFinancesApi.addPayment(data.financeId, {
-        amount: data.amount,
-        date: new Date(data.date),
-        method: 'sponsor',
-        notes: data.notes || `Sponsored by ${sponsor.businessName}`,
-        sponsorId: data.sponsorId,
-        sponsorName: sponsor.businessName,
-        recordedBy: user?.uid || 'unknown',
-      });
+      const perPlayerAmount = data.amount / data.financeIds.length;
 
-      // 2. Create income record
-      await incomeApi.create({
-        date: new Date(data.date),
-        category: 'sponsorships',
-        amount: data.amount,
-        source: sponsor.businessName,
-        description: `Sponsor payment for ${finance.playerName}`,
-        paymentMethod: 'other',
-        playerId: finance.playerId,
-        season: finance.season,
-        notes: data.notes,
-        recordedBy: user?.uid || 'unknown',
-      });
+      for (const financeId of data.financeIds) {
+        const finance = finances.find((f) => f.id === financeId);
+        if (!finance) continue;
 
-      // 3. Update sponsor's sponsoredPlayers
-      await sponsorsApi.addSponsoredPlayer(data.sponsorId, {
-        playerId: finance.playerId,
-        playerName: finance.playerName,
-        amount: data.amount,
-        paymentId,
-        date: new Date(data.date),
-      });
+        const paymentId = await playerFinancesApi.addPayment(financeId, {
+          amount: perPlayerAmount,
+          date: new Date(data.date),
+          method: 'sponsor',
+          notes: data.notes || `Sponsored by ${sponsor.businessName}`,
+          reference: data.invoiceReference,
+          sponsorId: data.sponsorId,
+          sponsorName: sponsor.businessName,
+          recordedBy: user?.uid || 'unknown',
+        });
+
+        await incomeApi.create({
+          date: new Date(data.date),
+          category: 'sponsorships',
+          amount: perPlayerAmount,
+          source: sponsor.businessName,
+          description: `Sponsor payment for ${finance.playerName}`,
+          paymentMethod: 'other',
+          playerId: finance.playerId,
+          season: finance.season,
+          notes: data.notes,
+          recordedBy: user?.uid || 'unknown',
+        });
+
+        await sponsorsApi.addSponsoredPlayer(data.sponsorId, {
+          playerId: finance.playerId,
+          playerName: finance.playerName,
+          amount: perPlayerAmount,
+          paymentId,
+          date: new Date(data.date),
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['playerFinances'] });
@@ -165,20 +171,21 @@ const SponsorPaymentDialog = ({ open, onClose, finances }: SponsorPaymentDialogP
             />
 
             <Controller
-              name="financeId"
+              name="financeIds"
               control={control}
               render={({ field }) => (
                 <Autocomplete
+                  multiple
                   options={finances}
                   getOptionLabel={(option) => `${option.playerName} (${option.teamName})`}
-                  value={finances.find((f) => f.id === field.value) || null}
-                  onChange={(_, newValue) => field.onChange(newValue?.id || '')}
+                  value={finances.filter((f) => field.value.includes(f.id))}
+                  onChange={(_, newValue) => field.onChange(newValue.map(v => v.id))}
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      label="Player"
-                      error={!!errors.financeId}
-                      helperText={errors.financeId?.message}
+                      label="Players"
+                      error={!!errors.financeIds}
+                      helperText={errors.financeIds?.message}
                       required
                     />
                   )}
@@ -191,10 +198,16 @@ const SponsorPaymentDialog = ({ open, onClose, finances }: SponsorPaymentDialogP
               type="number"
               {...register('amount', { valueAsNumber: true })}
               error={!!errors.amount}
-              helperText={errors.amount?.message}
+              helperText={errors.amount?.message || 'Total amount will be split equally across selected players'}
               fullWidth
               InputProps={{ startAdornment: '$' }}
               inputProps={{ step: '0.01' }}
+            />
+
+            <TextField
+              label="Invoice Reference"
+              {...register('invoiceReference')}
+              fullWidth
             />
 
             <TextField

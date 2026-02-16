@@ -18,6 +18,7 @@ import {
   useMediaQuery,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
+import SponsorBanner from '@/components/common/SponsorBanner';
 
 
 const NAV_LINKS = [
@@ -209,8 +210,12 @@ const PublicLayout = () => {
             </Box>
           </Box>
           <Divider sx={{ my: 2, borderColor: 'rgba(255,255,255,0.2)' }} />
-          <Typography variant="body2" align="center" sx={{ opacity: 0.7 }}>
+          <SponsorBanner mode="footer" />
+          <Typography variant="body2" align="center" sx={{ opacity: 0.7, mt: 2 }}>
             &copy; {new Date().getFullYear()} TC Waves Ball Club, Inc. All rights reserved.
+          </Typography>
+          <Typography variant="caption" align="center" display="block" sx={{ opacity: 0.45, mt: 0.5 }}>
+            Developed by KSA08 Enterprises
           </Typography>
         </Container>
       </Box>

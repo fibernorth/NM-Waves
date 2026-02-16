@@ -17,7 +17,9 @@ service cloud.firestore {
     }
 
     function hasRole(role) {
-      return role in getUserData(request.auth.uid).roles;
+      let data = getUserData(request.auth.uid);
+      return ('roles' in data && role in data.roles) ||
+             ('role' in data && data.role == role);
     }
 
     function isMasterAdmin() {
@@ -65,8 +67,8 @@ service cloud.firestore {
     // USER DATA
     match /users/{userId} {
       allow read: if isAuth();
-      allow create;
-      allow update: if isUser(userId) || isMasterAdmin();
+      allow create: if (isAuth() && request.auth.uid == userId && !('roles' in request.resource.data && request.resource.data.roles.hasAny(['admin', 'master-admin']))) || isAdmin();
+      allow update: if isUser(userId) || isAdmin();
       allow delete: if isMasterAdmin();
     }
 
@@ -98,7 +100,7 @@ service cloud.firestore {
     // SPONSORS
     match /sponsors/{docId} {
       allow read: if true;
-      allow create: if true;
+      allow create: if isAuth();
       allow update: if isAdmin() || (isSponsor() && resource.data.userId == request.auth.uid);
       allow delete: if isAdmin();
     }
@@ -122,7 +124,7 @@ service cloud.firestore {
       allow update: if isAuth() && request.auth.uid in resource.data.participantIds;
 
       match /messages/{messageId} {
-        allow read, create: if isAuth();
+        allow read, create: if isAuth() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convoId)).data.participantIds;
       }
     }
 
@@ -139,7 +141,7 @@ service cloud.firestore {
 
     // MEDIA
     match /media/{docId} {
-      allow read: if isAuth();
+      allow read: if true;
       allow write: if isCoach();
     }
 
@@ -225,7 +227,7 @@ service cloud.firestore {
     match /invoiceTokens/{docId} {
       allow read: if true;
       allow create: if isAdmin();
-      allow update: if true;
+      allow update: if isAuth();
       allow delete: if isAdmin();
     }
 
