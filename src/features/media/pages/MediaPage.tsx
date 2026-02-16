@@ -27,8 +27,13 @@ import CloseIcon from '@mui/icons-material/Close';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import BlockIcon from '@mui/icons-material/Block';
+import GoogleIcon from '@mui/icons-material/Google';
 import { mediaApi } from '@/lib/api/media';
 import { teamsApi } from '@/lib/api/teams';
+import { googleDriveApi } from '@/lib/api/googleDrive';
+import { appSettingsApi } from '@/lib/api/appSettings';
 import { MediaItem } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -51,7 +56,7 @@ const MediaPage = () => {
   const [lightboxItem, setLightboxItem] = useState<MediaItem | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
-  const { data: mediaItems = [], isLoading } = useQuery({
+  const { data: firebaseMedia = [], isLoading } = useQuery({
     queryKey: ['media'],
     queryFn: () => mediaApi.getAll(),
   });
@@ -60,6 +65,23 @@ const MediaPage = () => {
     queryKey: ['teams'],
     queryFn: () => teamsApi.getAll(),
   });
+
+  const { data: integrationSettings } = useQuery({
+    queryKey: ['integrations'],
+    queryFn: () => appSettingsApi.getIntegrations(),
+  });
+
+  const { data: drivePhotos = [] } = useQuery({
+    queryKey: ['drivePhotos'],
+    queryFn: () => googleDriveApi.listPhotos(),
+    enabled: !!integrationSettings?.googleDrive?.enabled,
+  });
+
+  // Merge Firebase media with Google Drive photos
+  const mediaItems = useMemo(() => {
+    const all = [...firebaseMedia, ...drivePhotos];
+    return all.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }, [firebaseMedia, drivePhotos]);
 
   const deleteMutation = useMutation({
     mutationFn: (item: MediaItem) => mediaApi.delete(item.id, item.fileUrl),
@@ -84,6 +106,10 @@ const MediaPage = () => {
 
   const filteredMedia = useMemo(() => {
     let result = mediaItems;
+    // Non-admins don't see rejected items
+    if (!isAdmin) {
+      result = result.filter((m) => m.moderationStatus !== 'rejected');
+    }
     if (filterTeam !== 'all') {
       result = result.filter((m) => m.teamId === filterTeam);
     }
@@ -94,7 +120,19 @@ const MediaPage = () => {
       );
     }
     return result;
-  }, [mediaItems, filterTeam, filterTag]);
+  }, [mediaItems, filterTeam, filterTag, isAdmin]);
+
+  const moderationMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'approved' | 'rejected' }) =>
+      mediaApi.overrideModeration(id, status, user?.uid || ''),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['media'] });
+      toast.success('Moderation status updated');
+    },
+    onError: () => {
+      toast.error('Failed to update moderation status');
+    },
+  });
 
   const teamNameMap = useMemo(() => {
     const map: Record<string, string> = { all: 'All Teams' };
@@ -211,6 +249,15 @@ const MediaPage = () => {
                 boxShadow: 1,
                 '&:hover': { boxShadow: 4 },
                 transition: 'box-shadow 0.2s',
+                ...(item.moderationStatus === 'rejected' && {
+                  border: '3px solid',
+                  borderColor: 'error.main',
+                }),
+                ...(item.moderationStatus === 'pending' && {
+                  border: '2px solid',
+                  borderColor: 'warning.main',
+                }),
+                position: 'relative',
               }}
               onClick={() => setLightboxItem(item)}
             >
@@ -237,6 +284,31 @@ const MediaPage = () => {
                     height: 240,
                     objectFit: 'cover',
                   }}
+                />
+              )}
+              {/* Moderation badges */}
+              {isAdmin && item.moderationStatus === 'rejected' && (
+                <Chip
+                  label="Flagged"
+                  color="error"
+                  size="small"
+                  sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
+                />
+              )}
+              {isAdmin && item.moderationStatus === 'pending' && (
+                <Chip
+                  label="Pending"
+                  color="warning"
+                  size="small"
+                  sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
+                />
+              )}
+              {item.source === 'google_drive' && (
+                <Chip
+                  icon={<GoogleIcon />}
+                  label="Drive"
+                  size="small"
+                  sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1, bgcolor: 'rgba(255,255,255,0.85)' }}
                 />
               )}
               <ImageListItemBar
@@ -298,6 +370,8 @@ const MediaPage = () => {
         canDelete={lightboxItem ? canDeleteItem(lightboxItem) : false}
         onDelete={handleDelete}
         teamNameMap={teamNameMap}
+        isAdmin={isAdmin}
+        onModerate={(id, status) => moderationMutation.mutate({ id, status })}
       />
 
       {/* Upload Dialog */}
@@ -318,9 +392,11 @@ interface LightboxDialogProps {
   canDelete: boolean;
   onDelete: (item: MediaItem) => void;
   teamNameMap: Record<string, string>;
+  isAdmin?: boolean;
+  onModerate?: (id: string, status: 'approved' | 'rejected') => void;
 }
 
-const LightboxDialog = ({ item, onClose, canDelete, onDelete, teamNameMap }: LightboxDialogProps) => {
+const LightboxDialog = ({ item, onClose, canDelete, onDelete, teamNameMap, isAdmin, onModerate }: LightboxDialogProps) => {
   if (!item) return null;
 
   return (
@@ -375,15 +451,53 @@ const LightboxDialog = ({ item, onClose, canDelete, onDelete, teamNameMap }: Lig
           )}
         </Box>
       </DialogContent>
-      {canDelete && (
+      {(canDelete || isAdmin) && (
         <DialogActions>
-          <Button
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={() => onDelete(item)}
-          >
-            Delete
-          </Button>
+          {isAdmin && item.moderationStatus === 'rejected' && onModerate && (
+            <Button
+              color="success"
+              startIcon={<CheckCircleIcon />}
+              onClick={() => onModerate(item.id, 'approved')}
+            >
+              Approve
+            </Button>
+          )}
+          {isAdmin && item.moderationStatus === 'approved' && onModerate && (
+            <Button
+              color="warning"
+              startIcon={<BlockIcon />}
+              onClick={() => onModerate(item.id, 'rejected')}
+            >
+              Reject
+            </Button>
+          )}
+          {isAdmin && item.moderationStatus === 'pending' && onModerate && (
+            <>
+              <Button
+                color="success"
+                startIcon={<CheckCircleIcon />}
+                onClick={() => onModerate(item.id, 'approved')}
+              >
+                Approve
+              </Button>
+              <Button
+                color="warning"
+                startIcon={<BlockIcon />}
+                onClick={() => onModerate(item.id, 'rejected')}
+              >
+                Reject
+              </Button>
+            </>
+          )}
+          {canDelete && (
+            <Button
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={() => onDelete(item)}
+            >
+              Delete
+            </Button>
+          )}
         </DialogActions>
       )}
     </Dialog>
@@ -448,7 +562,7 @@ const UploadDialog = ({ open, onClose, teams }: UploadDialogProps) => {
       setIsUploading(true);
       setUploadProgress(0);
 
-      const { url, fileName, mediaType } = await mediaApi.uploadMedia(
+      const { url, thumbnailUrl, fileName, mediaType } = await mediaApi.uploadMedia(
         selectedFile,
         (progress) => setUploadProgress(progress)
       );
@@ -462,6 +576,7 @@ const UploadDialog = ({ open, onClose, teams }: UploadDialogProps) => {
 
       await mediaApi.create({
         fileUrl: url,
+        thumbnailUrl,
         fileName,
         teamId,
         teamName: team?.name || (teamId === 'all' ? 'All Teams' : ''),

@@ -13,6 +13,7 @@ import {
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase/config';
 import type { AppDocument } from '@/types/models';
+import { isResizableImage, resizeImage } from '@/lib/utils/imageResize';
 
 const COLLECTION = 'documents';
 
@@ -121,7 +122,13 @@ export const documentsApi = {
     // uploadBytes does not support progress natively, so we signal start/end
     if (onProgress) onProgress(10);
 
-    await uploadBytes(storageRef, file);
+    // Resize images before upload (skip PDFs/docs)
+    let fileToUpload = file;
+    if (isResizableImage(file)) {
+      fileToUpload = await resizeImage(file, { maxDimension: 1920, quality: 0.85 });
+    }
+
+    await uploadBytes(storageRef, fileToUpload);
 
     if (onProgress) onProgress(80);
 
@@ -132,7 +139,7 @@ export const documentsApi = {
     return {
       url,
       fileName: file.name,
-      fileSize: file.size,
+      fileSize: fileToUpload.size,
     };
   },
 };

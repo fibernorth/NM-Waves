@@ -247,6 +247,17 @@ service cloud.firestore {
       allow create: if true;
     }
 
+    // APP SETTINGS
+    match /appSettings/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // ADMIN NOTIFICATIONS (content moderation alerts)
+    match /adminNotifications/{docId} {
+      allow read, write: if isAdmin();
+    }
+
     // HOMEPAGE POSTS (public-facing content)
     match /homepagePosts/{docId} {
       allow read: if true;

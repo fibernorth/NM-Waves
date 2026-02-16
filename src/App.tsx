@@ -10,6 +10,7 @@ import { theme } from './theme';
 import AppLayout from './components/layout/AppLayout';
 import AuthLayout from './components/layout/AuthLayout';
 import PublicLayout from './components/layout/PublicLayout';
+import SponsorLayout from './components/layout/SponsorLayout';
 
 // Auth Pages
 import LoginPage from './features/auth/pages/LoginPage';
@@ -61,6 +62,29 @@ import FundraisersPage from './features/fundraisers/pages/FundraisersPage';
 import MetricsPage from './features/metrics/pages/MetricsPage';
 import ScholarshipsPage from './features/scholarships/pages/ScholarshipsPage';
 import UsersPage from './features/users/pages/UsersPage';
+import UserManagementPage from './features/admin/pages/UserManagementPage';
+
+// Sponsor Portal Pages
+import BecomeSponsorPage from './features/sponsors/pages/BecomeSponsorPage';
+import SponsorDashboardPage from './features/sponsors/pages/SponsorDashboardPage';
+import SponsorPayPlayerPage from './features/sponsors/pages/SponsorPayPlayerPage';
+import SponsorPaymentHistoryPage from './features/sponsors/pages/SponsorPaymentHistoryPage';
+import SponsorAccountPage from './features/sponsors/pages/SponsorAccountPage';
+
+// Public Payment Pages
+import PublicPaymentPage from './features/public/pages/PublicPaymentPage';
+import PaymentSuccessPage from './features/public/pages/PaymentSuccessPage';
+import PaymentCancelPage from './features/public/pages/PaymentCancelPage';
+
+// Invoice Management
+import InvoiceManagementPage from './features/finances/pages/InvoiceManagementPage';
+
+// Homepage Manager
+import HomepageManagerPage from './features/homepage-manager/pages/HomepageManagerPage';
+
+// Admin Pages
+import ZipUploadPage from './features/admin/pages/ZipUploadPage';
+import AdminSettingsPage from './features/admin/pages/AdminSettingsPage';
 
 // Components
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -105,10 +129,24 @@ function App() {
               <Route path="/tryouts" element={<TryoutRegistrationPage />} />
             </Route>
 
+            {/* Public Payment Routes (no layout wrapper needed) */}
+            <Route path="/pay/:token" element={<PublicPaymentPage />} />
+            <Route path="/pay/success" element={<PaymentSuccessPage />} />
+            <Route path="/pay/cancel" element={<PaymentCancelPage />} />
+            <Route path="/become-sponsor" element={<BecomeSponsorPage />} />
+
             {/* Auth Routes */}
             <Route element={<AuthLayout />}>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+            </Route>
+
+            {/* Sponsor Portal Routes */}
+            <Route element={<SponsorLayout />}>
+              <Route path="/sponsor/dashboard" element={<SponsorDashboardPage />} />
+              <Route path="/sponsor/pay" element={<SponsorPayPlayerPage />} />
+              <Route path="/sponsor/history" element={<SponsorPaymentHistoryPage />} />
+              <Route path="/sponsor/account" element={<SponsorAccountPage />} />
             </Route>
 
             {/* Protected Routes */}
@@ -130,6 +168,7 @@ function App() {
               <Route path="/finances/income" element={<IncomePage />} />
               <Route path="/finances/reports" element={<FinancialReportsPage />} />
               <Route path="/finances/reconciliation" element={<ReconciliationPage />} />
+              <Route path="/finances/invoices" element={<InvoiceManagementPage />} />
 
               {/* Phase 2 - Communication & Scheduling */}
               <Route path="/announcements" element={<AnnouncementsPage />} />
@@ -146,11 +185,19 @@ function App() {
               <Route path="/tournaments" element={<TournamentsPage />} />
               <Route path="/sponsors/manage" element={<SponsorsPage />} />
 
+              {/* Homepage Manager */}
+              <Route path="/homepage-manager" element={<HomepageManagerPage />} />
+
+              {/* Admin Tools */}
+              <Route path="/admin/zip-upload" element={<ZipUploadPage />} />
+              <Route path="/admin/settings" element={<AdminSettingsPage />} />
+
               {/* Phase 4 - Growth */}
               <Route path="/fundraisers" element={<FundraisersPage />} />
               <Route path="/metrics" element={<MetricsPage />} />
               <Route path="/scholarships" element={<ScholarshipsPage />} />
               <Route path="/users" element={<UsersPage />} />
+              <Route path="/account-provisioning" element={<UserManagementPage />} />
             </Route>
 
             {/* 404 - Redirect to public home */}

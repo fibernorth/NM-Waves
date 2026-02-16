@@ -9,10 +9,14 @@ import {
   query,
   where,
   orderBy,
-  Timestamp
+  Timestamp,
+  arrayUnion,
 } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db } from '@/lib/firebase/config';
-import type { Player } from '@/types/models';
+import { storage } from '@/lib/firebase/config';
+import type { Player, PlayerDocument, PlayerDocumentType } from '@/types/models';
+import { isResizableImage, resizeImage } from '@/lib/utils/imageResize';
 
 const COLLECTION = 'players';
 
@@ -28,7 +32,14 @@ const convertPlayer = (id: string, data: any): Player => ({
   positions: data.positions || [],
   bats: data.bats,
   throws: data.throws,
-  contacts: data.contacts || [],
+  contacts: (data.contacts || []).map((c: any) => ({
+    name: c.name || '',
+    relationship: c.relationship || '',
+    email: c.email || '',
+    phone: c.phone || '',
+    isPrimaryContact: c.isPrimaryContact || false,
+    isFinancialParty: c.isFinancialParty || false,
+  })),
   parentName: data.parentName || '',
   parentEmail: data.parentEmail || '',
   parentPhone: data.parentPhone || '',
@@ -37,6 +48,17 @@ const convertPlayer = (id: string, data: any): Player => ({
   medicalNotes: data.medicalNotes,
   notes: data.notes,
   playingUpFrom: data.playingUpFrom || undefined,
+  documents: (data.documents || []).map((d: any) => ({
+    id: d.id || '',
+    type: d.type || 'other',
+    label: d.label || '',
+    fileUrl: d.fileUrl || '',
+    fileName: d.fileName || '',
+    fileSize: d.fileSize || 0,
+    uploadedBy: d.uploadedBy || '',
+    uploadedByName: d.uploadedByName || '',
+    uploadedAt: d.uploadedAt?.toDate?.() || new Date(d.uploadedAt) || new Date(),
+  })),
   active: data.active,
   createdAt: data.createdAt?.toDate() || new Date(),
   updatedAt: data.updatedAt?.toDate() || new Date(),
@@ -63,16 +85,38 @@ export const playersApi = {
       .sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
   },
 
-  // Get players by team
-  getByTeam: async (teamId: string): Promise<Player[]> => {
+  // Get players by team (tries teamId first, falls back to teamName match, auto-fixes mismatched IDs)
+  getByTeam: async (teamId: string, teamName?: string): Promise<Player[]> => {
+    // Primary query: match by teamId
     const q = query(
       collection(db, COLLECTION),
       where('teamId', '==', teamId),
-      orderBy('lastName')
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => convertPlayer(doc.id, doc.data()))
-      .sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
+    let players = snapshot.docs.map(d => convertPlayer(d.id, d.data()));
+
+    // Fallback: if no players found by teamId and teamName is provided,
+    // fetch ALL players and match by teamName client-side.
+    // This avoids needing a composite Firestore index on teamName.
+    if (players.length === 0 && teamName) {
+      const allSnap = await getDocs(collection(db, COLLECTION));
+      const allPlayers = allSnap.docs.map(d => ({ docId: d.id, ...d.data() }));
+      const matched = allPlayers.filter((p: any) => p.teamName === teamName);
+      players = matched.map((p: any) => convertPlayer(p.docId, p));
+
+      // Auto-heal: fix teamId on all matched players so future queries work directly
+      for (const player of players) {
+        if (player.teamId !== teamId) {
+          await updateDoc(doc(db, COLLECTION, player.id), {
+            teamId,
+            updatedAt: Timestamp.now(),
+          });
+          player.teamId = teamId;
+        }
+      }
+    }
+
+    return players.sort((a, b) => a.lastName.localeCompare(b.lastName) || a.firstName.localeCompare(b.firstName));
   },
 
   // Get player by ID
@@ -132,5 +176,76 @@ export const playersApi = {
       teamName: null,
       updatedAt: Timestamp.now(),
     });
+  },
+
+  // Upload a document (birth certificate, etc.) for a player
+  uploadDocument: async (
+    playerId: string,
+    file: File,
+    docType: PlayerDocumentType,
+    label: string,
+    uploadedBy: string,
+    uploadedByName: string,
+  ): Promise<PlayerDocument> => {
+    const timestamp = Date.now();
+    const storagePath = `player-documents/${playerId}/${timestamp}_${file.name}`;
+    const storageRef = ref(storage, storagePath);
+
+    // Resize images before upload (skip PDFs/docs)
+    let fileToUpload = file;
+    if (isResizableImage(file)) {
+      fileToUpload = await resizeImage(file, { maxDimension: 1920, quality: 0.85 });
+    }
+
+    await uploadBytes(storageRef, fileToUpload);
+    const fileUrl = await getDownloadURL(storageRef);
+
+    const playerDoc: PlayerDocument = {
+      id: `${timestamp}`,
+      type: docType,
+      label,
+      fileUrl,
+      fileName: file.name,
+      fileSize: file.size,
+      uploadedBy,
+      uploadedByName,
+      uploadedAt: new Date(),
+    };
+
+    const docRef = doc(db, COLLECTION, playerId);
+    await updateDoc(docRef, {
+      documents: arrayUnion({
+        ...playerDoc,
+        uploadedAt: Timestamp.now(),
+      }),
+      updatedAt: Timestamp.now(),
+    });
+
+    return playerDoc;
+  },
+
+  // Delete a document from a player
+  deleteDocument: async (playerId: string, playerDocument: PlayerDocument): Promise<void> => {
+    // Remove from storage
+    try {
+      const storagePath = `player-documents/${playerId}/${playerDocument.id}_${playerDocument.fileName}`;
+      const storageRef = ref(storage, storagePath);
+      await deleteObject(storageRef);
+    } catch {
+      // File may already be deleted from storage
+    }
+
+    // Remove from player's documents array
+    // Since arrayRemove needs exact match, we fetch and filter
+    const docRef = doc(db, COLLECTION, playerId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      const docs = (data.documents || []).filter((d: any) => d.id !== playerDocument.id);
+      await updateDoc(docRef, {
+        documents: docs,
+        updatedAt: Timestamp.now(),
+      });
+    }
   },
 };

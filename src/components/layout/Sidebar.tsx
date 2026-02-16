@@ -35,6 +35,8 @@ import ChecklistIcon from '@mui/icons-material/Checklist';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import QrCodeIcon from '@mui/icons-material/QrCode';
 import WebIcon from '@mui/icons-material/Web';
+import FolderZipIcon from '@mui/icons-material/FolderZip';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin, isMasterAdmin } from '@/lib/auth/roles';
 
@@ -85,6 +87,8 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Scholarships', icon: <SchoolIcon />, path: '/scholarships', roles: ['admin', 'master-admin'] },
     { text: 'Sponsors', icon: <BusinessIcon />, path: '/sponsors/manage', roles: ['admin', 'master-admin'] },
     { text: 'Fundraising', icon: <FundraiseIcon />, path: '/fundraisers', roles: ['admin', 'master-admin'] },
+    ...(isAdmin ? [{ text: 'Bulk Image Upload', icon: <FolderZipIcon />, path: '/admin/zip-upload', roles: ['admin', 'master-admin'] }] : []),
+    ...(isAdmin ? [{ text: 'Admin Settings', icon: <SettingsIcon />, path: '/admin/settings', roles: ['admin', 'master-admin'] }] : []),
     ...(isAdmin ? [{ text: 'Account Provisioning', icon: <PersonAddIcon />, path: '/account-provisioning', roles: ['admin', 'master-admin'] }] : []),
     ...(isSuperAdmin ? [{ text: 'User Management', icon: <PeopleIcon />, path: '/users', roles: ['master-admin'] }] : []),
   ];

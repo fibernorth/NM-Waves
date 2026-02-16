@@ -265,6 +265,11 @@ export interface MediaItem {
   tags: string[];
   caption?: string;
   mediaType?: 'image' | 'video';
+  moderationStatus?: 'pending' | 'approved' | 'rejected';
+  moderationLabels?: { adult?: string; violence?: string; racy?: string };
+  moderationReviewedAt?: Date;
+  moderationOverriddenBy?: string;
+  source?: 'firebase' | 'google_drive';
   createdAt: Date;
 }
 

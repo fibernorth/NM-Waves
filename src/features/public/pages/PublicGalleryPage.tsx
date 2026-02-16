@@ -59,6 +59,7 @@ const PublicGalleryPage = () => {
             tags: data.tags || [],
             caption: data.caption || undefined,
             mediaType: data.mediaType || 'image',
+            moderationStatus: data.moderationStatus || undefined,
             createdAt: data.createdAt?.toDate() || new Date(),
           } as MediaItem;
         });
@@ -74,11 +75,16 @@ const PublicGalleryPage = () => {
     fetchMedia();
   }, []);
 
-  const teamNames = Array.from(new Set(media.map((m) => m.teamName).filter(Boolean))) as string[];
+  // Filter out rejected and pending moderation items for public view
+  const approvedMedia = media.filter(
+    (m) => !m.moderationStatus || m.moderationStatus === 'approved'
+  );
+
+  const teamNames = Array.from(new Set(approvedMedia.map((m) => m.teamName).filter(Boolean))) as string[];
 
   const filteredMedia = filterTeam
-    ? media.filter((m) => m.teamName === filterTeam)
-    : media;
+    ? approvedMedia.filter((m) => m.teamName === filterTeam)
+    : approvedMedia;
 
   const imageMedia = filteredMedia.filter((m) => m.mediaType === 'image');
 
@@ -170,7 +176,7 @@ const PublicGalleryPage = () => {
                   onClick={() => handleOpen(index)}
                 >
                   <img
-                    src={item.fileUrl}
+                    src={item.thumbnailUrl || item.fileUrl}
                     alt={item.caption || item.fileName || 'Gallery photo'}
                     loading="lazy"
                     style={{ height: 260, objectFit: 'cover' }}
