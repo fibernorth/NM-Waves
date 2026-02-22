@@ -29,7 +29,9 @@ import QrCodeIcon from '@mui/icons-material/QrCode';
 import PaymentDialog from '../components/PaymentDialog';
 import SponsorPaymentDialog from '../components/SponsorPaymentDialog';
 import InvoiceQRCard from '../components/InvoiceQRCard';
+import TeamInvoiceDialog from '../components/TeamInvoiceDialog';
 import { PlayerFinance } from '@/types/models';
+import GroupsIcon from '@mui/icons-material/Groups';
 
 const BillingPage = () => {
   const { user } = useAuthStore();
@@ -42,6 +44,7 @@ const BillingPage = () => {
   const [selectedFinance, setSelectedFinance] = useState<PlayerFinance | null>(null);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [qrFinance, setQrFinance] = useState<PlayerFinance | null>(null);
+  const [teamInvoiceDialogOpen, setTeamInvoiceDialogOpen] = useState(false);
 
   const { data: allFinances = [], isLoading } = useQuery({
     queryKey: ['playerFinances'],
@@ -334,16 +337,26 @@ const BillingPage = () => {
           </Grid>
 
           <Grid item xs={12} sm={12} md={4}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               {isAdmin && (
-                <Button
-                  variant="contained"
-                  size="small"
-                  startIcon={<BusinessIcon />}
-                  onClick={() => setSponsorPaymentDialogOpen(true)}
-                >
-                  Sponsor Payment
-                </Button>
+                <>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<GroupsIcon />}
+                    onClick={() => setTeamInvoiceDialogOpen(true)}
+                  >
+                    Invoice Team
+                  </Button>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<BusinessIcon />}
+                    onClick={() => setSponsorPaymentDialogOpen(true)}
+                  >
+                    Sponsor Payment
+                  </Button>
+                </>
               )}
               <Button variant="outlined" size="small">
                 Export to CSV
@@ -396,13 +409,15 @@ const BillingPage = () => {
             setQrDialogOpen(false);
             setQrFinance(null);
           }}
-          financeId={qrFinance.id}
-          playerId={qrFinance.playerId}
-          playerName={qrFinance.playerName}
-          teamName={qrFinance.teamName}
-          amountDue={Math.max(0, Math.abs(qrFinance.balance))}
+          finance={qrFinance}
         />
       )}
+
+      {/* Team Invoice Dialog */}
+      <TeamInvoiceDialog
+        open={teamInvoiceDialogOpen}
+        onClose={() => setTeamInvoiceDialogOpen(false)}
+      />
     </Box>
   );
 };

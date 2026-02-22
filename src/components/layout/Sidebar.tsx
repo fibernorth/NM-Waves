@@ -68,7 +68,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Billing & Payments', icon: <AttachMoneyIcon />, path: '/finances/billing', roles: ['admin', 'master-admin'] },
     { text: 'Expenses', icon: <TrendingDownIcon />, path: '/finances/expenses', roles: ['admin', 'master-admin'] },
     { text: 'Income', icon: <TrendingUpIcon />, path: '/finances/income', roles: ['admin', 'master-admin'] },
-    { text: 'Cost Assumptions', icon: <AttachMoneyIcon />, path: '/finances/assumptions', roles: ['admin', 'master-admin'] },
+    { text: 'Cost Management', icon: <AttachMoneyIcon />, path: '/finances/assumptions', roles: ['admin', 'master-admin'] },
     { text: 'Financial Reports', icon: <AssessmentIcon />, path: '/finances/reports', roles: ['admin', 'master-admin'] },
     { text: 'Reconciliation', icon: <AccountBalanceIcon />, path: '/finances/reconciliation', roles: ['admin', 'master-admin'] },
     { text: 'Invoices & QR', icon: <QrCodeIcon />, path: '/finances/invoices', roles: ['admin', 'master-admin'] },

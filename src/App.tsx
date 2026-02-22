@@ -33,7 +33,7 @@ import TeamsPage from './features/teams/pages/TeamsPage';
 import TeamDetailsPage from './features/teams/pages/TeamDetailsPage';
 import PlayersPage from './features/players/pages/PlayersPage';
 import PlayerDetailsPage from './features/players/pages/PlayerDetailsPage';
-import CostAssumptionsPage from './features/finances/pages/CostAssumptionsPage';
+import CostManagementPage from './features/finances/pages/CostManagementPage';
 import BillingPage from './features/finances/pages/BillingPage';
 import ExpensesPage from './features/finances/pages/ExpensesPage';
 import IncomePage from './features/finances/pages/IncomePage';
@@ -173,7 +173,7 @@ function App() {
 
             {/* Protected Routes - Admin and above */}
             <Route element={<ProtectedRoute requiredRole={['admin', 'master-admin']}><AppLayout /></ProtectedRoute>}>
-              <Route path="/finances/assumptions" element={<CostAssumptionsPage />} />
+              <Route path="/finances/assumptions" element={<CostManagementPage />} />
               <Route path="/finances/billing" element={<BillingPage />} />
               <Route path="/finances/expenses" element={<ExpensesPage />} />
               <Route path="/finances/income" element={<IncomePage />} />

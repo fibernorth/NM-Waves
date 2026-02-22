@@ -166,6 +166,17 @@ export interface InvoiceToken {
   teamName: string;
   season: string;
   amountDue: number;
+  chargeType?: string;       // e.g. 'registrationFee' or 'full_balance'
+  chargeLabel?: string;      // e.g. 'Registration Fee' or 'Full Balance'
+  chargeAmount?: number;     // amount for the specific charge (0 for full balance)
+  registrationFee?: number;
+  uniformCost?: number;
+  tournamentFees?: number;
+  facilityFees?: number;
+  equipmentFees?: number;
+  otherFees?: number;
+  scholarshipAmount?: number;
+  totalPaid?: number;
   token: string;
   expiresAt: Date;
   createdBy: string;
@@ -273,6 +284,26 @@ export interface MediaItem {
   createdAt: Date;
 }
 
+// Tournament Workflow Status
+export type TournamentWorkflowStatus =
+  | 'planning'
+  | 'committed'
+  | 'signed_up'
+  | 'deposit_paid'
+  | 'schedule_received'
+  | 'accommodations_shared'
+  | 'playing'
+  | 'completed';
+
+// Tournament Status History Entry
+export interface TournamentStatusHistoryEntry {
+  from: TournamentWorkflowStatus;
+  to: TournamentWorkflowStatus;
+  changedBy: string;
+  changedAt: Date;
+  notes?: string;
+}
+
 // Tournament Model
 export interface Tournament {
   id: string;
@@ -285,7 +316,83 @@ export interface Tournament {
   notes?: string;
   cost: number;
   status?: 'upcoming' | 'in_progress' | 'completed';
+  workflowStatus?: TournamentWorkflowStatus;
+  depositAmount?: number;
+  depositPaidDate?: Date;
+  balanceDueDate?: Date;
+  balancePaid?: boolean;
+  registrationUrl?: string;
+  accommodationsInfo?: string;
+  statusHistory?: TournamentStatusHistoryEntry[];
 }
+
+// ============================================
+// COST MANAGEMENT SYSTEM
+// ============================================
+
+export type CostItemTier = 'organization' | 'team' | 'player';
+
+export type OrgCostCategory = 'waves_fee' | 'insurance' | 'administrative';
+export type TeamCostCategory = 'tournament' | 'equipment' | 'special';
+export type PlayerCostCategory = 'helmet' | 'bag' | 'uniform_piece' | 'special';
+export type CostItemCategory = OrgCostCategory | TeamCostCategory | PlayerCostCategory;
+
+export type CostFinanceField =
+  | 'registrationFee'
+  | 'uniformCost'
+  | 'tournamentFees'
+  | 'facilityFees'
+  | 'equipmentFees'
+  | 'otherFees';
+
+export interface CostItem {
+  id: string;
+  tier: CostItemTier;
+  category: CostItemCategory;
+  label: string;
+  amount: number;
+  season: string;
+  teamId?: string;
+  teamName?: string;
+  playerId?: string;
+  playerName?: string;
+  tournamentId?: string;
+  tournamentName?: string;
+  financeField: CostFinanceField;
+  notes?: string;
+  active: boolean;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TeamInvoiceBatch {
+  id: string;
+  teamId: string;
+  teamName: string;
+  season: string;
+  amountPerPlayer: number;
+  totalAmount: number;
+  playerCount: number;
+  playerFinanceIds: string[];
+  description: string;
+  batchDate: Date;
+  createdBy: string;
+  createdAt: Date;
+}
+
+// Category to Finance Field mapping
+export const COST_CATEGORY_FINANCE_FIELD_MAP: Record<CostItemCategory, CostFinanceField> = {
+  waves_fee: 'registrationFee',
+  insurance: 'otherFees',
+  administrative: 'otherFees',
+  tournament: 'tournamentFees',
+  equipment: 'equipmentFees',
+  special: 'otherFees',
+  helmet: 'equipmentFees',
+  bag: 'equipmentFees',
+  uniform_piece: 'uniformCost',
+};
 
 // Sponsor Model
 export interface SponsoredPlayer {
