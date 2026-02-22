@@ -56,12 +56,12 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
 
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard', roles: ['all'] },
-    { text: 'Teams', icon: <GroupsIcon />, path: '/teams', roles: ['all'] },
-    { text: 'Players', icon: <PersonIcon />, path: '/players', roles: ['all'] },
-    { text: 'Schedule', icon: <CalendarMonthIcon />, path: '/schedules', roles: ['all'] },
+    { text: 'Teams', icon: <GroupsIcon />, path: '/teams', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Players', icon: <PersonIcon />, path: '/players', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Schedule', icon: <CalendarMonthIcon />, path: '/schedules', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Announcements', icon: <CampaignIcon />, path: '/announcements', roles: ['all'] },
-    { text: 'Messaging', icon: <ChatIcon />, path: '/messaging', roles: ['parent', 'coach', 'admin', 'master-admin'] },
-    { text: 'Homepage Manager', icon: <WebIcon />, path: '/homepage-manager', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Messaging', icon: <ChatIcon />, path: '/messaging', roles: ['all'] },
+    { text: 'Homepage Manager', icon: <WebIcon />, path: '/homepage-manager', roles: ['admin', 'master-admin'] },
   ];
 
   const financeItems = [
@@ -75,11 +75,11 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
   ];
 
   const operationsItems = [
-    { text: 'Equipment', icon: <ChecklistIcon />, path: '/equipment', roles: ['admin', 'master-admin'] },
-    { text: 'Volunteers', icon: <VolunteerActivismIcon />, path: '/volunteers', roles: ['all'] },
-    { text: 'Tournaments', icon: <EmojiEventsIcon />, path: '/tournaments', roles: ['all'] },
-    { text: 'Documents', icon: <DescriptionIcon />, path: '/documents', roles: ['all'] },
-    { text: 'Media Gallery', icon: <PhotoLibraryIcon />, path: '/media', roles: ['all'] },
+    { text: 'Equipment', icon: <ChecklistIcon />, path: '/equipment', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Volunteers', icon: <VolunteerActivismIcon />, path: '/volunteers', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Tournaments', icon: <EmojiEventsIcon />, path: '/tournaments', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Documents', icon: <DescriptionIcon />, path: '/documents', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Media Gallery', icon: <PhotoLibraryIcon />, path: '/media', roles: ['coach', 'admin', 'master-admin'] },
   ];
 
   const managementItems = [
