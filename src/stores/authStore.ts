@@ -19,6 +19,7 @@ interface AuthState {
   signUp: (email: string, password: string, displayName: string, role?: UserRole) => Promise<void>;
   signOut: () => Promise<void>;
   initialize: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const defaultPermissions = {
@@ -28,6 +29,31 @@ const defaultPermissions = {
   canUploadMedia: false,
 };
 
+// Flag to prevent onAuthStateChanged from racing with signIn
+let signInActive = false;
+
+async function loadUserProfile(uid: string, email: string, firebaseUser: FirebaseUser) {
+  const userDoc = await getDoc(doc(db, 'users', uid));
+  if (userDoc.exists()) {
+    const userData = userDoc.data();
+    return {
+      user: {
+        uid,
+        email,
+        displayName: userData.displayName,
+        roles: userData.roles || (userData.role ? [userData.role] : ['visitor']),
+        teamIds: userData.teamIds || [],
+        linkedPlayerIds: userData.linkedPlayerIds || [],
+        permissions: userData.permissions || defaultPermissions,
+        createdAt: userData.createdAt?.toDate(),
+        updatedAt: userData.updatedAt?.toDate(),
+      } as User,
+      firebaseUser,
+    };
+  }
+  return null;
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   firebaseUser: null,
@@ -36,66 +62,73 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   initialize: () => {
     onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('[Auth] onAuthStateChanged:', firebaseUser?.uid || 'null', 'signInActive:', signInActive);
+
+      // If signIn is currently running, let it handle everything
+      if (signInActive) {
+        console.log('[Auth] signIn active, skipping onAuthStateChanged');
+        return;
+      }
+
       if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          set({
-            user: {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email!,
-              displayName: userData.displayName,
-              roles: userData.roles || (userData.role ? [userData.role] : ['visitor']),
-              teamIds: userData.teamIds || [],
-              linkedPlayerIds: userData.linkedPlayerIds || [],
-              permissions: userData.permissions || defaultPermissions,
-              createdAt: userData.createdAt?.toDate(),
-              updatedAt: userData.updatedAt?.toDate(),
-            },
-            firebaseUser,
-            loading: false,
-            initialized: true,
-          });
-        } else {
-          set({ user: null, firebaseUser: null, loading: false, initialized: true });
+        // If user is already loaded with this UID, just mark initialized
+        const current = useAuthStore.getState();
+        if (current.user?.uid === firebaseUser.uid) {
+          console.log('[Auth] User already loaded, marking initialized');
+          set({ loading: false, initialized: true });
+          return;
+        }
+
+        try {
+          console.log('[Auth] Loading user profile from onAuthStateChanged...');
+          const result = await loadUserProfile(firebaseUser.uid, firebaseUser.email!, firebaseUser);
+          if (result) {
+            console.log('[Auth] User profile loaded successfully:', result.user.displayName);
+            set({ ...result, loading: false, initialized: true });
+          } else {
+            console.warn('[Auth] User doc not found in Firestore');
+            set({ user: null, firebaseUser: null, loading: false, initialized: true });
+          }
+        } catch (err) {
+          console.error('[Auth] Failed to load user profile:', err);
+          // Don't clear user state - signIn may have set it
+          set({ loading: false, initialized: true });
         }
       } else {
+        console.log('[Auth] No firebase user, clearing state');
         set({ user: null, firebaseUser: null, loading: false, initialized: true });
       }
     });
   },
 
   signIn: async (email: string, password: string) => {
+    signInActive = true;
     set({ loading: true });
     try {
+      console.log('[Auth] signIn starting...');
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      console.log('[Auth] Firebase auth succeeded, loading profile...');
 
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        set({
-          user: {
-            uid: userCredential.user.uid,
-            email: userCredential.user.email!,
-            displayName: userData.displayName,
-            roles: userData.roles || (userData.role ? [userData.role] : ['visitor']),
-            teamIds: userData.teamIds || [],
-            linkedPlayerIds: userData.linkedPlayerIds || [],
-            permissions: userData.permissions || defaultPermissions,
-            createdAt: userData.createdAt?.toDate(),
-            updatedAt: userData.updatedAt?.toDate(),
-          },
-          firebaseUser: userCredential.user,
-          loading: false,
-        });
+      const result = await loadUserProfile(userCredential.user.uid, userCredential.user.email!, userCredential.user);
+      if (result) {
+        console.log('[Auth] Profile loaded:', result.user.displayName, 'roles:', result.user.roles);
+        set({ ...result, loading: false, initialized: true });
+      } else {
+        console.error('[Auth] User profile not found in Firestore');
+        set({ loading: false, initialized: true });
+        throw new Error('User profile not found. Please contact an administrator.');
       }
     } catch (error) {
-      set({ loading: false });
+      console.error('[Auth] signIn error:', error);
+      set({ loading: false, initialized: true });
       throw error;
+    } finally {
+      signInActive = false;
     }
   },
 
   signUp: async (email: string, password: string, displayName: string, role: UserRole = 'parent') => {
+    signInActive = true;
     set({ loading: true });
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -122,15 +155,27 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: newUser,
         firebaseUser: userCredential.user,
         loading: false,
+        initialized: true,
       });
     } catch (error) {
-      set({ loading: false });
+      set({ loading: false, initialized: true });
       throw error;
+    } finally {
+      signInActive = false;
     }
   },
 
   signOut: async () => {
     await firebaseSignOut(auth);
     set({ user: null, firebaseUser: null });
+  },
+
+  refreshUser: async () => {
+    const { firebaseUser } = useAuthStore.getState();
+    if (!firebaseUser) return;
+    const result = await loadUserProfile(firebaseUser.uid, firebaseUser.email!, firebaseUser);
+    if (result) {
+      set({ user: result.user, firebaseUser: result.firebaseUser });
+    }
   },
 }));

@@ -1,4 +1,4 @@
-import type { User, UserRole } from '@/types/models';
+import type { User, Player, UserRole } from '@/types/models';
 
 /** Check if user holds a specific role */
 export function hasRole(user: User | null | undefined, role: UserRole): boolean {
@@ -28,6 +28,26 @@ export function isParent(user: User | null | undefined): boolean {
 /** Has 'sponsor' */
 export function isSponsor(user: User | null | undefined): boolean {
   return hasRole(user, 'sponsor');
+}
+
+/** Can this user view a specific player's profile? */
+export function canViewPlayer(user: User | null | undefined, player: Player | null | undefined): boolean {
+  if (!user || !player) return false;
+  if (isAdmin(user)) return true;
+  // Coach on the same team
+  if (isCoach(user) && player.teamId && user.teamIds?.includes(player.teamId)) return true;
+  // Parent with linked child
+  if (user.linkedPlayerIds?.includes(player.id)) return true;
+  return false;
+}
+
+/** Can this user view a player's financial details (invoices, balances)? */
+export function canViewPlayerFinances(user: User | null | undefined, player: Player | null | undefined): boolean {
+  if (!user || !player) return false;
+  if (isAdmin(user)) return true;
+  // Parent with linked child
+  if (user.linkedPlayerIds?.includes(player.id)) return true;
+  return false;
 }
 
 const ROLE_PRIORITY: UserRole[] = ['master-admin', 'admin', 'coach', 'parent', 'sponsor', 'visitor'];

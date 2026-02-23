@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Drawer,
   Box,
@@ -10,6 +11,7 @@ import {
   Toolbar,
 } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import GroupsIcon from '@mui/icons-material/Groups';
 import PersonIcon from '@mui/icons-material/Person';
@@ -37,8 +39,12 @@ import QrCodeIcon from '@mui/icons-material/QrCode';
 import WebIcon from '@mui/icons-material/Web';
 import FolderZipIcon from '@mui/icons-material/FolderZip';
 import SettingsIcon from '@mui/icons-material/Settings';
+import LinkIcon from '@mui/icons-material/Link';
+import ChildCareIcon from '@mui/icons-material/ChildCare';
 import { useAuthStore } from '@/stores/authStore';
-import { isAdmin as checkIsAdmin, isMasterAdmin } from '@/lib/auth/roles';
+import { isAdmin as checkIsAdmin, isMasterAdmin, isParent as checkIsParent } from '@/lib/auth/roles';
+import { playersApi } from '@/lib/api/players';
+import LinkChildDialog from '@/features/players/components/LinkChildDialog';
 
 interface SidebarProps {
   drawerWidth: number;
@@ -53,6 +59,22 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
 
   const isAdmin = checkIsAdmin(user);
   const isSuperAdmin = isMasterAdmin(user);
+  const isParent = checkIsParent(user);
+
+  const [linkChildOpen, setLinkChildOpen] = useState(false);
+
+  // Fetch linked player names for parent sidebar
+  const linkedPlayerIds = user?.linkedPlayerIds || [];
+  const linkedPlayerQueries = useQuery({
+    queryKey: ['linkedPlayers', ...linkedPlayerIds],
+    queryFn: async () => {
+      const results = await Promise.all(
+        linkedPlayerIds.map(id => playersApi.getById(id))
+      );
+      return results.filter(Boolean) as NonNullable<Awaited<ReturnType<typeof playersApi.getById>>>[];
+    },
+    enabled: linkedPlayerIds.length > 0,
+  });
 
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard', roles: ['all'] },
@@ -172,6 +194,51 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
         ))}
       </List>
 
+      {/* Parent: My Players section */}
+      {isParent && (
+        <>
+          <Divider />
+          <List>
+            <ListItem>
+              <ListItemText
+                primary="MY PLAYERS"
+                primaryTypographyProps={{
+                  fontSize: '0.75rem',
+                  fontWeight: 'bold',
+                  color: 'text.secondary',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  pl: 2,
+                }}
+              />
+            </ListItem>
+            {(linkedPlayerQueries.data || []).map((player) => (
+              <ListItem key={player.id} disablePadding>
+                <ListItemButton
+                  selected={isSelected(`/players/${player.id}`)}
+                  onClick={() => {
+                    navigate(`/players/${player.id}`);
+                    if (mobileOpen) onDrawerToggle();
+                  }}
+                >
+                  <ListItemIcon><ChildCareIcon /></ListItemIcon>
+                  <ListItemText primary={`${player.firstName} ${player.lastName}`} />
+                </ListItemButton>
+              </ListItem>
+            ))}
+            <ListItem disablePadding>
+              <ListItemButton
+                onClick={() => setLinkChildOpen(true)}
+                sx={{ color: 'primary.main' }}
+              >
+                <ListItemIcon><LinkIcon color="primary" /></ListItemIcon>
+                <ListItemText primary="Link a Child" />
+              </ListItemButton>
+            </ListItem>
+          </List>
+        </>
+      )}
+
       {isAdmin && renderNavSection('Finances', financeItems)}
       {renderNavSection('Operations', operationsItems)}
       {renderNavSection('Management', managementItems)}
@@ -206,6 +273,9 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
       >
         {drawer}
       </Drawer>
+
+      {/* Link Child Dialog */}
+      <LinkChildDialog open={linkChildOpen} onClose={() => setLinkChildOpen(false)} />
     </Box>
   );
 };

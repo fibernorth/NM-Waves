@@ -9,7 +9,8 @@ import {
   query,
   where,
   orderBy,
-  Timestamp
+  Timestamp,
+  arrayUnion,
 } from 'firebase/firestore';
 import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -61,10 +62,10 @@ export const usersApi = {
     return docSnap.exists() ? convertUser(docSnap.id, docSnap.data()) : null;
   },
 
-  // Update user (roles, permissions, teamIds)
+  // Update user (roles, permissions, teamIds, linkedPlayerIds)
   update: async (
     uid: string,
-    userData: Partial<Pick<User, 'roles' | 'permissions' | 'teamIds'>>
+    userData: Partial<Pick<User, 'roles' | 'permissions' | 'teamIds' | 'linkedPlayerIds'>>
   ): Promise<void> => {
     const docRef = doc(db, COLLECTION, uid);
     await updateDoc(docRef, {
@@ -132,6 +133,15 @@ export const usersApi = {
       } catch { /* ignore cleanup errors */ }
       throw error;
     }
+  },
+
+  // Add a linked player to a user's linkedPlayerIds array
+  addLinkedPlayer: async (uid: string, playerId: string): Promise<void> => {
+    const docRef = doc(db, COLLECTION, uid);
+    await updateDoc(docRef, {
+      linkedPlayerIds: arrayUnion(playerId),
+      updatedAt: Timestamp.now(),
+    });
   },
 
   // Delete user document

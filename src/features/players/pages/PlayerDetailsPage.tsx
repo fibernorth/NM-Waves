@@ -22,15 +22,17 @@ import { useQuery } from '@tanstack/react-query';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonIcon from '@mui/icons-material/Person';
+import LockIcon from '@mui/icons-material/Lock';
 import { playersApi } from '@/lib/api/players';
 import { equipmentApi } from '@/lib/api/equipment';
 import { playerFinancesApi } from '@/lib/api/finances';
 import { useAuthStore } from '@/stores/authStore';
-import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
+import { isAdmin as checkIsAdmin, isCoach as checkIsCoach, canViewPlayer, canViewPlayerFinances } from '@/lib/auth/roles';
 import GCStatsPanel from '@/features/gamechanger/components/GCStatsPanel';
 import { format, differenceInYears } from 'date-fns';
 import PlayerFormDialog from '../components/PlayerFormDialog';
 import PlayerDocumentsCard from '../components/PlayerDocumentsCard';
+import PlayerInvoicesCard from '../components/PlayerInvoicesCard';
 
 /**
  * Derives a softball age group label from a date of birth.
@@ -78,6 +80,7 @@ const PlayerDetailsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
+  const isCoachOrAbove = checkIsCoach(user);
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
@@ -99,11 +102,13 @@ const PlayerDetailsPage = () => {
     enabled: !!id,
   });
 
-  // Fetch financial records for this player (admin only)
+  const showFinances = canViewPlayerFinances(user, player ?? null);
+
+  // Fetch financial records for this player (admin or parent-with-linked-child)
   const { data: finances = [] } = useQuery({
     queryKey: ['playerFinances', 'player', id],
     queryFn: () => playerFinancesApi.getByPlayer(id!),
-    enabled: !!id && isAdmin,
+    enabled: !!id && showFinances,
   });
 
   if (isLoading) {
@@ -119,10 +124,10 @@ const PlayerDetailsPage = () => {
       <Box sx={{ p: 4 }}>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/players')}
+          onClick={() => navigate(isCoachOrAbove ? '/players' : '/dashboard')}
           sx={{ mb: 2 }}
         >
-          Back to Players
+          Back
         </Button>
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="h6" color="text.secondary">
@@ -130,6 +135,29 @@ const PlayerDetailsPage = () => {
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             The player you are looking for does not exist or has been removed.
+          </Typography>
+        </Paper>
+      </Box>
+    );
+  }
+
+  if (!canViewPlayer(user, player)) {
+    return (
+      <Box sx={{ p: 4 }}>
+        <Button
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate('/dashboard')}
+          sx={{ mb: 2 }}
+        >
+          Back
+        </Button>
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <LockIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+          <Typography variant="h6" color="text.secondary">
+            Access Denied
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            You do not have permission to view this player's profile.
           </Typography>
         </Paper>
       </Box>
@@ -164,7 +192,7 @@ const PlayerDetailsPage = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Button
             startIcon={<ArrowBackIcon />}
-            onClick={() => navigate('/players')}
+            onClick={() => navigate(isCoachOrAbove ? '/players' : '/dashboard')}
             color="inherit"
           >
             Back
@@ -480,8 +508,8 @@ const PlayerDetailsPage = () => {
           </Card>
         </Grid>
 
-        {/* Financial Summary (admin only) */}
-        {isAdmin && (
+        {/* Financial Summary (admin or parent-with-linked-child) */}
+        {showFinances && (
           <Grid item xs={12}>
             <Card variant="outlined">
               <CardContent>
@@ -670,6 +698,13 @@ const PlayerDetailsPage = () => {
                 )}
               </CardContent>
             </Card>
+          </Grid>
+        )}
+
+        {/* Player Invoices (admin or parent-with-linked-child) */}
+        {showFinances && (
+          <Grid item xs={12}>
+            <PlayerInvoicesCard playerId={id!} playerName={fullName} finances={finances} />
           </Grid>
         )}
 

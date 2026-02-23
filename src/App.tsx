@@ -154,6 +154,7 @@ function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/announcements" element={<AnnouncementsPage />} />
               <Route path="/messaging" element={<MessagingPage />} />
+              <Route path="/players/:id" element={<PlayerDetailsPage />} />
             </Route>
 
             {/* Protected Routes - Coach and above */}
@@ -161,7 +162,6 @@ function App() {
               <Route path="/teams" element={<TeamsPage />} />
               <Route path="/teams/:id" element={<TeamDetailsPage />} />
               <Route path="/players" element={<PlayersPage />} />
-              <Route path="/players/:id" element={<PlayerDetailsPage />} />
               <Route path="/schedules" element={<SchedulesPage />} />
               <Route path="/volunteers" element={<VolunteersPage />} />
               <Route path="/equipment" element={<EquipmentPage />} />
