@@ -84,8 +84,8 @@ const TeamFormDialog = ({ open, onClose, team }: TeamFormDialogProps) => {
       toast.success('Team created successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to create team');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to create team');
     },
   });
 
@@ -96,8 +96,8 @@ const TeamFormDialog = ({ open, onClose, team }: TeamFormDialogProps) => {
       toast.success('Team updated successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update team');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update team');
     },
   });
 

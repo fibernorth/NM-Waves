@@ -66,8 +66,8 @@ const SponsorAccountPage = () => {
       queryClient.invalidateQueries({ queryKey: ['sponsor', 'self'] });
       toast.success('Account updated successfully');
     },
-    onError: () => {
-      toast.error('Failed to update account');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update account');
     },
   });
 

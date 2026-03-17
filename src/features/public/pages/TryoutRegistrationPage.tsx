@@ -16,6 +16,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { collection, addDoc, Timestamp } from 'firebase/firestore';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { db } from '@/lib/firebase/config';
 
 const AGE_GROUPS = ['8U', '10U', '12U', '14U', '16U', '18U'];
@@ -48,6 +49,7 @@ const tryoutSchema = z.object({
 type TryoutFormData = z.infer<typeof tryoutSchema>;
 
 const TryoutRegistrationPage = () => {
+  useDocumentTitle('Tryout Registration');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);

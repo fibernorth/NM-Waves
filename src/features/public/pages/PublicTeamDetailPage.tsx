@@ -44,6 +44,7 @@ const PublicTeamDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [playerError, setPlayerError] = useState<string | null>(null);
 
   // Fetch team data
   useEffect(() => {
@@ -128,6 +129,7 @@ const PublicTeamDetailPage = () => {
         setPlayers(playersData);
       } catch (err) {
         console.error('Error fetching players:', err);
+        setPlayerError('Failed to load roster. Please try again later.');
       } finally {
         setLoadingPlayers(false);
       }
@@ -314,6 +316,8 @@ const PublicTeamDetailPage = () => {
               />
             )}
           </Box>
+
+          {playerError && <Alert severity="error" sx={{ mt: 2 }}>{playerError}</Alert>}
 
           {loadingPlayers ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>

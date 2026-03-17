@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -13,6 +13,7 @@ import {
   IconButton,
   Typography,
   Divider,
+  Chip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -23,28 +24,43 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { playersApi } from '@/lib/api/players';
 import { teamsApi } from '@/lib/api/teams';
 import { userProvisioningApi } from '@/lib/api/userProvisioning';
+import { auth } from '@/lib/firebase/config';
 import { Player } from '@/types/models';
 import toast from 'react-hot-toast';
+
+/** Send provisioning invite emails via the sendParentInvites cloud function */
+const sendProvisioningInvites = async (emails: string[]) => {
+  if (emails.length === 0) return;
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) return;
+  const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+  const url = `https://us-central1-${projectId}.cloudfunctions.net/sendParentInvites`;
+  await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ emails }),
+  });
+};
 
 const playerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
-  dateOfBirth: z.string().min(1, 'Date of birth is required'),
+  dateOfBirth: z.string().optional(),
   teamId: z.string().optional(),
   jerseyNumber: z.string().optional(),
   positions: z.string().optional(),
   bats: z.string().optional(),
   throws: z.string().optional(),
   contacts: z.array(z.object({
-    name: z.string().min(1, 'Contact name is required'),
-    relationship: z.string().min(1, 'Relationship is required'),
-    email: z.string().email('Invalid email'),
-    phone: z.string().min(1, 'Phone is required'),
+    name: z.string().optional().default(''),
+    relationship: z.string().optional().default(''),
+    email: z.string().optional().default('').refine(v => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Invalid email'),
+    phone: z.string().optional().default(''),
     isPrimaryContact: z.boolean(),
     isFinancialParty: z.boolean(),
-  })).min(1, 'At least one contact is required'),
-  emergencyContact: z.string().min(1, 'Emergency contact is required'),
-  emergencyPhone: z.string().min(1, 'Emergency phone is required'),
+  })),
+  emergencyContact: z.string().optional(),
+  emergencyPhone: z.string().optional(),
   medicalNotes: z.string().optional(),
   notes: z.string().optional(),
   playingUpFrom: z.string().optional(),
@@ -57,6 +73,7 @@ interface PlayerFormDialogProps {
   open: boolean;
   onClose: () => void;
   player: Player | null;
+  defaultTeamId?: string;
 }
 
 const RELATIONSHIP_OPTIONS = [
@@ -76,10 +93,10 @@ const defaultContact = {
   email: '',
   phone: '',
   isPrimaryContact: true,
-  isFinancialParty: false,
+  isFinancialParty: true,
 };
 
-const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
+const PlayerFormDialog = ({ open, onClose, player, defaultTeamId }: PlayerFormDialogProps) => {
   const queryClient = useQueryClient();
 
   const { data: teams = [] } = useQuery({
@@ -119,6 +136,21 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
     name: 'contacts',
   });
 
+  // Track account status for each contact email
+  const [emailStatuses, setEmailStatuses] = useState<Record<string, 'active' | 'pending' | null>>({});
+
+  // Check contact email statuses when editing an existing player
+  useEffect(() => {
+    if (!player?.contacts?.length) {
+      setEmailStatuses({});
+      return;
+    }
+    const emails = player.contacts.map((c) => c.email).filter(Boolean);
+    if (emails.length === 0) return;
+
+    userProvisioningApi.checkEmailStatuses(emails).then(setEmailStatuses).catch(console.error);
+  }, [player]);
+
   useEffect(() => {
     if (player) {
       // Build contacts from player.contacts if available, otherwise fall back to parentName/Email/Phone
@@ -140,7 +172,7 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
             email: player.parentEmail || '',
             phone: player.parentPhone || '',
             isPrimaryContact: true,
-            isFinancialParty: false,
+            isFinancialParty: true,
           },
         ];
       }
@@ -167,7 +199,7 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
         firstName: '',
         lastName: '',
         dateOfBirth: '',
-        teamId: '',
+        teamId: defaultTeamId || '',
         jerseyNumber: '',
         positions: '',
         bats: '',
@@ -181,7 +213,7 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
         active: true,
       });
     }
-  }, [player, reset]);
+  }, [player, reset, defaultTeamId]);
 
   const buildPlayerPayload = (data: PlayerFormData) => {
     const primaryContact = data.contacts.find((c) => c.isPrimaryContact) || data.contacts[0];
@@ -189,7 +221,7 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
     return {
       firstName: data.firstName,
       lastName: data.lastName,
-      dateOfBirth: new Date(data.dateOfBirth),
+      dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
       teamId: data.teamId || undefined,
       teamName: team?.name,
       jerseyNumber: data.jerseyNumber ? parseInt(data.jerseyNumber) : undefined,
@@ -197,11 +229,11 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
       bats: (data.bats as 'L' | 'R' | 'S') || undefined,
       throws: (data.throws as 'L' | 'R') || undefined,
       contacts: data.contacts,
-      parentName: primaryContact.name,
-      parentEmail: primaryContact.email,
-      parentPhone: primaryContact.phone,
-      emergencyContact: data.emergencyContact,
-      emergencyPhone: data.emergencyPhone,
+      parentName: primaryContact?.name || '',
+      parentEmail: primaryContact?.email || '',
+      parentPhone: primaryContact?.phone || '',
+      emergencyContact: data.emergencyContact || '',
+      emergencyPhone: data.emergencyPhone || '',
       medicalNotes: data.medicalNotes || undefined,
       notes: data.notes || undefined,
       playingUpFrom: data.playingUpFrom || undefined,
@@ -214,41 +246,57 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
       const payload = buildPlayerPayload(data);
       const playerId = await playersApi.create(payload as any);
 
-      // Auto-provision parent accounts for contacts
+      // Auto-provision parent accounts for contacts and send invite emails
       const createdPlayer = await playersApi.getById(playerId);
       if (createdPlayer) {
         await userProvisioningApi.provisionAllContacts(createdPlayer).catch(console.error);
+        const emails = data.contacts.map(c => c.email).filter(Boolean);
+        await sendProvisioningInvites(emails).catch(console.error);
       }
       return playerId;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['players'] });
-      toast.success('Player created successfully');
+      queryClient.invalidateQueries({ queryKey: ['pendingUsers'] });
+      toast.success('Player created and invite sent');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to create player');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to create player');
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async (data: PlayerFormData) => {
       const payload = buildPlayerPayload(data);
+      const contactEmails = data.contacts.map(c => c.email).filter(Boolean);
+
+      // Check which emails already have accounts before provisioning
+      const existingStatuses = contactEmails.length > 0
+        ? await userProvisioningApi.checkEmailStatuses(contactEmails).catch(() => ({} as Record<string, string | null>))
+        : {};
+      const newEmails = contactEmails.filter(e => !existingStatuses[e]);
+
       await playersApi.update(player!.id, payload);
 
       // Auto-provision parent accounts for any new contacts
       const updatedPlayer = await playersApi.getById(player!.id);
       if (updatedPlayer) {
         await userProvisioningApi.provisionAllContacts(updatedPlayer).catch(console.error);
+        // Send invites only for newly provisioned contacts
+        if (newEmails.length > 0) {
+          await sendProvisioningInvites(newEmails).catch(console.error);
+        }
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['players'] });
+      queryClient.invalidateQueries({ queryKey: ['pendingUsers'] });
       toast.success('Player updated successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update player');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update player');
     },
   });
 
@@ -393,8 +441,8 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
                       relationship: '',
                       email: '',
                       phone: '',
-                      isPrimaryContact: false,
-                      isFinancialParty: false,
+                      isPrimaryContact: true,
+                      isFinancialParty: true,
                     })
                   }
                 >
@@ -457,15 +505,35 @@ const PlayerFormDialog = ({ open, onClose, player }: PlayerFormDialogProps) => {
                 </Box>
 
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 1 }}>
-                  <TextField
-                    label="Email"
-                    type="email"
-                    {...register(`contacts.${index}.email`)}
-                    error={!!errors.contacts?.[index]?.email}
-                    helperText={errors.contacts?.[index]?.email?.message}
-                    fullWidth
-                    size="small"
-                  />
+                  <Box>
+                    <TextField
+                      label="Email"
+                      type="email"
+                      {...register(`contacts.${index}.email`)}
+                      error={!!errors.contacts?.[index]?.email}
+                      helperText={errors.contacts?.[index]?.email?.message}
+                      fullWidth
+                      size="small"
+                    />
+                    {player?.contacts?.[index]?.email && emailStatuses[player.contacts[index].email] === 'active' && (
+                      <Chip
+                        label="Account exists"
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                        sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }}
+                      />
+                    )}
+                    {player?.contacts?.[index]?.email && emailStatuses[player.contacts[index].email] === 'pending' && (
+                      <Chip
+                        label="Invite pending"
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                        sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }}
+                      />
+                    )}
+                  </Box>
                   <TextField
                     label="Phone"
                     {...register(`contacts.${index}.phone`)}

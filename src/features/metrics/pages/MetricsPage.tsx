@@ -45,8 +45,8 @@ const MetricsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['metrics'] });
       toast.success('Metric deleted successfully');
     },
-    onError: () => {
-      toast.error('Failed to delete metric');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete metric');
     },
   });
 
@@ -175,7 +175,7 @@ const MetricsPage = () => {
         </TextField>
       </Box>
 
-      <Paper sx={{ height: 600, width: '100%' }}>
+      <Paper sx={{ height: { xs: 400, md: 600 }, width: '100%' }}>
         <DataGrid
           rows={filteredMetrics}
           columns={columns}

@@ -75,8 +75,8 @@ const DonationDialog = ({ open, onClose, fundraiser }: DonationDialogProps) => {
       });
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to record donation');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to record donation');
     },
   });
 

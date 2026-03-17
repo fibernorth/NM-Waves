@@ -176,8 +176,8 @@ const DocumentFormDialog = ({ open, onClose, document, teams }: DocumentFormDial
       setIsUploading(false);
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update document');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update document');
       setIsUploading(false);
     },
   });

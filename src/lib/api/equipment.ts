@@ -16,11 +16,22 @@ import type { Equipment } from '@/types/models';
 
 const COLLECTION = 'equipment';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertEquipment = (id: string, data: any): Equipment => ({
   id,
   type: data.type,
+  ownership: data.ownership || 'organization',
   number: data.number,
   size: data.size,
+  variant: data.variant,
   assignedTo: data.assignedTo,
   assignedToName: data.assignedToName,
   teamId: data.teamId,
@@ -95,21 +106,21 @@ export const equipmentApi = {
   },
 
   create: async (data: Omit<Equipment, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...data,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
   update: async (id: string, data: Partial<Equipment>): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
     const { id: _id, createdAt: _ca, ...updateData } = data as any;
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       ...updateData,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -119,23 +130,23 @@ export const equipmentApi = {
 
   assign: async (id: string, playerId: string, playerName: string, teamId?: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       assignedTo: playerId,
       assignedToName: playerName,
       teamId: teamId || null,
       status: 'assigned',
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   unassign: async (id: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       assignedTo: null,
       assignedToName: null,
       status: 'available',
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   /**

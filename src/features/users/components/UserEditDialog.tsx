@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { usersApi } from '@/lib/api/users';
 import { teamsApi } from '@/lib/api/teams';
+import { playersApi } from '@/lib/api/players';
 import type { User, UserRole } from '@/types/models';
 import toast from 'react-hot-toast';
 
@@ -37,6 +38,7 @@ const userEditSchema = z.object({
   canManageSchedules: z.boolean(),
   canUploadMedia: z.boolean(),
   teamIds: z.array(z.string()),
+  linkedPlayerIds: z.array(z.string()),
 });
 
 type UserEditFormData = z.infer<typeof userEditSchema>;
@@ -56,6 +58,12 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
     enabled: open,
   });
 
+  const { data: players = [] } = useQuery({
+    queryKey: ['players'],
+    queryFn: () => playersApi.getAll(),
+    enabled: open,
+  });
+
   const {
     handleSubmit,
     reset,
@@ -70,6 +78,7 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
       canManageSchedules: false,
       canUploadMedia: false,
       teamIds: [],
+      linkedPlayerIds: [],
     },
   });
 
@@ -82,6 +91,7 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
         canManageSchedules: user.permissions?.canManageSchedules ?? false,
         canUploadMedia: user.permissions?.canUploadMedia ?? false,
         teamIds: user.teamIds || [],
+        linkedPlayerIds: user.linkedPlayerIds || [],
       });
     } else {
       reset({
@@ -91,6 +101,7 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
         canManageSchedules: false,
         canUploadMedia: false,
         teamIds: [],
+        linkedPlayerIds: [],
       });
     }
   }, [user, reset]);
@@ -106,6 +117,7 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
           canUploadMedia: data.canUploadMedia,
         },
         teamIds: data.teamIds,
+        linkedPlayerIds: data.linkedPlayerIds,
       });
     },
     onSuccess: () => {
@@ -113,8 +125,8 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
       toast.success('User updated successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update user');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update user');
     },
   });
 
@@ -125,6 +137,7 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
   const isSubmitting = updateMutation.isPending;
 
   const teamOptions = teams.map(t => ({ id: t.id, label: `${t.name} (${t.ageGroup})` }));
+  const playerOptions = players.map(p => ({ id: p.id, label: `${p.firstName} ${p.lastName}${p.teamName ? ` (${p.teamName})` : ''}` }));
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -256,6 +269,31 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
                       label="Teams"
                       placeholder="Select teams"
                       helperText="Assign user to one or more teams"
+                    />
+                  )}
+                />
+              )}
+            />
+
+            <Controller
+              name="linkedPlayerIds"
+              control={control}
+              render={({ field }) => (
+                <Autocomplete
+                  multiple
+                  options={playerOptions}
+                  getOptionLabel={(option) => option.label}
+                  value={playerOptions.filter(p => field.value.includes(p.id))}
+                  onChange={(_, newValue) => {
+                    field.onChange(newValue.map(v => v.id));
+                  }}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Linked Players"
+                      placeholder="Search players"
+                      helperText="Link children to this parent/coach account"
                     />
                   )}
                 />

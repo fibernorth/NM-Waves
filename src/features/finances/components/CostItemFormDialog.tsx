@@ -27,11 +27,13 @@ const ORG_CATEGORIES: { value: CostItemCategory; label: string }[] = [
   { value: 'waves_fee', label: 'Waves Fee' },
   { value: 'insurance', label: 'Insurance' },
   { value: 'administrative', label: 'Administrative' },
+  { value: 'facility', label: 'Facility' },
 ];
 
 const TEAM_CATEGORIES: { value: CostItemCategory; label: string }[] = [
   { value: 'tournament', label: 'Tournament' },
   { value: 'equipment', label: 'Equipment' },
+  { value: 'facility', label: 'Facility' },
   { value: 'special', label: 'Special / Other' },
 ];
 
@@ -149,7 +151,7 @@ const CostItemFormDialog = ({
       toast.success('Cost item created');
       onClose();
     },
-    onError: () => toast.error('Failed to create cost item'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to create cost item'),
   });
 
   const updateMutation = useMutation({
@@ -170,7 +172,7 @@ const CostItemFormDialog = ({
       toast.success('Cost item updated');
       onClose();
     },
-    onError: () => toast.error('Failed to update cost item'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to update cost item'),
   });
 
   const onSubmit = (data: CostItemFormData) => {

@@ -16,6 +16,26 @@ import type { Tournament, TournamentWorkflowStatus } from '@/types/models';
 
 const COLLECTION = 'tournaments';
 
+/** Strip undefined values from an object (recursively) before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      result[key] = value.map(item =>
+        item && typeof item === 'object' && !Array.isArray(item) && !(item instanceof Date)
+          ? cleanData(item as Record<string, unknown>)
+          : item
+      );
+    } else if (value && typeof value === 'object' && !(value instanceof Date) && !(value as any).toDate) {
+      result[key] = cleanData(value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result as T;
+};
+
 const convertTournament = (id: string, data: any): Tournament => ({
   id,
   name: data.name,
@@ -23,17 +43,24 @@ const convertTournament = (id: string, data: any): Tournament => ({
   startDate: data.startDate?.toDate() || new Date(),
   endDate: data.endDate?.toDate() || new Date(),
   teamIds: data.teamIds || [],
+  contactName: data.contactName || '',
+  contactPhone: data.contactPhone || '',
+  contactEmail: data.contactEmail || '',
   contact: data.contact || '',
   notes: data.notes || '',
   cost: data.cost || 0,
   status: data.status || 'upcoming',
-  workflowStatus: data.workflowStatus || 'planning',
+  workflowStatus: data.workflowStatus || 'wanting',
   depositAmount: data.depositAmount,
   depositPaidDate: data.depositPaidDate?.toDate(),
   balanceDueDate: data.balanceDueDate?.toDate(),
   balancePaid: data.balancePaid,
   registrationUrl: data.registrationUrl,
+  websiteUrl: data.websiteUrl || '',
+  scheduleUrl: data.scheduleUrl || '',
   accommodationsInfo: data.accommodationsInfo,
+  insuranceSent: data.insuranceSent || false,
+  insuranceSentDate: data.insuranceSentDate?.toDate(),
   statusHistory: (data.statusHistory || []).map((h: any) => ({
     ...h,
     changedAt: h.changedAt?.toDate() || new Date(),
@@ -62,8 +89,11 @@ export const tournamentsApi = {
       ...data,
       startDate: Timestamp.fromDate(data.startDate),
       endDate: Timestamp.fromDate(data.endDate),
-      workflowStatus: data.workflowStatus || 'planning',
+      workflowStatus: data.workflowStatus || 'wanting',
     };
+    if (data.insuranceSentDate) {
+      saveData.insuranceSentDate = Timestamp.fromDate(data.insuranceSentDate);
+    }
     if (data.depositPaidDate) {
       saveData.depositPaidDate = Timestamp.fromDate(data.depositPaidDate);
     }
@@ -76,7 +106,7 @@ export const tournamentsApi = {
         changedAt: Timestamp.fromDate(h.changedAt),
       }));
     }
-    const docRef = await addDoc(collection(db, COLLECTION), saveData);
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData(saveData));
     return docRef.id;
   },
 
@@ -95,13 +125,16 @@ export const tournamentsApi = {
     if (data.balanceDueDate) {
       updateData.balanceDueDate = Timestamp.fromDate(data.balanceDueDate);
     }
+    if (data.insuranceSentDate) {
+      updateData.insuranceSentDate = Timestamp.fromDate(data.insuranceSentDate);
+    }
     if (data.statusHistory) {
       updateData.statusHistory = data.statusHistory.map((h) => ({
         ...h,
         changedAt: h.changedAt instanceof Date ? Timestamp.fromDate(h.changedAt) : h.changedAt,
       }));
     }
-    await updateDoc(docRef, updateData);
+    await updateDoc(docRef, cleanData(updateData));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -121,7 +154,7 @@ export const tournamentsApi = {
     userId: string,
     notes?: string
   ): Promise<void> => {
-    const oldStatus = tournament.workflowStatus || 'planning';
+    const oldStatus = tournament.workflowStatus || 'wanting';
     const historyEntry = {
       from: oldStatus,
       to: newStatus,
@@ -136,13 +169,13 @@ export const tournamentsApi = {
       statusHistory: [...existingHistory, historyEntry],
     });
 
-    // Auto-create cost items when advancing to signed_up
-    if (newStatus === 'signed_up' && tournament.cost > 0 && tournament.teamIds.length > 0) {
+    // Auto-create cost items when advancing to entered
+    if (newStatus === 'entered' && tournament.cost > 0 && tournament.teamIds.length > 0) {
       await tournamentsApi.createTournamentCostItems(tournament, userId);
     }
 
-    // If rolling back from signed_up, remove cost items
-    if (oldStatus === 'signed_up' && newStatus !== 'signed_up') {
+    // If rolling back from entered, remove cost items
+    if (oldStatus === 'entered' && newStatus !== 'entered') {
       await costItemsApi.deleteByTournament(tournament.id);
     }
   },

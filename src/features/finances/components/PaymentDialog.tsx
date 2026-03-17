@@ -85,8 +85,8 @@ const PaymentDialog = ({ open, onClose, financeId, playerName, currentBalance, c
       reset();
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to record payment');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to record payment');
     },
   });
 
@@ -109,15 +109,15 @@ const PaymentDialog = ({ open, onClose, financeId, playerName, currentBalance, c
             <Box
               sx={{
                 p: 2,
-                bgcolor: currentBalance < 0 ? 'error.light' : 'success.light',
+                bgcolor: currentBalance > 0 ? 'error.light' : 'success.light',
                 borderRadius: 1,
               }}
             >
               <Typography variant="body2" color="text.secondary">
-                Current Balance
+                Balance Due (after scholarships)
               </Typography>
-              <Typography variant="h6" sx={{ color: currentBalance < 0 ? 'error.dark' : 'success.dark' }}>
-                ${Math.abs(currentBalance).toFixed(2)} {currentBalance < 0 ? 'Owed' : 'Credit'}
+              <Typography variant="h6" sx={{ color: currentBalance > 0 ? 'error.dark' : 'success.dark' }}>
+                ${Math.abs(currentBalance).toFixed(2)} {currentBalance > 0 ? 'Owed' : currentBalance < 0 ? 'Credit' : 'Paid'}
               </Typography>
             </Box>
 
@@ -195,6 +195,7 @@ const PaymentDialog = ({ open, onClose, financeId, playerName, currentBalance, c
               <MenuItem value="zelle">Zelle</MenuItem>
               <MenuItem value="credit_card">Credit Card</MenuItem>
               <MenuItem value="bank_transfer">Bank Transfer</MenuItem>
+              <MenuItem value="stripe">Stripe (Online)</MenuItem>
               <MenuItem value="sponsor">Sponsor</MenuItem>
               <MenuItem value="other">Other</MenuItem>
             </TextField>

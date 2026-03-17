@@ -18,13 +18,15 @@ import { Equipment } from '@/types/models';
 import toast from 'react-hot-toast';
 
 const equipmentSchema = z.object({
-  type: z.enum(['jersey', 'pants', 'helmet', 'bag', 'belt', 'socks', 'guest_jersey']),
-  number: z.number().optional(),
+  type: z.enum(['jersey', 'pants', 'helmet', 'bag', 'belt', 'socks', 'guest_jersey', 'bat', 'softball', 'glove', 'catcher_gear', 'other']),
+  ownership: z.enum(['player', 'organization', 'consumable']),
+  number: z.preprocess((val) => (val === '' || Number.isNaN(val) ? undefined : val), z.number().optional()),
   size: z.string().min(1, 'Size is required'),
+  variant: z.string().optional(),
   season: z.string().min(1, 'Season is required'),
   condition: z.enum(['new', 'good', 'fair', 'poor']),
   cost: z.number().min(0),
-  status: z.enum(['available', 'assigned', 'damaged', 'retired']),
+  status: z.enum(['available', 'assigned', 'damaged', 'retired', 'consumed']),
   notes: z.string().optional(),
 });
 
@@ -40,11 +42,25 @@ const typeLabels: Record<string, string> = {
   jersey: 'Jersey',
   pants: 'Pants',
   helmet: 'Helmet',
-  bag: 'Bag',
+  bag: 'Backpack Bag',
   belt: 'Belt',
   socks: 'Socks',
   guest_jersey: 'Guest Jersey',
+  bat: 'Bat',
+  softball: 'Softball',
+  glove: 'Glove',
+  catcher_gear: 'Catcher Gear',
+  other: 'Other',
 };
+
+const ownershipLabels: Record<string, string> = {
+  player: 'Player-Owned (purchased for player)',
+  organization: 'Organization-Owned (loaned)',
+  consumable: 'Consumable (used up)',
+};
+
+/** Equipment types that default to player-owned when purchased per player */
+const PLAYER_OWNED_DEFAULTS = ['helmet', 'bag', 'belt', 'socks'];
 
 const EquipmentFormDialog = ({ open, onClose, equipment }: EquipmentFormDialogProps) => {
   const queryClient = useQueryClient();
@@ -54,12 +70,16 @@ const EquipmentFormDialog = ({ open, onClose, equipment }: EquipmentFormDialogPr
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<EquipmentFormData>({
     resolver: zodResolver(equipmentSchema),
     defaultValues: {
       type: 'jersey',
+      ownership: 'organization',
       size: '',
+      variant: '',
       season: new Date().getFullYear().toString(),
       condition: 'new',
       cost: 0,
@@ -68,12 +88,30 @@ const EquipmentFormDialog = ({ open, onClose, equipment }: EquipmentFormDialogPr
     },
   });
 
+  const watchedType = watch('type');
+  const watchedOwnership = watch('ownership');
+  const watchedCondition = watch('condition');
+  const watchedStatus = watch('status');
+
+  // Auto-set ownership when type changes for common player-owned items
+  useEffect(() => {
+    if (!equipment) {
+      if (PLAYER_OWNED_DEFAULTS.includes(watchedType)) {
+        setValue('ownership', 'player');
+      } else if (watchedType === 'softball') {
+        setValue('ownership', 'consumable');
+      }
+    }
+  }, [watchedType, equipment, setValue]);
+
   useEffect(() => {
     if (equipment) {
       reset({
         type: equipment.type,
+        ownership: equipment.ownership || 'organization',
         number: equipment.number,
         size: equipment.size,
+        variant: equipment.variant || '',
         season: equipment.season,
         condition: equipment.condition,
         cost: equipment.cost,
@@ -83,7 +121,9 @@ const EquipmentFormDialog = ({ open, onClose, equipment }: EquipmentFormDialogPr
     } else {
       reset({
         type: 'jersey',
+        ownership: 'organization',
         size: '',
+        variant: '',
         season: new Date().getFullYear().toString(),
         condition: 'new',
         cost: 0,
@@ -102,7 +142,7 @@ const EquipmentFormDialog = ({ open, onClose, equipment }: EquipmentFormDialogPr
       reset();
       onClose();
     },
-    onError: () => toast.error('Failed to add equipment'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to add equipment'),
   });
 
   const updateMutation = useMutation({
@@ -113,7 +153,7 @@ const EquipmentFormDialog = ({ open, onClose, equipment }: EquipmentFormDialogPr
       toast.success('Equipment updated successfully');
       onClose();
     },
-    onError: () => toast.error('Failed to update equipment'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to update equipment'),
   });
 
   const onSubmit = (data: EquipmentFormData) => {
@@ -140,12 +180,35 @@ const EquipmentFormDialog = ({ open, onClose, equipment }: EquipmentFormDialogPr
               helperText={errors.type?.message}
               fullWidth
               required
-              defaultValue={equipment?.type || 'jersey'}
+              value={watchedType}
             >
               {Object.entries(typeLabels).map(([value, label]) => (
                 <MenuItem key={value} value={value}>{label}</MenuItem>
               ))}
             </TextField>
+
+            <TextField
+              label="Ownership"
+              select
+              {...register('ownership')}
+              error={!!errors.ownership}
+              helperText={errors.ownership?.message}
+              fullWidth
+              required
+              value={watchedOwnership}
+            >
+              {Object.entries(ownershipLabels).map(([value, label]) => (
+                <MenuItem key={value} value={value}>{label}</MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              label="Variant / Description"
+              {...register('variant')}
+              fullWidth
+              placeholder="e.g., Navy Blue, DeMarini CF, Evoshield XVT"
+              helperText="Color, brand, model, or style"
+            />
 
             <TextField
               label="Number"
@@ -183,7 +246,7 @@ const EquipmentFormDialog = ({ open, onClose, equipment }: EquipmentFormDialogPr
               helperText={errors.condition?.message}
               fullWidth
               required
-              defaultValue={equipment?.condition || 'new'}
+              value={watchedCondition}
             >
               <MenuItem value="new">New</MenuItem>
               <MenuItem value="good">Good</MenuItem>
@@ -210,12 +273,13 @@ const EquipmentFormDialog = ({ open, onClose, equipment }: EquipmentFormDialogPr
               helperText={errors.status?.message}
               fullWidth
               required
-              defaultValue={equipment?.status || 'available'}
+              value={watchedStatus}
             >
               <MenuItem value="available">Available</MenuItem>
               <MenuItem value="assigned">Assigned</MenuItem>
               <MenuItem value="damaged">Damaged</MenuItem>
               <MenuItem value="retired">Retired</MenuItem>
+              <MenuItem value="consumed">Consumed</MenuItem>
             </TextField>
 
             <TextField

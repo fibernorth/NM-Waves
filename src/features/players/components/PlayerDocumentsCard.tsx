@@ -38,16 +38,24 @@ import toast from 'react-hot-toast';
 const DOC_TYPE_LABELS: Record<PlayerDocumentType, string> = {
   birth_certificate: 'Birth Certificate',
   medical_form: 'Medical Form',
+  health_insurance: 'Health Insurance',
   waiver: 'Waiver',
   report_card: 'Report Card',
+  concussion_protocol: 'Concussion Protocol',
+  player_conduct: 'Player Conduct',
+  parent_conduct: 'Parent Conduct',
   other: 'Other',
 };
 
 const DOC_TYPE_COLORS: Record<PlayerDocumentType, 'error' | 'info' | 'warning' | 'success' | 'default'> = {
   birth_certificate: 'error',
   medical_form: 'info',
+  health_insurance: 'warning',
   waiver: 'warning',
   report_card: 'success',
+  concussion_protocol: 'info',
+  player_conduct: 'default',
+  parent_conduct: 'default',
   other: 'default',
 };
 
@@ -94,8 +102,8 @@ const PlayerDocumentsCard = ({ player }: PlayerDocumentsCardProps) => {
       toast.success('Document uploaded successfully');
       handleCloseUpload();
     },
-    onError: () => {
-      toast.error('Failed to upload document');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to upload document');
     },
   });
 
@@ -106,8 +114,8 @@ const PlayerDocumentsCard = ({ player }: PlayerDocumentsCardProps) => {
       queryClient.invalidateQueries({ queryKey: ['player', player.id] });
       toast.success('Document deleted');
     },
-    onError: () => {
-      toast.error('Failed to delete document');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete document');
     },
   });
 
@@ -119,6 +127,14 @@ const PlayerDocumentsCard = ({ player }: PlayerDocumentsCardProps) => {
   };
 
   const hasBirthCert = documents.some(d => d.type === 'birth_certificate');
+  const hasInsurance = documents.some(d => d.type === 'health_insurance');
+  const hasMedicalForm = documents.some(d => d.type === 'medical_form');
+
+  const requiredDocs: { label: string; has: boolean }[] = [
+    { label: 'Birth Certificate', has: hasBirthCert },
+    { label: 'Health Insurance', has: hasInsurance },
+    { label: 'Medical Form', has: hasMedicalForm },
+  ];
 
   return (
     <>
@@ -141,16 +157,15 @@ const PlayerDocumentsCard = ({ player }: PlayerDocumentsCardProps) => {
           </Box>
           <Divider sx={{ mb: 1 }} />
 
-          {/* Birth certificate status */}
-          <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-            <VerifiedIcon
-              fontSize="small"
-              color={hasBirthCert ? 'success' : 'disabled'}
-            />
-            <Typography variant="body2" color={hasBirthCert ? 'success.main' : 'text.secondary'}>
-              Birth Certificate: {hasBirthCert ? 'On File' : 'Not Uploaded'}
-            </Typography>
-          </Box>
+          {/* Required documents checklist */}
+          {requiredDocs.map((rd) => (
+            <Box key={rd.label} sx={{ mb: 0.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <VerifiedIcon fontSize="small" color={rd.has ? 'success' : 'disabled'} />
+              <Typography variant="body2" color={rd.has ? 'success.main' : 'text.secondary'}>
+                {rd.label}: {rd.has ? 'On File' : 'Not Uploaded'}
+              </Typography>
+            </Box>
+          ))}
 
           {documents.length === 0 ? (
             <Box sx={{ py: 2, textAlign: 'center' }}>
@@ -240,8 +255,12 @@ const PlayerDocumentsCard = ({ player }: PlayerDocumentsCardProps) => {
               fullWidth
             >
               <MenuItem value="birth_certificate">Birth Certificate</MenuItem>
+              <MenuItem value="health_insurance">Health Insurance Card</MenuItem>
               <MenuItem value="medical_form">Medical Form</MenuItem>
-              <MenuItem value="waiver">Waiver</MenuItem>
+              <MenuItem value="waiver">Signed Waiver</MenuItem>
+              <MenuItem value="concussion_protocol">Concussion Protocol</MenuItem>
+              <MenuItem value="player_conduct">Player Conduct Agreement</MenuItem>
+              <MenuItem value="parent_conduct">Parent Conduct Agreement</MenuItem>
               <MenuItem value="report_card">Report Card</MenuItem>
               <MenuItem value="other">Other</MenuItem>
             </TextField>

@@ -17,6 +17,7 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import GroupsIcon from '@mui/icons-material/Groups';
 import { useNavigate } from 'react-router-dom';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import {
   collection,
   query,
@@ -34,12 +35,14 @@ interface PublicPlayer {
 }
 
 const PublicTeamsPage = () => {
+  useDocumentTitle('Teams');
   const navigate = useNavigate();
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamPlayers, setTeamPlayers] = useState<Record<string, PublicPlayer[]>>({});
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [loadingPlayers, setLoadingPlayers] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
+  const [playerErrors, setPlayerErrors] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState<string | false>(false);
 
   useEffect(() => {
@@ -100,6 +103,7 @@ const PublicTeamsPage = () => {
       setTeamPlayers((prev) => ({ ...prev, [teamId]: players }));
     } catch (err) {
       console.error('Error fetching players for team:', teamId, err);
+      setPlayerErrors(prev => ({ ...prev, [teamId]: 'Failed to load roster' }));
     } finally {
       setLoadingPlayers((prev) => ({ ...prev, [teamId]: false }));
     }
@@ -186,6 +190,8 @@ const PublicTeamsPage = () => {
                     Head Coach: {team.coachName}
                   </Typography>
                 )}
+
+                {playerErrors[team.id] && <Alert severity="error" sx={{ mt: 1 }}>{playerErrors[team.id]}</Alert>}
 
                 {loadingPlayers[team.id] ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>

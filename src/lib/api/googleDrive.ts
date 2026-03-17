@@ -19,6 +19,7 @@ export const googleDriveApi = {
   listPhotos: async (): Promise<MediaItem[]> => {
     const callable = httpsCallable<void, { photos: DrivePhoto[] }>(functions, 'listDrivePhotos');
     const result = await callable();
+    if (!result?.data) return [];
     const photos = result.data.photos || [];
 
     return photos.map((photo) => ({

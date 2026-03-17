@@ -17,6 +17,15 @@ import { isResizableImage, resizeImage } from '@/lib/utils/imageResize';
 
 const COLLECTION = 'homepagePosts';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertPost = (id: string, data: any): HomepagePost => ({
   id,
   type: data.type,
@@ -67,7 +76,7 @@ export const homepagePostsApi = {
     if (data.gameDate) {
       payload.gameDate = Timestamp.fromDate(data.gameDate);
     }
-    const docRef = await addDoc(collection(db, COLLECTION), payload);
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData(payload));
     return docRef.id;
   },
 
@@ -77,7 +86,7 @@ export const homepagePostsApi = {
       payload.gameDate = Timestamp.fromDate(data.gameDate);
     }
     const docRef = doc(db, COLLECTION, id);
-    await updateDoc(docRef, payload);
+    await updateDoc(docRef, cleanData(payload));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -107,6 +116,6 @@ export const homepagePostsApi = {
     }
 
     await uploadBytes(storageRef, fileToUpload);
-    return getDownloadURL(storageRef);
+    return await getDownloadURL(storageRef);
   },
 };

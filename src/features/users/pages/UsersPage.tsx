@@ -7,12 +7,14 @@ import {
   Chip,
   TextField,
   MenuItem,
+  CircularProgress,
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import LockResetIcon from '@mui/icons-material/LockReset';
 import { usersApi } from '@/lib/api/users';
 import type { User, UserRole } from '@/types/models';
 import toast from 'react-hot-toast';
@@ -70,8 +72,8 @@ const UsersPage = () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast.success('User deleted successfully');
     },
-    onError: () => {
-      toast.error('Failed to delete user');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete user');
     },
   });
 
@@ -83,6 +85,34 @@ const UsersPage = () => {
   const handleDelete = (uid: string) => {
     if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
       deleteMutation.mutate(uid);
+    }
+  };
+
+  const [resettingPassword, setResettingPassword] = useState<string | null>(null);
+
+  const handleResetPassword = async (email: string) => {
+    if (!window.confirm(`Send password reset email to ${email}?`)) return;
+    setResettingPassword(email);
+    try {
+      const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+      const res = await fetch(
+        `https://us-central1-${projectId}.cloudfunctions.net/sendCustomPasswordReset`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        }
+      );
+      if (res.ok) {
+        toast.success(`Password reset email sent to ${email} (valid for 48 hours)`);
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Failed to send password reset email');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to send password reset email');
+    } finally {
+      setResettingPassword(null);
     }
   };
 
@@ -146,16 +176,25 @@ const UsersPage = () => {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 180,
+      width: 280,
       sortable: false,
       renderCell: (params) => (
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
           <Button
             size="small"
             startIcon={<EditIcon />}
             onClick={() => handleEdit(params.row)}
           >
             Edit
+          </Button>
+          <Button
+            size="small"
+            color="secondary"
+            startIcon={resettingPassword === params.row.email ? <CircularProgress size={14} /> : <LockResetIcon />}
+            onClick={() => handleResetPassword(params.row.email)}
+            disabled={resettingPassword === params.row.email}
+          >
+            Reset PW
           </Button>
           <Button
             size="small"
@@ -212,7 +251,7 @@ const UsersPage = () => {
         </TextField>
       </Box>
 
-      <Paper sx={{ height: 600, width: '100%' }}>
+      <Paper sx={{ height: { xs: 400, md: 600 }, width: '100%' }}>
         <DataGrid
           rows={filteredUsers}
           columns={columns}

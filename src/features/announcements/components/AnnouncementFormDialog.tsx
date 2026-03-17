@@ -99,8 +99,8 @@ const AnnouncementFormDialog = ({
       toast.success('Announcement created successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to create announcement');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to create announcement');
     },
   });
 
@@ -112,8 +112,8 @@ const AnnouncementFormDialog = ({
       toast.success('Announcement updated successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update announcement');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update announcement');
     },
   });
 

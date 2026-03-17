@@ -132,8 +132,8 @@ const EventFormDialog = ({ open, onClose, event }: EventFormDialogProps) => {
       toast.success('Event created successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to create event');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to create event');
     },
   });
 
@@ -156,8 +156,8 @@ const EventFormDialog = ({ open, onClose, event }: EventFormDialogProps) => {
       toast.success('Event updated successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update event');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update event');
     },
   });
 

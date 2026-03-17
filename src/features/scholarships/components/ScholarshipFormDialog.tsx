@@ -90,8 +90,8 @@ const ScholarshipFormDialog = ({ open, onClose, scholarship }: ScholarshipFormDi
       toast.success('Scholarship awarded successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to award scholarship');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to award scholarship');
     },
   });
 
@@ -110,8 +110,8 @@ const ScholarshipFormDialog = ({ open, onClose, scholarship }: ScholarshipFormDi
       toast.success('Scholarship updated successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update scholarship');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update scholarship');
     },
   });
 

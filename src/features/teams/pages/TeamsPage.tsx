@@ -36,8 +36,8 @@ const TeamsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['players'] });
       toast.success(`Synced ${result.updated} players across ${result.teams} teams`);
     },
-    onError: () => {
-      toast.error('Failed to sync rosters');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to sync rosters');
     },
   });
 
@@ -47,8 +47,8 @@ const TeamsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['teams'] });
       toast.success('Team deleted successfully');
     },
-    onError: () => {
-      toast.error('Failed to delete team');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete team');
     },
   });
 
@@ -162,7 +162,7 @@ const TeamsPage = () => {
         )}
       </Box>
 
-      <Paper sx={{ height: 600, width: '100%' }}>
+      <Paper sx={{ height: { xs: 400, md: 600 }, width: '100%' }}>
         <DataGrid
           rows={teams}
           columns={columns}

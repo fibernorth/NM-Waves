@@ -12,8 +12,10 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Button,
 } from '@mui/material';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import {
@@ -28,6 +30,7 @@ import { db } from '@/lib/firebase/config';
 import { format, isToday, isTomorrow } from 'date-fns';
 import type { ScheduleEvent } from '@/types/models';
 import SponsorBanner from '@/components/common/SponsorBanner';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 const EVENT_TYPE_COLORS: Record<string, 'primary' | 'success' | 'secondary' | 'warning' | 'info'> = {
   game: 'primary',
@@ -46,6 +49,7 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
 };
 
 const PublicSchedulePage = () => {
+  useDocumentTitle('Schedule');
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +108,42 @@ const PublicSchedulePage = () => {
     return format(date, 'EEEE, MMMM d, yyyy');
   };
 
+  const exportToICal = () => {
+    if (events.length === 0) return;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const toICalDate = (d: Date) =>
+      `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//TC Waves Ball Club//Schedule//EN',
+      'CALSCALE:GREGORIAN',
+    ];
+
+    for (const event of events) {
+      lines.push(
+        'BEGIN:VEVENT',
+        `DTSTART:${toICalDate(event.startTime)}`,
+        `DTEND:${toICalDate(event.endTime)}`,
+        `SUMMARY:${event.title.replace(/[,;\\]/g, ' ')}`,
+        ...(event.location ? [`LOCATION:${event.location.replace(/[,;\\]/g, ' ')}`] : []),
+        ...(event.teamName ? [`DESCRIPTION:Team: ${event.teamName}`] : []),
+        `UID:${event.id}@tcwaves`,
+        'END:VEVENT',
+      );
+    }
+
+    lines.push('END:VCALENDAR');
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'tc-waves-schedule.ics';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Box>
       {/* Page Header */}
@@ -131,6 +171,18 @@ const PublicSchedulePage = () => {
       </Box>
 
       <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
+        {events.length > 0 && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={<FileDownloadIcon />}
+              onClick={exportToICal}
+              size="small"
+            >
+              Export to Calendar
+            </Button>
+          </Box>
+        )}
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
             <CircularProgress />

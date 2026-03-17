@@ -25,11 +25,14 @@ const NAV_LINKS = [
   { label: 'Home', path: '/' },
   { label: 'About', path: '/about' },
   { label: 'Teams', path: '/teams-roster' },
+  { label: 'Staff', path: '/staff' },
   { label: 'Schedule', path: '/schedule' },
   { label: 'Gallery', path: '/gallery' },
+  { label: 'Pricing', path: '/pricing' },
   { label: 'Sponsors', path: '/sponsors' },
+  { label: 'Resources', path: '/resources' },
   { label: 'Contact', path: '/contact' },
-  { label: 'Tryout Registration', path: '/tryouts' },
+  { label: 'Tryouts', path: '/tryouts' },
 ];
 
 const PublicLayout = () => {
@@ -210,6 +213,24 @@ const PublicLayout = () => {
             </Box>
           </Box>
           <Divider sx={{ my: 2, borderColor: 'rgba(255,255,255,0.2)' }} />
+          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, flexWrap: 'wrap', mb: 2 }}>
+            {[
+              { label: 'Privacy Policy', path: '/privacy' },
+              { label: 'Terms of Service', path: '/terms' },
+              { label: 'Sponsorship Packages', path: '/sponsorship-packages' },
+              { label: 'Parent Resources', path: '/resources' },
+            ].map((link) => (
+              <Typography
+                key={link.path}
+                component={RouterLink}
+                to={link.path}
+                variant="body2"
+                sx={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', '&:hover': { color: 'white' } }}
+              >
+                {link.label}
+              </Typography>
+            ))}
+          </Box>
           <SponsorBanner mode="footer" />
           <Typography variant="body2" align="center" sx={{ opacity: 0.7, mt: 2 }}>
             &copy; {new Date().getFullYear()} TC Waves Ball Club, Inc. All rights reserved.

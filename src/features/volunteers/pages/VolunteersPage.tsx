@@ -64,8 +64,8 @@ const VolunteersPage = () => {
       queryClient.invalidateQueries({ queryKey: ['volunteers'] });
       toast.success('Volunteer assignment deleted');
     },
-    onError: () => {
-      toast.error('Failed to delete assignment');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete assignment');
     },
   });
 
@@ -76,8 +76,8 @@ const VolunteersPage = () => {
       queryClient.invalidateQueries({ queryKey: ['volunteers'] });
       toast.success('Status updated');
     },
-    onError: () => {
-      toast.error('Failed to update status');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update status');
     },
   });
 
@@ -265,7 +265,7 @@ const VolunteersPage = () => {
       </Paper>
 
       {/* Data Grid */}
-      <Paper sx={{ height: 600, width: '100%' }}>
+      <Paper sx={{ height: { xs: 400, md: 600 }, width: '100%' }}>
         <DataGrid
           rows={filteredVolunteers}
           columns={columns}

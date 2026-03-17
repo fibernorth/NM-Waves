@@ -10,21 +10,23 @@
     "logs": "firebase functions:log"
   },
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "main": "lib/index.js",
   "dependencies": {
     "@google-cloud/vision": "^4.0.0",
-    "@types/cors": "^2.8.19",
     "cors": "^2.8.6",
     "firebase-admin": "^12.0.0",
     "firebase-functions": "^5.0.0",
     "googleapis": "^130.0.0",
-    "puppeteer": "^22.0.0",
+    "nodemailer": "^8.0.2",
+    "puppeteer-core": "^22.0.0",
     "stripe": "^14.0.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/node": "^20.0.0",
+    "@types/nodemailer": "^7.0.11",
     "typescript": "^5.3.0"
   },
   "private": true

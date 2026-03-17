@@ -8,14 +8,17 @@ import {
   Button,
   Paper,
   Grid,
+  MenuItem,
+  Alert,
+  Divider,
+  CircularProgress,
 } from '@mui/material';
 import BusinessIcon from '@mui/icons-material/Business';
+import PaymentIcon from '@mui/icons-material/Payment';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { sponsorsApi } from '@/lib/api/sponsors';
-import { useAuthStore } from '@/stores/authStore';
-import { isSponsor as checkIsSponsor } from '@/lib/auth/roles';
+import { redirectToCheckout } from '@/lib/api/stripe';
 import toast from 'react-hot-toast';
 
 const sponsorSchema = z.object({
@@ -24,70 +27,49 @@ const sponsorSchema = z.object({
   contactEmail: z.string().email('Valid email required'),
   contactPhone: z.string().min(1, 'Phone number is required'),
   websiteUrl: z.string().optional(),
+  amount: z.number({ invalid_type_error: 'Enter an amount' }).min(1, 'Minimum $1.00'),
+  sponsorshipTarget: z.enum(['organization', 'team', 'player']),
+  notes: z.string().optional(),
 });
 
 type SponsorFormData = z.infer<typeof sponsorSchema>;
 
 const BecomeSponsorPage = () => {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
-  const [submitted, setSubmitted] = useState(false);
-
-  // If already a sponsor, redirect
-  if (checkIsSponsor(user)) {
-    navigate('/sponsor/dashboard', { replace: true });
-    return null;
-  }
+  const [paying, setPaying] = useState(false);
 
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<SponsorFormData>({
     resolver: zodResolver(sponsorSchema),
+    defaultValues: {
+      sponsorshipTarget: 'organization',
+      amount: undefined as any,
+    },
   });
 
-  const onSubmit = async (data: SponsorFormData) => {
-    try {
-      await sponsorsApi.create({
-        businessName: data.businessName,
-        contactName: data.contactName,
-        contactEmail: data.contactEmail,
-        contactPhone: data.contactPhone,
-        websiteUrl: data.websiteUrl || '',
-        level: 'custom',
-        sponsorshipType: 'player_sponsor',
-        displayOnPublicSite: false,
-        season: new Date().getFullYear().toString(),
-        sponsoredPlayers: [],
-      });
+  const sponsorshipTarget = watch('sponsorshipTarget');
 
-      setSubmitted(true);
-      toast.success('Sponsor application submitted!');
-    } catch (error) {
-      toast.error('Failed to submit. Please try again.');
+  const onSubmit = async (data: SponsorFormData) => {
+    setPaying(true);
+    try {
+      await redirectToCheckout({
+        amount: data.amount,
+        sponsorBusinessName: data.businessName,
+        sponsorshipTarget: data.sponsorshipTarget,
+        sponsorNotes: data.notes || '',
+        payerName: data.contactName,
+        payerEmail: data.contactEmail,
+      });
+    } catch (error: any) {
+      console.error('Checkout error:', error);
+      toast.error(error.message || 'Failed to start checkout. Please try again.');
+      setPaying(false);
     }
   };
-
-  if (submitted) {
-    return (
-      <Container maxWidth="sm" sx={{ py: 8 }}>
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <BusinessIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
-          <Typography variant="h4" gutterBottom>
-            Thank You!
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Your sponsor application has been submitted. An administrator will review your
-            information and set up your account. Check your email for login instructions.
-          </Typography>
-          <Button variant="contained" onClick={() => navigate('/')}>
-            Back to Home
-          </Button>
-        </Paper>
-      </Container>
-    );
-  }
 
   return (
     <Container maxWidth="sm" sx={{ py: 8 }}>
@@ -98,8 +80,8 @@ const BecomeSponsorPage = () => {
             Become a Sponsor
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Support TC Waves players by becoming a sponsor. You can sponsor individual players
-            and help cover their costs for the season.
+            Support TC Waves players by becoming a sponsor. Your contribution is tax-deductible
+            and directly supports youth athletics in Northern Michigan.
           </Typography>
         </Box>
 
@@ -115,12 +97,22 @@ const BecomeSponsorPage = () => {
                 required
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="Contact Name"
                 {...register('contactName')}
                 error={!!errors.contactName}
                 helperText={errors.contactName?.message}
+                fullWidth
+                required
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Phone"
+                {...register('contactPhone')}
+                error={!!errors.contactPhone}
+                helperText={errors.contactPhone?.message}
                 fullWidth
                 required
               />
@@ -138,30 +130,90 @@ const BecomeSponsorPage = () => {
             </Grid>
             <Grid item xs={12}>
               <TextField
-                label="Phone"
-                {...register('contactPhone')}
-                error={!!errors.contactPhone}
-                helperText={errors.contactPhone?.message}
-                fullWidth
-                required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
                 label="Website (optional)"
                 {...register('websiteUrl')}
                 fullWidth
               />
             </Grid>
+
+            <Grid item xs={12}>
+              <Divider sx={{ my: 1 }} />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Sponsorship Amount"
+                type="number"
+                {...register('amount', { valueAsNumber: true })}
+                error={!!errors.amount}
+                helperText={errors.amount?.message || 'Gold: $1,000+ | Silver: $500+ | Bronze: $250+'}
+                fullWidth
+                required
+                InputProps={{ startAdornment: <Typography sx={{ mr: 0.5, color: 'text.secondary' }}>$</Typography> }}
+                inputProps={{ step: '1', min: '1' }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Apply Sponsorship To"
+                select
+                {...register('sponsorshipTarget')}
+                error={!!errors.sponsorshipTarget}
+                helperText={errors.sponsorshipTarget?.message}
+                fullWidth
+                required
+                defaultValue="organization"
+              >
+                <MenuItem value="organization">Organization (General Fund)</MenuItem>
+                <MenuItem value="team">A Specific Team</MenuItem>
+                <MenuItem value="player">A Specific Player</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                label={
+                  sponsorshipTarget === 'player'
+                    ? 'Player name or details (we\'ll match them up)'
+                    : sponsorshipTarget === 'team'
+                    ? 'Team name or age group'
+                    : 'Any notes for the club (optional)'
+                }
+                {...register('notes')}
+                fullWidth
+                multiline
+                rows={3}
+                placeholder={
+                  sponsorshipTarget === 'player'
+                    ? 'e.g. "Apply to Jane Smith, 12U team"'
+                    : sponsorshipTarget === 'team'
+                    ? 'e.g. "14U Gold team"'
+                    : 'e.g. "Use where most needed"'
+                }
+              />
+            </Grid>
+
+            <Grid item xs={12}>
+              <Alert severity="info" sx={{ mb: 1 }}>
+                A small processing fee (2.9% + $0.30) applies to card payments. You&apos;ll be redirected to Stripe&apos;s secure checkout.
+              </Alert>
+            </Grid>
+
             <Grid item xs={12}>
               <Button
                 type="submit"
                 variant="contained"
                 size="large"
                 fullWidth
-                disabled={isSubmitting}
+                disabled={isSubmitting || paying}
+                startIcon={paying ? <CircularProgress size={20} color="inherit" /> : <PaymentIcon />}
+                sx={{
+                  py: 1.5,
+                  fontSize: '1.1rem',
+                  backgroundColor: '#635bff',
+                  '&:hover': { backgroundColor: '#4b45c6' },
+                }}
               >
-                {isSubmitting ? 'Submitting...' : 'Submit Sponsor Application'}
+                {paying ? 'Redirecting to Stripe...' : 'Pay & Become a Sponsor'}
               </Button>
             </Grid>
           </Grid>
@@ -169,6 +221,12 @@ const BecomeSponsorPage = () => {
 
         <Box sx={{ mt: 3, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
+            Prefer to pay by check or another method?{' '}
+            <Button size="small" onClick={() => navigate('/contact')}>
+              Contact us
+            </Button>
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             Already a sponsor?{' '}
             <Button size="small" onClick={() => navigate('/login')}>
               Log in here

@@ -15,6 +15,8 @@ import SponsorLayout from './components/layout/SponsorLayout';
 // Auth Pages
 import LoginPage from './features/auth/pages/LoginPage';
 import SignupPage from './features/auth/pages/SignupPage';
+import SetupAccountPage from './features/auth/pages/SetupAccountPage';
+import ResetPasswordPage from './features/auth/pages/ResetPasswordPage';
 
 // Public Pages
 import HomePage from './features/public/pages/HomePage';
@@ -78,6 +80,26 @@ import PaymentCancelPage from './features/public/pages/PaymentCancelPage';
 
 // Invoice Management
 import InvoiceManagementPage from './features/finances/pages/InvoiceManagementPage';
+import ParentInvoicesPage from './features/finances/pages/ParentInvoicesPage';
+
+// Accounting Foundation (Phase 2)
+import TrialBalancePage from './features/finances/pages/TrialBalancePage';
+import BalanceSheetPage from './features/finances/pages/BalanceSheetPage';
+import BudgetVsActualPage from './features/finances/pages/BudgetVsActualPage';
+import AgedReceivablesPage from './features/finances/pages/AgedReceivablesPage';
+
+// Non-Profit Compliance (Phase 3)
+import DonorManagementPage from './features/compliance/pages/DonorManagementPage';
+import GovernancePage from './features/compliance/pages/GovernancePage';
+import ComplianceDashboardPage from './features/compliance/pages/ComplianceDashboardPage';
+
+// Public Website Polish (Phase 4)
+import StaffDirectoryPage from './features/public/pages/StaffDirectoryPage';
+import PricingPage from './features/public/pages/PricingPage';
+import PrivacyPolicyPage from './features/public/pages/PrivacyPolicyPage';
+import TermsPage from './features/public/pages/TermsPage';
+import ParentResourcesPage from './features/public/pages/ParentResourcesPage';
+import SponsorshipPackagesPage from './features/public/pages/SponsorshipPackagesPage';
 
 // Homepage Manager
 import HomepageManagerPage from './features/homepage-manager/pages/HomepageManagerPage';
@@ -127,6 +149,12 @@ function App() {
               <Route path="/sponsors" element={<PublicSponsorsPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/tryouts" element={<TryoutRegistrationPage />} />
+              <Route path="/staff" element={<StaffDirectoryPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/privacy" element={<PrivacyPolicyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/resources" element={<ParentResourcesPage />} />
+              <Route path="/sponsorship-packages" element={<SponsorshipPackagesPage />} />
             </Route>
 
             {/* Public Payment Routes (no layout wrapper needed) */}
@@ -139,6 +167,8 @@ function App() {
             <Route element={<AuthLayout />}>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/setup-account" element={<SetupAccountPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
             </Route>
 
             {/* Sponsor Portal Routes */}
@@ -155,6 +185,8 @@ function App() {
               <Route path="/announcements" element={<AnnouncementsPage />} />
               <Route path="/messaging" element={<MessagingPage />} />
               <Route path="/players/:id" element={<PlayerDetailsPage />} />
+              <Route path="/my-invoices" element={<ParentInvoicesPage />} />
+              <Route path="/tournaments" element={<TournamentsPage />} />
             </Route>
 
             {/* Protected Routes - Coach and above */}
@@ -167,7 +199,6 @@ function App() {
               <Route path="/equipment" element={<EquipmentPage />} />
               <Route path="/documents" element={<DocumentsPage />} />
               <Route path="/media" element={<MediaPage />} />
-              <Route path="/tournaments" element={<TournamentsPage />} />
               <Route path="/metrics" element={<MetricsPage />} />
             </Route>
 
@@ -180,6 +211,13 @@ function App() {
               <Route path="/finances/reports" element={<FinancialReportsPage />} />
               <Route path="/finances/reconciliation" element={<ReconciliationPage />} />
               <Route path="/finances/invoices" element={<InvoiceManagementPage />} />
+              <Route path="/finances/trial-balance" element={<TrialBalancePage />} />
+              <Route path="/finances/balance-sheet" element={<BalanceSheetPage />} />
+              <Route path="/finances/budget-vs-actual" element={<BudgetVsActualPage />} />
+              <Route path="/finances/aged-receivables" element={<AgedReceivablesPage />} />
+              <Route path="/compliance/donors" element={<DonorManagementPage />} />
+              <Route path="/compliance/governance" element={<GovernancePage />} />
+              <Route path="/compliance/dashboard" element={<ComplianceDashboardPage />} />
               <Route path="/sponsors/manage" element={<SponsorsPage />} />
               <Route path="/fundraisers" element={<FundraisersPage />} />
               <Route path="/scholarships" element={<ScholarshipsPage />} />

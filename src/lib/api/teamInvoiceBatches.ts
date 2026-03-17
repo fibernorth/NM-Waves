@@ -13,6 +13,15 @@ import type { TeamInvoiceBatch } from '@/types/models';
 
 const COLLECTION = 'teamInvoiceBatches';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertBatch = (id: string, data: any): TeamInvoiceBatch => ({
   id,
   teamId: data.teamId,
@@ -93,7 +102,7 @@ export const teamInvoiceBatchesApi = {
     }
 
     // Create the batch record for audit
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       teamId,
       teamName,
       season,
@@ -105,7 +114,7 @@ export const teamInvoiceBatchesApi = {
       batchDate: Timestamp.now(),
       createdBy,
       createdAt: Timestamp.now(),
-    });
+    }));
 
     return docRef.id;
   },

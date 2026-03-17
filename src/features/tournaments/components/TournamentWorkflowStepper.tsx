@@ -10,23 +10,21 @@ import {
 import type { TournamentWorkflowStatus } from '@/types/models';
 
 const WORKFLOW_STEPS: { status: TournamentWorkflowStatus; label: string }[] = [
-  { status: 'planning', label: 'Planning' },
-  { status: 'committed', label: 'Committed' },
-  { status: 'signed_up', label: 'Signed Up' },
+  { status: 'wanting', label: 'Wanting' },
+  { status: 'entered', label: 'Entered' },
   { status: 'deposit_paid', label: 'Deposit Paid' },
+  { status: 'paid_in_full', label: 'Paid in Full' },
   { status: 'schedule_received', label: 'Schedule Received' },
-  { status: 'accommodations_shared', label: 'Accommodations Shared' },
   { status: 'playing', label: 'Playing' },
   { status: 'completed', label: 'Completed' },
 ];
 
 const statusColorMap: Record<TournamentWorkflowStatus, 'default' | 'info' | 'warning' | 'success' | 'primary' | 'secondary'> = {
-  planning: 'default',
-  committed: 'info',
-  signed_up: 'warning',
+  wanting: 'default',
+  entered: 'info',
   deposit_paid: 'primary',
+  paid_in_full: 'success',
   schedule_received: 'info',
-  accommodations_shared: 'secondary',
   playing: 'warning',
   completed: 'success',
 };

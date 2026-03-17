@@ -15,6 +15,15 @@ import type { Conversation, Message } from '@/types/models';
 
 const COLLECTION = 'conversations';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertConversation = (id: string, data: any): Conversation => ({
   id,
   type: data.type,
@@ -56,11 +65,11 @@ export const conversationsApi = {
   create: async (
     data: Omit<Conversation, 'id' | 'lastMessage' | 'lastMessageAt'>
   ): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...data,
       lastMessage: '',
       lastMessageAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
@@ -83,17 +92,17 @@ export const conversationsApi = {
       conversationId,
       'messages'
     );
-    const docRef = await addDoc(messagesRef, {
+    const docRef = await addDoc(messagesRef, cleanData({
       ...message,
       sentAt: Timestamp.now(),
-    });
+    }));
 
     // Update the conversation's lastMessage and lastMessageAt
     const convRef = doc(db, COLLECTION, conversationId);
-    await updateDoc(convRef, {
+    await updateDoc(convRef, cleanData({
       lastMessage: message.text,
       lastMessageAt: Timestamp.now(),
-    });
+    }));
 
     return docRef.id;
   },
@@ -111,6 +120,8 @@ export const conversationsApi = {
         convertMessage(d.id, d.data())
       );
       callback(messages);
+    }, (error) => {
+      console.error('Messages listener error:', error);
     });
     return unsubscribe;
   },

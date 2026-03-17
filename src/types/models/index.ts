@@ -47,7 +47,7 @@ export interface PlayerContact {
 }
 
 // Player Document (birth certificate, etc.)
-export type PlayerDocumentType = 'birth_certificate' | 'medical_form' | 'waiver' | 'report_card' | 'other';
+export type PlayerDocumentType = 'birth_certificate' | 'medical_form' | 'health_insurance' | 'waiver' | 'report_card' | 'concussion_protocol' | 'player_conduct' | 'parent_conduct' | 'other';
 
 export interface PlayerDocument {
   id: string;
@@ -60,6 +60,24 @@ export interface PlayerDocument {
   uploadedByName?: string;
   uploadedAt: Date;
 }
+
+// Compliance Acknowledgment
+export interface ComplianceAck {
+  acknowledgedAt: Date;
+  acknowledgedBy: string;
+  acknowledgedByName?: string;
+}
+
+// Player Compliance Tracking
+export interface PlayerCompliance {
+  concussionProtocol?: ComplianceAck;
+  waiver?: ComplianceAck;
+  playerConduct?: ComplianceAck;
+  parentConduct?: ComplianceAck;
+}
+
+// Player Status
+export type PlayerStatus = 'active' | 'quit' | 'inactive';
 
 // Player Model
 export interface Player {
@@ -84,7 +102,11 @@ export interface Player {
   dateOfBirth?: Date;
   playingUpFrom?: string;
   documents?: PlayerDocument[];
+  compliance?: PlayerCompliance;
   active: boolean;
+  status?: PlayerStatus;
+  quitDate?: Date;
+  quitReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -141,7 +163,6 @@ export interface Payment {
   date: Date;
   method: 'cash' | 'check' | 'venmo' | 'zelle' | 'card' | 'credit_card' | 'bank_transfer' | 'sponsor' | 'stripe' | 'other';
   reference?: string;
-  note?: string;
   notes?: string;
   payerName?: string;
   payerEmail?: string;
@@ -178,12 +199,16 @@ export interface InvoiceToken {
   scholarshipAmount?: number;
   totalPaid?: number;
   token: string;
+  invoiceNumber?: string;
+  dueDate?: Date;
+  paymentTerms?: string;
   expiresAt: Date;
   createdBy: string;
   createdAt: Date;
   used: boolean;
   usedAt?: Date;
   usedBy?: string;
+  paidByUserId?: string;
 }
 
 // Announcement Model
@@ -281,17 +306,26 @@ export interface MediaItem {
   moderationReviewedAt?: Date;
   moderationOverriddenBy?: string;
   source?: 'firebase' | 'google_drive';
+  // Vision API analysis fields
+  detectedText?: string[];
+  detectedLabels?: string[];
+  detectedJerseyNumbers?: number[];
+  suggestedPlayerIds?: string[];
+  suggestedPlayerNames?: string[];
+  suggestedTeamId?: string;
+  photoDate?: Date;
+  analysisStatus?: 'pending' | 'analyzed' | 'failed';
+  showInGallery?: boolean;
   createdAt: Date;
 }
 
 // Tournament Workflow Status
 export type TournamentWorkflowStatus =
-  | 'planning'
-  | 'committed'
-  | 'signed_up'
+  | 'wanting'
+  | 'entered'
   | 'deposit_paid'
+  | 'paid_in_full'
   | 'schedule_received'
-  | 'accommodations_shared'
   | 'playing'
   | 'completed';
 
@@ -312,6 +346,9 @@ export interface Tournament {
   startDate: Date;
   endDate: Date;
   teamIds: string[];
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
   contact?: string;
   notes?: string;
   cost: number;
@@ -322,7 +359,11 @@ export interface Tournament {
   balanceDueDate?: Date;
   balancePaid?: boolean;
   registrationUrl?: string;
+  websiteUrl?: string;
+  scheduleUrl?: string;
   accommodationsInfo?: string;
+  insuranceSent?: boolean;
+  insuranceSentDate?: Date;
   statusHistory?: TournamentStatusHistoryEntry[];
 }
 
@@ -332,8 +373,8 @@ export interface Tournament {
 
 export type CostItemTier = 'organization' | 'team' | 'player';
 
-export type OrgCostCategory = 'waves_fee' | 'insurance' | 'administrative';
-export type TeamCostCategory = 'tournament' | 'equipment' | 'special';
+export type OrgCostCategory = 'waves_fee' | 'insurance' | 'administrative' | 'facility';
+export type TeamCostCategory = 'tournament' | 'equipment' | 'facility' | 'special';
 export type PlayerCostCategory = 'helmet' | 'bag' | 'uniform_piece' | 'special';
 export type CostItemCategory = OrgCostCategory | TeamCostCategory | PlayerCostCategory;
 
@@ -386,6 +427,7 @@ export const COST_CATEGORY_FINANCE_FIELD_MAP: Record<CostItemCategory, CostFinan
   waves_fee: 'registrationFee',
   insurance: 'otherFees',
   administrative: 'otherFees',
+  facility: 'facilityFees',
   tournament: 'tournamentFees',
   equipment: 'equipmentFees',
   special: 'otherFees',
@@ -403,6 +445,17 @@ export interface SponsoredPlayer {
   date: Date;
 }
 
+export interface SponsorContribution {
+  id: string;
+  amount: number;
+  date: Date;
+  method: string;
+  reference?: string;
+  notes?: string;
+  recordedBy: string;
+  recordedAt: Date;
+}
+
 export type SponsorshipType = 'player_sponsor' | 'team_sponsor' | 'general';
 
 export interface Sponsor {
@@ -418,6 +471,10 @@ export interface Sponsor {
   amount?: number;
   displayOnPublicSite: boolean;
   season: string;
+  sponsorshipStart?: Date;
+  sponsorshipEnd?: Date;
+  contributions?: SponsorContribution[];
+  totalContributed?: number;
   sponsoredPlayers?: SponsoredPlayer[];
   userId?: string;
   stripeCustomerId?: string;
@@ -484,6 +541,7 @@ export type ExpenseCategory =
   | 'league_fees'
   | 'coaching'
   | 'administrative'
+  | 'processing_fees'
   | 'marketing'
   | 'fundraising'
   | 'maintenance'
@@ -510,6 +568,11 @@ export interface Expense {
   checkNumber?: string;
   receiptUrl?: string;
   teamId?: string;
+  teamName?: string;
+  playerId?: string;
+  playerName?: string;
+  tournamentId?: string;
+  tournamentName?: string;
   season: string;
   isPaid: boolean;
   paidDate?: Date;
@@ -639,6 +702,7 @@ export interface FinancialSummary {
     leagueFees: number;
     coaching: number;
     administrative: number;
+    processingFees: number;
     marketing: number;
     fundraising: number;
     maintenance: number;
@@ -648,6 +712,228 @@ export interface FinancialSummary {
   netIncome: number;
   outstandingPayables: number;
   outstandingReceivables: number;
+}
+
+// ============================================
+// CHART OF ACCOUNTS & GENERAL LEDGER
+// ============================================
+
+export type GLAccountType = 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
+
+export type GLAccountSubtype =
+  // Assets
+  | 'cash' | 'accounts_receivable' | 'prepaid' | 'equipment_asset' | 'other_asset'
+  // Liabilities
+  | 'accounts_payable' | 'accrued_liability' | 'deferred_revenue' | 'other_liability'
+  // Equity / Net Assets
+  | 'unrestricted_net_assets' | 'restricted_net_assets' | 'retained_earnings'
+  // Revenue
+  | 'program_revenue' | 'contribution_revenue' | 'grant_revenue' | 'other_revenue'
+  // Expense
+  | 'program_expense' | 'admin_expense' | 'fundraising_expense' | 'other_expense';
+
+export interface ChartOfAccount {
+  id: string;
+  accountNumber: string;       // e.g. '1000', '4100'
+  name: string;                // e.g. 'Cash - Checking', 'Player Registration Revenue'
+  type: GLAccountType;
+  subtype: GLAccountSubtype;
+  normalBalance: 'debit' | 'credit';
+  description?: string;
+  parentAccountId?: string;    // For sub-accounts
+  active: boolean;
+  isSystem: boolean;           // System accounts cannot be deleted
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type GLSourceType = 'income' | 'expense' | 'payment' | 'journal' | 'opening_balance';
+
+export interface GeneralLedgerEntry {
+  id: string;
+  date: Date;
+  accountId: string;           // FK to ChartOfAccount
+  accountNumber: string;       // Denormalized for display
+  accountName: string;         // Denormalized for display
+  debit: number;
+  credit: number;
+  memo: string;
+  sourceType: GLSourceType;
+  sourceId?: string;           // FK to the originating income/expense/payment doc
+  season: string;
+  createdBy: string;
+  createdAt: Date;
+}
+
+// ============================================
+// NON-PROFIT COMPLIANCE
+// ============================================
+
+export type DonorType = 'individual' | 'business' | 'foundation' | 'government';
+
+export interface Donor {
+  id: string;
+  name: string;
+  type: DonorType;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  notes?: string;
+  totalGiven: number;
+  donationCount: number;
+  firstDonationDate?: Date;
+  lastDonationDate?: Date;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DonorReceipt {
+  id: string;
+  donorId: string;
+  donorName: string;
+  donorAddress?: string;
+  amount: number;
+  date: Date;
+  description: string;
+  receiptNumber: string;          // e.g. REC-2026-0001
+  taxYear: number;
+  goodsOrServicesProvided: boolean;
+  goodsOrServicesDescription?: string;
+  goodsOrServicesValue?: number;
+  orgName: string;
+  orgEIN: string;
+  orgAddress: string;
+  sentAt?: Date;
+  createdBy: string;
+  createdAt: Date;
+}
+
+export interface BoardMeeting {
+  id: string;
+  date: Date;
+  title: string;
+  location?: string;
+  attendees: string[];             // Names of board members present
+  absentees?: string[];
+  agendaItems: string[];
+  minutesText: string;             // Full meeting minutes content
+  resolutions?: string[];          // Formal resolutions passed
+  nextMeetingDate?: Date;
+  approvedBy?: string;
+  approvedAt?: Date;
+  status: 'draft' | 'approved';
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type GovernanceDocType =
+  | 'bylaws'
+  | 'articles_of_incorporation'
+  | 'conflict_of_interest'
+  | 'whistleblower'
+  | 'document_retention'
+  | 'compensation'
+  | 'gift_acceptance'
+  | 'financial_controls'
+  | 'other';
+
+export interface GovernanceDocument {
+  id: string;
+  type: GovernanceDocType;
+  title: string;
+  description?: string;
+  fileUrl: string;
+  fileName: string;
+  version: string;                 // e.g. '1.0', '2.1'
+  effectiveDate: Date;
+  reviewDate?: Date;               // Next scheduled review
+  approvedBy?: string;
+  approvedAt?: Date;
+  status: 'draft' | 'active' | 'archived';
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface VolunteerHourLog {
+  id: string;
+  volunteerId?: string;            // FK to user if registered
+  volunteerName: string;
+  date: Date;
+  hours: number;
+  activity: string;
+  eventId?: string;
+  eventTitle?: string;
+  teamId?: string;
+  season: string;
+  verifiedBy?: string;
+  verifiedAt?: Date;
+  notes?: string;
+  createdBy: string;
+  createdAt: Date;
+}
+
+export type BackgroundCheckStatus = 'pending' | 'approved' | 'denied' | 'expired';
+
+export interface BackgroundCheck {
+  id: string;
+  personName: string;
+  personEmail?: string;
+  role: string;                    // e.g. 'coach', 'volunteer', 'board_member'
+  provider?: string;               // Background check service used
+  submittedDate: Date;
+  completedDate?: Date;
+  expirationDate?: Date;
+  status: BackgroundCheckStatus;
+  notes?: string;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Form990Data {
+  id: string;
+  taxYear: number;
+  formType: '990-N' | '990-EZ' | '990';
+  // Organization info
+  orgName: string;
+  orgEIN: string;
+  orgAddress: string;
+  orgPhone?: string;
+  orgWebsite?: string;
+  yearFormed?: number;
+  stateOfIncorporation?: string;
+  // Financial summary
+  grossReceipts: number;
+  totalRevenue: number;
+  totalExpenses: number;
+  netAssets: number;
+  totalAssets: number;
+  totalLiabilities: number;
+  // Program info
+  missionStatement?: string;
+  programAccomplishments?: string;
+  numberOfVolunteers?: number;
+  numberOfEmployees?: number;
+  // Officers
+  officers: Array<{
+    name: string;
+    title: string;
+    hoursPerWeek: number;
+    compensation: number;
+  }>;
+  // Status
+  status: 'draft' | 'filed' | 'accepted';
+  filedDate?: Date;
+  notes?: string;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // ============================================
@@ -685,14 +971,17 @@ export interface HomepagePost {
 // EQUIPMENT MANAGEMENT
 // ============================================
 
-export type EquipmentType = 'jersey' | 'pants' | 'helmet' | 'bag' | 'belt' | 'socks' | 'guest_jersey';
-export type EquipmentStatus = 'available' | 'assigned' | 'damaged' | 'retired';
+export type EquipmentType = 'jersey' | 'pants' | 'helmet' | 'bag' | 'belt' | 'socks' | 'guest_jersey' | 'bat' | 'softball' | 'glove' | 'catcher_gear' | 'other';
+export type EquipmentStatus = 'available' | 'assigned' | 'damaged' | 'retired' | 'consumed';
+export type EquipmentOwnership = 'player' | 'organization' | 'consumable';
 
 export interface Equipment {
   id: string;
   type: EquipmentType;
+  ownership: EquipmentOwnership;
   number?: number;
   size: string;
+  variant?: string;
   assignedTo?: string;
   assignedToName?: string;
   teamId?: string;
@@ -735,4 +1024,17 @@ export interface GCGame {
   result: 'W' | 'L' | 'T';
   season: string;
   scrapedAt: Date;
+}
+
+// ============================================
+// SWAG STORE SETTINGS
+// ============================================
+
+export interface SwagStoreSettings {
+  url: string;
+  label: string;
+  closesAt: Date | null;
+  active: boolean;
+  updatedBy: string;
+  updatedAt: Date;
 }

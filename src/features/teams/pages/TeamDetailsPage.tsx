@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -26,6 +26,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
+import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import SportsBaseballIcon from '@mui/icons-material/SportsBaseball';
 import GroupIcon from '@mui/icons-material/Group';
@@ -33,8 +34,14 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import BadgeIcon from '@mui/icons-material/Badge';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import PaymentIcon from '@mui/icons-material/Payment';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
+import { playerFinancesApi } from '@/lib/api/finances';
+import { costCalculationApi } from '@/lib/api/costCalculation';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import GCStatsPanel from '@/features/gamechanger/components/GCStatsPanel';
@@ -56,12 +63,14 @@ const TeamDetailsPage = () => {
   const [addPlayerDialogOpen, setAddPlayerDialogOpen] = useState(false);
   const [selectedPlayerToAdd, setSelectedPlayerToAdd] = useState<Player | null>(null);
   const [confirmRemovePlayer, setConfirmRemovePlayer] = useState<Player | null>(null);
+  const [confirmQuitPlayer, setConfirmQuitPlayer] = useState<Player | null>(null);
 
   // ---- Queries ----
 
   const {
     data: team,
     isLoading: teamLoading,
+    isError: teamError,
   } = useQuery({
     queryKey: ['team', id],
     queryFn: () => teamsApi.getById(id!),
@@ -76,6 +85,53 @@ const TeamDetailsPage = () => {
     queryFn: () => playersApi.getByTeam(id!, team?.name),
     enabled: !!id && !!team,
   });
+
+  // Fetch finances for balance column (admin only)
+  const { data: teamFinances = [] } = useQuery({
+    queryKey: ['playerFinances', 'team', id],
+    queryFn: () => playerFinancesApi.getAll(),
+    enabled: isAdmin && !!id,
+  });
+
+  // Map playerId -> balanceDue (positive = owes money, accounts for scholarships)
+  const balanceMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const fin of teamFinances) {
+      const existing = map.get(fin.playerId) || 0;
+      map.set(fin.playerId, existing + (fin.balanceDue ?? (fin.totalOwed - fin.totalPaid)));
+    }
+    return map;
+  }, [teamFinances]);
+
+  // Compute team-level financial stats (admin only)
+  const teamStats = useMemo(() => {
+    // Filter finances to this team's players
+    const playerIds = new Set(players.map(p => p.id));
+    const teamFin = teamFinances.filter(f => playerIds.has(f.playerId));
+    const totalOwed = teamFin.reduce((s, f) => s + f.totalOwed, 0);
+    const totalPaid = teamFin.reduce((s, f) => s + f.totalPaid, 0);
+    const totalScholarships = teamFin.reduce((s, f) => s + (f.scholarshipAmount || 0), 0);
+    const outstanding = totalOwed - totalPaid - totalScholarships;
+    const playersOwing = new Set(teamFin.filter(f => (f.balanceDue ?? (f.totalOwed - f.totalPaid)) > 0).map(f => f.playerId)).size;
+    const collectionRate = totalOwed > 0 ? ((totalPaid + totalScholarships) / totalOwed) * 100 : 0;
+    return { totalOwed, totalPaid, outstanding, playersOwing, collectionRate, totalScholarships };
+  }, [teamFinances, players]);
+
+  // Build a status map for payment status column
+  const statusMap = useMemo(() => {
+    const map = new Map<string, 'paid' | 'current' | 'overdue' | 'none'>();
+    for (const fin of teamFinances) {
+      const existing = map.get(fin.playerId);
+      // Worst status wins: overdue > current > paid
+      const status = fin.status || (fin.balance >= 0 ? 'paid' : 'current');
+      if (!existing || existing === 'none' || existing === 'paid') {
+        map.set(fin.playerId, status as 'paid' | 'current' | 'overdue');
+      } else if (existing === 'current' && status === 'overdue') {
+        map.set(fin.playerId, 'overdue');
+      }
+    }
+    return map;
+  }, [teamFinances]);
 
   const { data: allPlayers = [] } = useQuery({
     queryKey: ['players', 'all'],
@@ -101,8 +157,8 @@ const TeamDetailsPage = () => {
       setAddPlayerDialogOpen(false);
       setSelectedPlayerToAdd(null);
     },
-    onError: () => {
-      toast.error('Failed to add player to team');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to add player to team');
     },
   });
 
@@ -115,8 +171,44 @@ const TeamDetailsPage = () => {
       toast.success('Player removed from team');
       setConfirmRemovePlayer(null);
     },
-    onError: () => {
-      toast.error('Failed to remove player from team');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to remove player from team');
+    },
+  });
+
+  const quitPlayerMutation = useMutation({
+    mutationFn: async (player: Player) => {
+      // 1. Mark player as quit (sets active=false, clears team)
+      await playersApi.markAsQuit(player.id);
+
+      // 2. Zero out the player's fees
+      const finances = teamFinances.filter(f => f.playerId === player.id);
+      for (const fin of finances) {
+        await playerFinancesApi.update(fin.id, {
+          registrationFee: 0,
+          uniformCost: 0,
+          tournamentFees: 0,
+          facilityFees: 0,
+          equipmentFees: 0,
+          otherFees: 0,
+        });
+      }
+
+      // 3. Redistribute team costs to remaining active players
+      if (team) {
+        await costCalculationApi.redistributeAfterQuit(team.id, team.season);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['players', 'team', id] });
+      queryClient.invalidateQueries({ queryKey: ['players', 'all'] });
+      queryClient.invalidateQueries({ queryKey: ['team', id] });
+      queryClient.invalidateQueries({ queryKey: ['playerFinances'] });
+      toast.success('Player marked as quit. Fees zeroed and team costs redistributed.');
+      setConfirmQuitPlayer(null);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to process player quit');
     },
   });
 
@@ -244,10 +336,61 @@ const TeamDetailsPage = () => {
         return primary?.phone || player.parentPhone || '--';
       },
     },
+    ...(isAdmin ? [
+      {
+        field: 'paymentStatus',
+        headerName: 'Status',
+        width: 100,
+        valueGetter: (params: any) => statusMap.get(params.row.id) || 'none',
+        renderCell: (params: any) => {
+          const status = params.value as string;
+          if (status === 'none') return <Typography variant="body2" color="text.disabled">--</Typography>;
+          return (
+            <Chip
+              label={status}
+              size="small"
+              color={status === 'paid' ? 'success' : status === 'overdue' ? 'error' : 'warning'}
+              sx={{ textTransform: 'capitalize', fontWeight: 600 }}
+            />
+          );
+        },
+      },
+      {
+        field: 'balance',
+        headerName: 'Balance',
+        width: 110,
+        valueGetter: (params: any) => balanceMap.get(params.row.id) ?? 0,
+        renderCell: (params: any) => {
+          const balance = params.value as number;
+          if (balance === 0 && !balanceMap.has(params.row.id)) {
+            return <Typography variant="body2" color="text.secondary">--</Typography>;
+          }
+          const isOwed = balance > 0;
+          return (
+            <Box
+              onClick={() => navigate(`/players/${params.row.id}`)}
+              sx={{
+                px: 1,
+                py: 0.5,
+                borderRadius: 1,
+                bgcolor: isOwed ? 'error.main' : 'success.main',
+                color: 'white',
+                fontSize: '0.75rem',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                '&:hover': { opacity: 0.85 },
+              }}
+            >
+              {isOwed ? `$${balance.toFixed(2)} owed` : 'Paid'}
+            </Box>
+          );
+        },
+      },
+    ] : []),
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 130,
+      width: 160,
       sortable: false,
       filterable: false,
       disableColumnMenu: true,
@@ -263,15 +406,26 @@ const TeamDetailsPage = () => {
             </IconButton>
           </Tooltip>
           {isAdmin && (
-            <Tooltip title="Remove from Team">
-              <IconButton
-                size="small"
-                color="error"
-                onClick={() => setConfirmRemovePlayer(params.row as Player)}
-              >
-                <PersonRemoveIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            <>
+              <Tooltip title="Mark as Quit (zeroes fees, redistributes)">
+                <IconButton
+                  size="small"
+                  color="warning"
+                  onClick={() => setConfirmQuitPlayer(params.row as Player)}
+                >
+                  <ExitToAppIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Remove from Team">
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => setConfirmRemovePlayer(params.row as Player)}
+                >
+                  <PersonRemoveIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </>
           )}
         </Box>
       ),
@@ -284,6 +438,27 @@ const TeamDetailsPage = () => {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', p: 8 }}>
         <CircularProgress size={48} />
+      </Box>
+    );
+  }
+
+  if (teamError) {
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Typography variant="h5" color="error" gutterBottom>
+          Failed to load team data
+        </Typography>
+        <Typography variant="body2" color="text.secondary" gutterBottom>
+          Please check your connection and try again.
+        </Typography>
+        <Button
+          variant="outlined"
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate('/teams')}
+          sx={{ mt: 2 }}
+        >
+          Back to Teams
+        </Button>
       </Box>
     );
   }
@@ -417,6 +592,70 @@ const TeamDetailsPage = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* ===== Team Financial Summary (admin only) ===== */}
+      {isAdmin && teamStats.totalOwed > 0 && (
+        <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="h6" fontWeight={600}>
+              <AttachMoneyIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
+              Team Financials
+            </Typography>
+            <Button size="small" variant="outlined" onClick={() => navigate(`/finances/billing?team=${id}`)}>
+              Go to Billing
+            </Button>
+          </Box>
+          <Grid container spacing={2}>
+            <Grid item xs={6} sm={3}>
+              <Card variant="outlined">
+                <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                    <AttachMoneyIcon fontSize="small" color="primary" />
+                    <Typography variant="caption" color="text.secondary">Total Owed</Typography>
+                  </Box>
+                  <Typography variant="h6" fontWeight={700}>${teamStats.totalOwed.toFixed(2)}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Card variant="outlined">
+                <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                    <PaymentIcon fontSize="small" color="success" />
+                    <Typography variant="caption" color="text.secondary">Collected</Typography>
+                  </Box>
+                  <Typography variant="h6" fontWeight={700} color="success.main">${teamStats.totalPaid.toFixed(2)}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Card variant="outlined">
+                <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                    <TrendingUpIcon fontSize="small" color="error" />
+                    <Typography variant="caption" color="text.secondary">Outstanding</Typography>
+                  </Box>
+                  <Typography variant="h6" fontWeight={700} color="error.main">${teamStats.outstanding.toFixed(2)}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Card variant="outlined">
+                <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                    <PeopleAltIcon fontSize="small" color="warning" />
+                    <Typography variant="caption" color="text.secondary">Players Owing</Typography>
+                  </Box>
+                  <Typography variant="h6" fontWeight={700}>{teamStats.playersOwing}</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {teamStats.collectionRate.toFixed(0)}% collected
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+        </Paper>
+      )}
 
       {/* ===== Additional Team Details ===== */}
       {(team.gcTeamId || team.status) && (
@@ -635,14 +874,18 @@ const TeamDetailsPage = () => {
           >
             Cancel
           </Button>
-          <Button
-            variant="contained"
-            disabled={!selectedPlayerToAdd || assignPlayerMutation.isPending}
-            onClick={handleAddPlayer}
-            startIcon={assignPlayerMutation.isPending ? <CircularProgress size={16} /> : <PersonAddIcon />}
-          >
-            {assignPlayerMutation.isPending ? 'Adding...' : 'Add to Team'}
-          </Button>
+          <Tooltip title={!selectedPlayerToAdd ? 'Select a player first' : ''}>
+            <span>
+              <Button
+                variant="contained"
+                disabled={!selectedPlayerToAdd || assignPlayerMutation.isPending}
+                onClick={handleAddPlayer}
+                startIcon={assignPlayerMutation.isPending ? <CircularProgress size={16} /> : <PersonAddIcon />}
+              >
+                {assignPlayerMutation.isPending ? 'Adding...' : 'Add to Team'}
+              </Button>
+            </span>
+          </Tooltip>
         </DialogActions>
       </Dialog>
 
@@ -676,6 +919,46 @@ const TeamDetailsPage = () => {
             startIcon={removePlayerMutation.isPending ? <CircularProgress size={16} /> : <PersonRemoveIcon />}
           >
             {removePlayerMutation.isPending ? 'Removing...' : 'Remove'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ===== Confirm Quit Player Dialog ===== */}
+      <Dialog
+        open={!!confirmQuitPlayer}
+        onClose={() => setConfirmQuitPlayer(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle color="warning.main">Mark Player as Quit</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Mark{' '}
+            <strong>
+              {confirmQuitPlayer?.firstName} {confirmQuitPlayer?.lastName}
+            </strong>{' '}
+            as quit from <strong>{team.name}</strong>?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This will:
+          </Typography>
+          <Typography component="ul" variant="body2" color="text.secondary" sx={{ mt: 0.5, pl: 2 }}>
+            <li>Remove the player from the team roster</li>
+            <li>Zero out all their fees</li>
+            <li>Redistribute team costs to remaining players</li>
+            <li>Keep their payment history intact</li>
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmQuitPlayer(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            disabled={quitPlayerMutation.isPending}
+            onClick={() => confirmQuitPlayer && quitPlayerMutation.mutate(confirmQuitPlayer)}
+            startIcon={quitPlayerMutation.isPending ? <CircularProgress size={16} /> : <ExitToAppIcon />}
+          >
+            {quitPlayerMutation.isPending ? 'Processing...' : 'Mark as Quit'}
           </Button>
         </DialogActions>
       </Dialog>

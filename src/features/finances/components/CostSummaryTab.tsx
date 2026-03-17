@@ -17,6 +17,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import SyncIcon from '@mui/icons-material/Sync';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { costCalculationApi, PlayerCostBreakdown } from '@/lib/api/costCalculation';
+import { invoiceTokensApi } from '@/lib/api/invoiceTokens';
 import toast from 'react-hot-toast';
 import PlayerCostBreakdownDialog from './PlayerCostBreakdownDialog';
 
@@ -40,17 +41,39 @@ const CostSummaryTab = ({ season }: CostSummaryTabProps) => {
   });
 
   const syncMutation = useMutation({
-    mutationFn: () => costCalculationApi.syncToBilling(season),
-    onSuccess: (result) => {
+    mutationFn: async () => {
+      // Step 1: Sync cost breakdowns to PlayerFinance records
+      const syncResult = await costCalculationApi.syncToBilling(season);
+
+      // Step 2: Auto-generate invoices for any new charges
+      let invoiceResult = { created: 0, skipped: 0, errors: [] as string[] };
+      if (syncResult.updated > 0) {
+        try {
+          invoiceResult = await invoiceTokensApi.batchGenerate({ season });
+        } catch {
+          // Invoice generation is non-critical; don't fail the whole sync
+          invoiceResult.errors.push('Invoice auto-generation failed');
+        }
+      }
+
+      return { syncResult, invoiceResult };
+    },
+    onSuccess: ({ syncResult, invoiceResult }) => {
       queryClient.invalidateQueries({ queryKey: ['playerFinances'] });
       queryClient.invalidateQueries({ queryKey: ['costBreakdowns'] });
-      if (result.errors.length > 0) {
-        toast.error(`Synced ${result.updated} records, ${result.errors.length} errors`);
+      queryClient.invalidateQueries({ queryKey: ['invoiceTokens'] });
+
+      if (syncResult.errors.length > 0) {
+        toast.error(`Synced ${syncResult.updated} records, ${syncResult.errors.length} errors`);
       } else {
-        toast.success(`Synced costs to ${result.updated} player billing records`);
+        let msg = `Synced costs to ${syncResult.updated} player billing records`;
+        if (invoiceResult.created > 0) {
+          msg += ` and generated ${invoiceResult.created} invoices`;
+        }
+        toast.success(msg);
       }
     },
-    onError: () => toast.error('Failed to sync costs to billing'),
+    onError: (err: Error) => toast.error(`Failed to sync costs to billing: ${err.message}`),
   });
 
   const totalPerPlayerAvg =
@@ -129,15 +152,27 @@ const CostSummaryTab = ({ season }: CostSummaryTabProps) => {
             Per-player cost breakdown showing how org, team, and player costs roll up.
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={syncMutation.isPending ? <CircularProgress size={18} /> : <SyncIcon />}
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending || breakdowns.length === 0}
+        <Tooltip
+          title={
+            breakdowns.length === 0
+              ? 'No cost breakdowns available. Add costs and players before syncing.'
+              : syncMutation.isPending
+              ? 'Sync in progress...'
+              : 'Write calculated costs to each player\'s billing record'
+          }
         >
-          {syncMutation.isPending ? 'Syncing...' : 'Sync to Billing'}
-        </Button>
+          <span>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={syncMutation.isPending ? <CircularProgress size={18} /> : <SyncIcon />}
+              onClick={() => syncMutation.mutate()}
+              disabled={syncMutation.isPending || breakdowns.length === 0}
+            >
+              {syncMutation.isPending ? 'Syncing...' : 'Sync to Billing'}
+            </Button>
+          </span>
+        </Tooltip>
       </Box>
 
       {/* Team summary cards */}
@@ -178,7 +213,7 @@ const CostSummaryTab = ({ season }: CostSummaryTabProps) => {
           <CircularProgress />
         </Box>
       ) : (
-        <Paper sx={{ height: 500, width: '100%' }}>
+        <Paper sx={{ height: { xs: 350, md: 500 }, width: '100%' }}>
           <DataGrid
             rows={rows}
             columns={columns}

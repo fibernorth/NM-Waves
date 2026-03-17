@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
 
-const db = admin.firestore();
+const getDb = () => admin.firestore();
 
 /**
  * Firestore onCreate trigger on media/{mediaId}
@@ -60,7 +60,7 @@ export const moderateMedia = functions.firestore
 
       // Notify admins on rejection
       if (isRejected) {
-        await db.collection('adminNotifications').add({
+        await getDb().collection('adminNotifications').add({
           type: 'content_moderation',
           mediaId,
           fileName: data.fileName || '',

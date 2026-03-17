@@ -37,7 +37,7 @@ exports.moderateMedia = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const vision_1 = require("@google-cloud/vision");
-const db = admin.firestore();
+const getDb = () => admin.firestore();
 /**
  * Firestore onCreate trigger on media/{mediaId}
  * Calls Cloud Vision SafeSearch on new image uploads.
@@ -84,7 +84,7 @@ exports.moderateMedia = functions.firestore
         });
         // Notify admins on rejection
         if (isRejected) {
-            await db.collection('adminNotifications').add({
+            await getDb().collection('adminNotifications').add({
                 type: 'content_moderation',
                 mediaId,
                 fileName: data.fileName || '',

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -21,6 +21,8 @@ import toast from 'react-hot-toast';
 
 const SignupPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get('returnTo');
   const { signUp } = useAuthStore();
   const [formData, setFormData] = useState({
     email: '',
@@ -55,7 +57,11 @@ const SignupPage = () => {
     try {
       await signUp(formData.email, formData.password, formData.displayName, formData.role);
       toast.success('Account created successfully');
-      navigate('/dashboard');
+      if (returnTo && returnTo.startsWith('/')) {
+        navigate(returnTo);
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
       toast.error('Failed to create account');
@@ -150,7 +156,7 @@ const SignupPage = () => {
         <Box sx={{ textAlign: 'center', mt: 2 }}>
           <Typography variant="body2">
             Already have an account?{' '}
-            <Link component={RouterLink} to="/login">
+            <Link component={RouterLink} to={returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : '/login'}>
               Sign in
             </Link>
           </Typography>

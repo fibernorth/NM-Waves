@@ -70,8 +70,8 @@ const AnnouncementsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['announcements'] });
       toast.success('Announcement deleted');
     },
-    onError: () => {
-      toast.error('Failed to delete announcement');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete announcement');
     },
   });
 
@@ -82,8 +82,8 @@ const AnnouncementsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['announcements'] });
       toast.success('Pin status updated');
     },
-    onError: () => {
-      toast.error('Failed to update pin status');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update pin status');
     },
   });
 

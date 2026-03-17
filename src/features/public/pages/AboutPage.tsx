@@ -1,7 +1,9 @@
 import { Container, Typography, Paper, Box, Divider, Grid } from '@mui/material';
 import SponsorBanner from '@/components/common/SponsorBanner';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 const AboutPage = () => {
+  useDocumentTitle('About Us');
   return (
     <Box>
       {/* Page Header */}

@@ -90,8 +90,8 @@ const CostAssumptionsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['costAssumptions'] });
       toast.success('Cost assumptions updated successfully');
     },
-    onError: () => {
-      toast.error('Failed to update cost assumptions');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update cost assumptions');
     },
   });
 

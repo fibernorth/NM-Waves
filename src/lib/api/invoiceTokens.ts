@@ -7,12 +7,19 @@ import {
   where,
   Timestamp,
 } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { db, app } from '@/lib/firebase/config';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '@/lib/firebase/config';
 import type { InvoiceToken } from '@/types/models';
-
-const functions = getFunctions(app);
 const COLLECTION = 'invoiceTokens';
+
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
 
 const convertToken = (id: string, data: any): InvoiceToken => ({
   id,
@@ -66,6 +73,21 @@ interface GenerateParams {
   paymentTerms?: string;
 }
 
+interface BatchGenerateParams {
+  season?: string;
+  teamId?: string;
+  expiryDays?: number;
+  dueDate?: string;
+  paymentTerms?: string;
+}
+
+interface BatchGenerateResult {
+  created: number;
+  skipped: number;
+  errors: string[];
+  season: string;
+}
+
 export const invoiceTokensApi = {
   /**
    * Generate a new invoice token via Cloud Function (admin only).
@@ -88,8 +110,14 @@ export const invoiceTokensApi = {
     if (dueDate) params.dueDate = dueDate;
     if (paymentTerms) params.paymentTerms = paymentTerms;
 
-    const result = await callable(params);
-    return result.data;
+    try {
+      const result = await callable(params);
+      return result.data;
+    } catch (err: any) {
+      // Extract meaningful error from Firebase callable errors
+      const message = err?.details || err?.message || 'Unknown error generating invoice';
+      throw new Error(message);
+    }
   },
 
   /**
@@ -135,10 +163,37 @@ export const invoiceTokensApi = {
    */
   markUsed: async (tokenId: string, usedBy: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, tokenId);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       used: true,
       usedAt: Timestamp.now(),
       usedBy,
-    });
+    }));
+  },
+
+  /**
+   * Batch-generate invoices for all players with outstanding balances.
+   * Creates per-charge invoices, skipping charges that already have active invoices.
+   */
+  batchGenerate: async (params?: BatchGenerateParams): Promise<BatchGenerateResult> => {
+    const callable = httpsCallable<BatchGenerateParams, BatchGenerateResult>(
+      functions,
+      'batchGenerateInvoices'
+    );
+    const result = await callable(params || {});
+    return result.data;
+  },
+
+  /**
+   * Get all invoice tokens (optionally filtered by season).
+   */
+  getAll: async (season?: string): Promise<InvoiceToken[]> => {
+    let q;
+    if (season) {
+      q = query(collection(db, COLLECTION), where('season', '==', season));
+    } else {
+      q = query(collection(db, COLLECTION));
+    }
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(d => convertToken(d.id, d.data()));
   },
 };

@@ -1,5 +1,6 @@
 import { costItemsApi } from './costItems';
 import { playerFinancesApi } from './finances';
+import { playersApi } from './players';
 import { teamsApi } from './teams';
 import type { CostItem, CostFinanceField, PlayerFinance } from '@/types/models';
 
@@ -184,6 +185,7 @@ export const costCalculationApi = {
   /**
    * Sync cost breakdowns to PlayerFinance records.
    * Updates the fee fields on each PlayerFinance based on the cost items.
+   * Excludes quit players from division counts.
    */
   syncToBilling: async (season: string): Promise<{ updated: number; errors: string[] }> => {
     const breakdowns = await costCalculationApi.calculatePlayerBreakdowns(season);
@@ -214,6 +216,105 @@ export const costCalculationApi = {
         }
       } catch (err: any) {
         errors.push(`Failed to update ${breakdown.playerName}: ${err.message}`);
+      }
+    }
+
+    return { updated, errors };
+  },
+
+  /**
+   * Redistribute team fees after a player quits.
+   * Only updates remaining active players on the same team — does NOT
+   * change the quit player's fees (they still owe what they owed).
+   * Does NOT redistribute when a new player is added (they get custom fees).
+   */
+  redistributeAfterQuit: async (
+    teamId: string,
+    season: string
+  ): Promise<{ updated: number; errors: string[] }> => {
+    // Get all active players on this team
+    const allPlayers = await playersApi.getByTeam(teamId);
+    const activePlayers = allPlayers.filter(
+      (p) => p.active && p.status !== 'quit'
+    );
+    const activePlayerIds = new Set(activePlayers.map((p) => p.id));
+
+    // Get cost items for this team's season
+    const allCostItems = await costItemsApi.getBySeason(season);
+    const activeCostItems = allCostItems.filter((c) => c.active);
+    const teamItems = activeCostItems.filter(
+      (c) => c.tier === 'team' && c.teamId === teamId
+    );
+
+    // Get all finances for the season (needed for org-level player count)
+    const allFinances = await playerFinancesApi.getBySeason(season);
+
+    // Count total active players across all teams (excluding quit)
+    const allActivePlayers = await playersApi.getActive();
+    const activePlayerIdsAll = new Set(
+      allActivePlayers.filter((p) => p.status !== 'quit').map((p) => p.id)
+    );
+    const totalActivePlayers = allFinances.filter(
+      (f) => activePlayerIdsAll.has(f.playerId)
+    ).length;
+
+    // Org items split across all active players
+    const orgItems = activeCostItems.filter((c) => c.tier === 'organization');
+
+    const playersOnTeam = activePlayers.length;
+
+    let updated = 0;
+    const errors: string[] = [];
+
+    // Update only active players on this team
+    for (const finance of allFinances) {
+      if (finance.teamId !== teamId) continue;
+      if (!activePlayerIds.has(finance.playerId)) continue;
+
+      const totals: Record<CostFinanceField, number> = {
+        registrationFee: 0,
+        uniformCost: 0,
+        tournamentFees: 0,
+        facilityFees: 0,
+        equipmentFees: 0,
+        otherFees: 0,
+      };
+
+      // Org costs
+      for (const item of orgItems) {
+        const perPlayer = totalActivePlayers > 0 ? item.amount / totalActivePlayers : 0;
+        totals[item.financeField] += perPlayer;
+      }
+
+      // Team costs — divided by remaining active players
+      for (const item of teamItems) {
+        const perPlayer = playersOnTeam > 0 ? item.amount / playersOnTeam : 0;
+        totals[item.financeField] += perPlayer;
+      }
+
+      // Player-level costs stay the same (direct assignment)
+      const playerItems = activeCostItems.filter(
+        (c) => c.tier === 'player' && c.playerId === finance.playerId
+      );
+      for (const item of playerItems) {
+        totals[item.financeField] += item.amount;
+      }
+
+      try {
+        const updateData: Partial<PlayerFinance> = {};
+        for (const field of FINANCE_FIELDS) {
+          const rounded = Math.round(totals[field] * 100) / 100;
+          if (rounded !== (finance as any)[field]) {
+            (updateData as any)[field] = rounded;
+          }
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await playerFinancesApi.update(finance.id, updateData);
+          updated++;
+        }
+      } catch (err: any) {
+        errors.push(`Failed to update ${finance.playerName}: ${err.message}`);
       }
     }
 

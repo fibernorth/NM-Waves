@@ -15,6 +15,15 @@ import type { Announcement } from '@/types/models';
 
 const COLLECTION = 'announcements';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertAnnouncement = (id: string, data: any): Announcement => ({
   id,
   title: data.title,
@@ -52,10 +61,10 @@ export const announcementsApi = {
   create: async (
     data: Omit<Announcement, 'id' | 'createdAt'>
   ): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...data,
       createdAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
@@ -64,7 +73,7 @@ export const announcementsApi = {
     data: Partial<Omit<Announcement, 'id' | 'createdAt'>>
   ): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
-    await updateDoc(docRef, { ...data });
+    await updateDoc(docRef, cleanData({ ...data }));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -74,6 +83,6 @@ export const announcementsApi = {
 
   togglePin: async (id: string, pinned: boolean): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
-    await updateDoc(docRef, { pinned: !pinned });
+    await updateDoc(docRef, cleanData({ pinned: !pinned }));
   },
 };

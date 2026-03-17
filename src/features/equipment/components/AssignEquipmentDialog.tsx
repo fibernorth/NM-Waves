@@ -74,7 +74,7 @@ const AssignEquipmentDialog = ({ open, onClose, equipment }: AssignEquipmentDial
       toast.success('Equipment assigned successfully');
       handleClose();
     },
-    onError: () => toast.error('Failed to assign equipment'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to assign equipment'),
   });
 
   const unassignMutation = useMutation({
@@ -84,7 +84,7 @@ const AssignEquipmentDialog = ({ open, onClose, equipment }: AssignEquipmentDial
       toast.success('Equipment unassigned');
       handleClose();
     },
-    onError: () => toast.error('Failed to unassign equipment'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to unassign equipment'),
   });
 
   const handleClose = () => {

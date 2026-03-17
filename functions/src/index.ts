@@ -2,11 +2,13 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import cors from 'cors';
 import { scrapeTeamStats, scrapeTeamGames } from './scraper';
-import { sendParentInvites } from './sendInvites';
+import { sendParentInvites, sendInvoiceEmails } from './sendInvites';
 import { createCheckoutSession, stripeWebhook } from './stripe';
-import { generateInvoiceToken } from './invoiceTokens';
+import { generateInvoiceToken, batchGenerateInvoices } from './invoiceTokens';
 import { moderateMedia } from './moderation';
+import { analyzeMedia, batchAnalyzeMedia } from './analyzeMedia';
 import { listDrivePhotos } from './googleDrive';
+import { setAccountPassword, sendCustomPasswordReset } from './accountSetup';
 
 const corsHandler = cors({ origin: true });
 
@@ -216,6 +218,7 @@ export const triggerScrape = functions.https.onRequest((req, res) => {
   });
 });
 
-export { sendParentInvites };
-export { createCheckoutSession, stripeWebhook, generateInvoiceToken };
-export { moderateMedia, listDrivePhotos };
+export { sendParentInvites, sendInvoiceEmails };
+export { createCheckoutSession, stripeWebhook, generateInvoiceToken, batchGenerateInvoices };
+export { moderateMedia, analyzeMedia, batchAnalyzeMedia, listDrivePhotos };
+export { setAccountPassword, sendCustomPasswordReset };

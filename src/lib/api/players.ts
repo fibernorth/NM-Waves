@@ -20,6 +20,15 @@ import { isResizableImage, resizeImage } from '@/lib/utils/imageResize';
 
 const COLLECTION = 'players';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertPlayer = (id: string, data: any): Player => ({
   id,
   firstName: data.firstName,
@@ -60,6 +69,9 @@ const convertPlayer = (id: string, data: any): Player => ({
     uploadedAt: d.uploadedAt?.toDate?.() || new Date(d.uploadedAt) || new Date(),
   })),
   active: data.active,
+  status: data.status || (data.active ? 'active' : 'inactive'),
+  quitDate: data.quitDate?.toDate?.() || undefined,
+  quitReason: data.quitReason || undefined,
   createdAt: data.createdAt?.toDate() || new Date(),
   updatedAt: data.updatedAt?.toDate() || new Date(),
 });
@@ -107,10 +119,10 @@ export const playersApi = {
       // Auto-heal: fix teamId on all matched players so future queries work directly
       for (const player of players) {
         if (player.teamId !== teamId) {
-          await updateDoc(doc(db, COLLECTION, player.id), {
+          await updateDoc(doc(db, COLLECTION, player.id), cleanData({
             teamId,
             updatedAt: Timestamp.now(),
-          });
+          }));
           player.teamId = teamId;
         }
       }
@@ -128,12 +140,12 @@ export const playersApi = {
 
   // Create player
   create: async (playerData: Omit<Player, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...playerData,
       dateOfBirth: playerData.dateOfBirth ? Timestamp.fromDate(playerData.dateOfBirth) : null,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
@@ -149,7 +161,7 @@ export const playersApi = {
       updateData.dateOfBirth = Timestamp.fromDate(playerData.dateOfBirth);
     }
 
-    await updateDoc(docRef, updateData);
+    await updateDoc(docRef, cleanData(updateData));
   },
 
   // Delete player
@@ -161,19 +173,48 @@ export const playersApi = {
   // Assign to team
   assignToTeam: async (playerId: string, teamId: string, teamName: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, playerId);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       teamId,
       teamName,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   // Remove from team
   removeFromTeam: async (playerId: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, playerId);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       teamId: null,
       teamName: null,
+      updatedAt: Timestamp.now(),
+    }));
+  },
+
+  // Mark player as quit — sets status, removes from team, keeps finance records
+  markAsQuit: async (playerId: string, reason?: string): Promise<void> => {
+    if (!playerId) throw new Error('Player ID is required');
+    const docRef = doc(db, COLLECTION, playerId);
+    const updateData: Record<string, unknown> = {
+      active: false,
+      status: 'quit',
+      quitDate: Timestamp.now(),
+      teamId: '',
+      teamName: '',
+      updatedAt: Timestamp.now(),
+    };
+    if (reason) updateData.quitReason = reason;
+    await updateDoc(docRef, updateData);
+  },
+
+  // Reactivate a quit player
+  reactivate: async (playerId: string): Promise<void> => {
+    if (!playerId) throw new Error('Player ID is required');
+    const docRef = doc(db, COLLECTION, playerId);
+    await updateDoc(docRef, {
+      active: true,
+      status: 'active',
+      quitDate: '',
+      quitReason: '',
       updatedAt: Timestamp.now(),
     });
   },
@@ -213,15 +254,33 @@ export const playersApi = {
     };
 
     const docRef = doc(db, COLLECTION, playerId);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       documents: arrayUnion({
         ...playerDoc,
         uploadedAt: Timestamp.now(),
       }),
       updatedAt: Timestamp.now(),
-    });
+    }));
 
     return playerDoc;
+  },
+
+  // Update compliance acknowledgment for a player
+  acknowledgeCompliance: async (
+    playerId: string,
+    complianceKey: 'concussionProtocol' | 'waiver' | 'playerConduct' | 'parentConduct',
+    acknowledgedBy: string,
+    acknowledgedByName: string,
+  ): Promise<void> => {
+    const docRef = doc(db, COLLECTION, playerId);
+    await updateDoc(docRef, cleanData({
+      [`compliance.${complianceKey}`]: {
+        acknowledgedAt: Timestamp.now(),
+        acknowledgedBy,
+        acknowledgedByName,
+      },
+      updatedAt: Timestamp.now(),
+    }));
   },
 
   // Delete a document from a player
@@ -242,10 +301,10 @@ export const playersApi = {
     if (snap.exists()) {
       const data = snap.data();
       const docs = (data.documents || []).filter((d: any) => d.id !== playerDocument.id);
-      await updateDoc(docRef, {
+      await updateDoc(docRef, cleanData({
         documents: docs,
         updatedAt: Timestamp.now(),
-      });
+      }));
     }
   },
 };

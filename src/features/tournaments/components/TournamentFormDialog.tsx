@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -15,6 +15,9 @@ import {
   OutlinedInput,
   Divider,
   Alert,
+  FormControlLabel,
+  Checkbox,
+  Typography,
 } from '@mui/material';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -35,7 +38,9 @@ const tournamentSchema = z.object({
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().min(1, 'End date is required'),
   teamIds: z.array(z.string()),
-  contact: z.string().optional(),
+  contactName: z.string().optional(),
+  contactPhone: z.string().optional(),
+  contactEmail: z.string().optional(),
   cost: z.number().min(0, 'Cost must be 0 or greater'),
   notes: z.string().optional(),
   status: z.enum(['upcoming', 'in_progress', 'completed']),
@@ -43,7 +48,10 @@ const tournamentSchema = z.object({
   depositAmount: z.number().min(0).optional(),
   balanceDueDate: z.string().optional(),
   registrationUrl: z.string().optional(),
+  websiteUrl: z.string().optional(),
+  scheduleUrl: z.string().optional(),
   accommodationsInfo: z.string().optional(),
+  insuranceSent: z.boolean().optional(),
 });
 
 type TournamentFormData = z.infer<typeof tournamentSchema>;
@@ -57,6 +65,14 @@ interface TournamentFormDialogProps {
 const TournamentFormDialog = ({ open, onClose, tournament }: TournamentFormDialogProps) => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const [liveWorkflowStatus, setLiveWorkflowStatus] = useState<TournamentWorkflowStatus>(
+    (tournament?.workflowStatus as TournamentWorkflowStatus) || 'wanting'
+  );
+
+  // Sync local workflow status when tournament prop changes
+  useEffect(() => {
+    setLiveWorkflowStatus((tournament?.workflowStatus as TournamentWorkflowStatus) || 'wanting');
+  }, [tournament]);
 
   const { data: teams = [] } = useQuery({
     queryKey: ['teams'],
@@ -78,15 +94,20 @@ const TournamentFormDialog = ({ open, onClose, tournament }: TournamentFormDialo
       startDate: '',
       endDate: '',
       teamIds: [],
-      contact: '',
+      contactName: '',
+      contactPhone: '',
+      contactEmail: '',
       cost: 0,
       notes: '',
       status: 'upcoming',
-      workflowStatus: 'planning',
+      workflowStatus: 'wanting',
       depositAmount: 0,
       balanceDueDate: '',
       registrationUrl: '',
+      websiteUrl: '',
+      scheduleUrl: '',
       accommodationsInfo: '',
+      insuranceSent: false,
     },
   });
 
@@ -100,17 +121,22 @@ const TournamentFormDialog = ({ open, onClose, tournament }: TournamentFormDialo
         startDate: format(tournament.startDate, 'yyyy-MM-dd'),
         endDate: format(tournament.endDate, 'yyyy-MM-dd'),
         teamIds: tournament.teamIds || [],
-        contact: tournament.contact || '',
+        contactName: tournament.contactName || '',
+        contactPhone: tournament.contactPhone || '',
+        contactEmail: tournament.contactEmail || '',
         cost: tournament.cost,
         notes: tournament.notes || '',
         status: tournament.status || 'upcoming',
-        workflowStatus: tournament.workflowStatus || 'planning',
+        workflowStatus: tournament.workflowStatus || 'wanting',
         depositAmount: tournament.depositAmount || 0,
         balanceDueDate: tournament.balanceDueDate
           ? format(tournament.balanceDueDate, 'yyyy-MM-dd')
           : '',
         registrationUrl: tournament.registrationUrl || '',
+        websiteUrl: tournament.websiteUrl || '',
+        scheduleUrl: tournament.scheduleUrl || '',
         accommodationsInfo: tournament.accommodationsInfo || '',
+        insuranceSent: tournament.insuranceSent || false,
       });
     } else {
       reset({
@@ -119,15 +145,20 @@ const TournamentFormDialog = ({ open, onClose, tournament }: TournamentFormDialo
         startDate: '',
         endDate: '',
         teamIds: [],
-        contact: '',
+        contactName: '',
+        contactPhone: '',
+        contactEmail: '',
         cost: 0,
         notes: '',
         status: 'upcoming',
-        workflowStatus: 'planning',
+        workflowStatus: 'wanting',
         depositAmount: 0,
         balanceDueDate: '',
         registrationUrl: '',
+        websiteUrl: '',
+        scheduleUrl: '',
         accommodationsInfo: '',
+        insuranceSent: false,
       });
     }
   }, [tournament, reset]);
@@ -140,10 +171,11 @@ const TournamentFormDialog = ({ open, onClose, tournament }: TournamentFormDialo
         newStatus,
         user?.uid || 'unknown'
       );
+      setLiveWorkflowStatus(newStatus);
       queryClient.invalidateQueries({ queryKey: ['tournaments'] });
       queryClient.invalidateQueries({ queryKey: ['costItems'] });
       toast.success(`Workflow advanced to "${newStatus}"`);
-      if (newStatus === 'signed_up') {
+      if (newStatus === 'entered') {
         toast.success('Tournament cost items auto-created for each team');
       }
     } catch (err: any) {
@@ -156,26 +188,31 @@ const TournamentFormDialog = ({ open, onClose, tournament }: TournamentFormDialo
       tournamentsApi.create({
         name: data.name,
         location: data.location,
-        startDate: new Date(data.startDate),
-        endDate: new Date(data.endDate),
+        startDate: new Date(data.startDate + 'T00:00:00'),
+        endDate: new Date(data.endDate + 'T00:00:00'),
         teamIds: data.teamIds,
-        contact: data.contact,
+        contactName: data.contactName,
+        contactPhone: data.contactPhone,
+        contactEmail: data.contactEmail,
         cost: data.cost,
         notes: data.notes,
         status: data.status,
-        workflowStatus: (data.workflowStatus as TournamentWorkflowStatus) || 'planning',
+        workflowStatus: (data.workflowStatus as TournamentWorkflowStatus) || 'wanting',
         depositAmount: data.depositAmount,
-        balanceDueDate: data.balanceDueDate ? new Date(data.balanceDueDate) : undefined,
+        balanceDueDate: data.balanceDueDate ? new Date(data.balanceDueDate + 'T00:00:00') : undefined,
         registrationUrl: data.registrationUrl,
+        websiteUrl: data.websiteUrl,
+        scheduleUrl: data.scheduleUrl,
         accommodationsInfo: data.accommodationsInfo,
+        insuranceSent: data.insuranceSent,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournaments'] });
       toast.success('Tournament created successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to create tournament');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to create tournament');
     },
   });
 
@@ -184,26 +221,31 @@ const TournamentFormDialog = ({ open, onClose, tournament }: TournamentFormDialo
       tournamentsApi.update(tournament!.id, {
         name: data.name,
         location: data.location,
-        startDate: new Date(data.startDate),
-        endDate: new Date(data.endDate),
+        startDate: new Date(data.startDate + 'T00:00:00'),
+        endDate: new Date(data.endDate + 'T00:00:00'),
         teamIds: data.teamIds,
-        contact: data.contact,
+        contactName: data.contactName,
+        contactPhone: data.contactPhone,
+        contactEmail: data.contactEmail,
         cost: data.cost,
         notes: data.notes,
         status: data.status,
-        workflowStatus: (data.workflowStatus as TournamentWorkflowStatus) || 'planning',
+        workflowStatus: (data.workflowStatus as TournamentWorkflowStatus) || 'wanting',
         depositAmount: data.depositAmount,
-        balanceDueDate: data.balanceDueDate ? new Date(data.balanceDueDate) : undefined,
+        balanceDueDate: data.balanceDueDate ? new Date(data.balanceDueDate + 'T00:00:00') : undefined,
         registrationUrl: data.registrationUrl,
+        websiteUrl: data.websiteUrl,
+        scheduleUrl: data.scheduleUrl,
         accommodationsInfo: data.accommodationsInfo,
+        insuranceSent: data.insuranceSent,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tournaments'] });
       toast.success('Tournament updated successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update tournament');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update tournament');
     },
   });
 
@@ -227,7 +269,7 @@ const TournamentFormDialog = ({ open, onClose, tournament }: TournamentFormDialo
             {tournament && (
               <>
                 <TournamentWorkflowStepper
-                  currentStatus={tournament.workflowStatus || 'planning'}
+                  currentStatus={liveWorkflowStatus}
                   onStatusChange={handleWorkflowChange}
                 />
                 <TournamentDepositCard tournament={tournament} />
@@ -298,13 +340,35 @@ const TournamentFormDialog = ({ open, onClose, tournament }: TournamentFormDialo
                 </FormControl>
               )}
             />
+            {/* Contact Info */}
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mt: 1 }}>
+              Contact Information
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Contact Name"
+                {...register('contactName')}
+                fullWidth
+              />
+              <TextField
+                label="Contact Phone"
+                {...register('contactPhone')}
+                fullWidth
+              />
+            </Box>
             <TextField
-              label="Contact"
-              {...register('contact')}
-              error={!!errors.contact}
-              helperText={errors.contact?.message}
+              label="Contact Email"
+              {...register('contactEmail')}
               fullWidth
+              type="email"
             />
+
+            <Divider />
+
+            {/* Financials */}
+            <Typography variant="subtitle2" color="text.secondary">
+              Financials
+            </Typography>
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField
                 label="Total Cost"
@@ -347,12 +411,33 @@ const TournamentFormDialog = ({ open, onClose, tournament }: TournamentFormDialo
                 <MenuItem value="completed">Completed</MenuItem>
               </TextField>
             </Box>
+
+            <Divider />
+
+            {/* Links */}
+            <Typography variant="subtitle2" color="text.secondary">
+              Links & Resources
+            </Typography>
             <TextField
               label="Registration URL"
               {...register('registrationUrl')}
               fullWidth
               placeholder="https://..."
             />
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Tournament Website"
+                {...register('websiteUrl')}
+                fullWidth
+                placeholder="https://..."
+              />
+              <TextField
+                label="Schedule Link"
+                {...register('scheduleUrl')}
+                fullWidth
+                placeholder="https://..."
+              />
+            </Box>
             <TextField
               label="Accommodations Info"
               {...register('accommodationsInfo')}
@@ -362,9 +447,28 @@ const TournamentFormDialog = ({ open, onClose, tournament }: TournamentFormDialo
               placeholder="Hotel details, links, etc."
             />
 
-            {watchedWorkflowStatus === 'signed_up' && !tournament && (
+            <Divider />
+
+            {/* Insurance */}
+            <Controller
+              name="insuranceSent"
+              control={control}
+              render={({ field }) => (
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={field.value || false}
+                      onChange={(e) => field.onChange(e.target.checked)}
+                    />
+                  }
+                  label="Insurance Certificate Sent"
+                />
+              )}
+            />
+
+            {watchedWorkflowStatus === 'entered' && !tournament && (
               <Alert severity="info">
-                Cost items will be auto-created for each team when the tournament is saved and workflow is advanced to "Signed Up".
+                Cost items will be auto-created for each team when the tournament is saved and workflow is advanced to "Entered".
               </Alert>
             )}
 

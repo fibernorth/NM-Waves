@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import {
   Container,
   Typography,
@@ -15,15 +14,10 @@ import {
   Divider,
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { useQuery } from '@tanstack/react-query';
+import { sponsorsApi } from '@/lib/api/sponsors';
 import type { Sponsor } from '@/types/models';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 const LEVEL_ORDER: Record<string, number> = {
   gold: 1,
@@ -47,47 +41,12 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 const PublicSponsorsPage = () => {
-  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchSponsors = async () => {
-      try {
-        const q = query(
-          collection(db, 'sponsors'),
-          where('displayOnPublicSite', '==', true),
-          orderBy('businessName')
-        );
-        const snapshot = await getDocs(q);
-        const sponsorsData = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            businessName: data.businessName,
-            logoUrl: data.logoUrl || '',
-            websiteUrl: data.websiteUrl || '',
-            contactName: data.contactName || '',
-            contactEmail: data.contactEmail || '',
-            contactPhone: data.contactPhone || '',
-            level: data.level,
-            amount: data.amount || 0,
-            displayOnPublicSite: data.displayOnPublicSite ?? false,
-            season: data.season,
-            createdAt: data.createdAt?.toDate() || new Date(),
-          } as Sponsor;
-        });
-        setSponsors(sponsorsData);
-      } catch (err) {
-        console.error('Error fetching sponsors:', err);
-        setError('Unable to load sponsors at this time. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSponsors();
-  }, []);
+  useDocumentTitle('Sponsors');
+  const { data: sponsors = [], isLoading: loading, isError } = useQuery({
+    queryKey: ['sponsors', 'public'],
+    queryFn: () => sponsorsApi.getPublic(),
+  });
+  const error = isError ? 'Unable to load sponsors at this time. Please try again later.' : null;
 
   // Group sponsors by level
   const groupedSponsors: Record<string, Sponsor[]> = {};

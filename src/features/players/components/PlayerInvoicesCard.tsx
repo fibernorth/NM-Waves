@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -47,17 +47,78 @@ const PlayerInvoicesCard = ({ playerId, finances }: PlayerInvoicesCardProps) => 
     enabled: !!playerId,
   });
 
+  // Build a map of financeId -> balanceDue from the authoritative finances prop
+  const financeBalanceMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const f of finances) {
+      map.set(f.id, f.balanceDue);
+    }
+    return map;
+  }, [finances]);
+
+  // Compute actual remaining amount per token based on finance data
+  const tokenRemainingMap = useMemo(() => {
+    const result: Record<string, { remaining: number; isPaid: boolean }> = {};
+
+    // Group non-used tokens by financeId to prorate the remaining balance
+    const tokensByFinance = new Map<string, InvoiceToken[]>();
+    for (const token of invoiceTokens) {
+      if (token.used) {
+        result[token.id] = { remaining: 0, isPaid: true };
+        continue;
+      }
+      const existing = tokensByFinance.get(token.financeId) || [];
+      existing.push(token);
+      tokensByFinance.set(token.financeId, existing);
+    }
+
+    for (const [financeId, tokens] of tokensByFinance) {
+      const balanceDue = financeBalanceMap.get(financeId);
+
+      if (balanceDue === undefined) {
+        // No finance data — fall back to original amounts
+        for (const t of tokens) {
+          const amt = t.chargeAmount || t.amountDue || 0;
+          result[t.id] = { remaining: amt, isPaid: false };
+        }
+        continue;
+      }
+
+      if (balanceDue <= 0) {
+        // Fully paid — all tokens for this finance record are effectively paid
+        for (const t of tokens) {
+          result[t.id] = { remaining: 0, isPaid: true };
+        }
+      } else {
+        // Partially paid — prorate remaining balance across outstanding tokens
+        const totalInvoiced = tokens.reduce((s, t) => s + (t.chargeAmount || t.amountDue || 0), 0);
+        for (const t of tokens) {
+          const originalAmt = t.chargeAmount || t.amountDue || 0;
+          const remaining = totalInvoiced > 0
+            ? Math.round((originalAmt / totalInvoiced) * balanceDue * 100) / 100
+            : balanceDue;
+          result[t.id] = { remaining, isPaid: remaining <= 0 };
+        }
+      }
+    }
+
+    return result;
+  }, [invoiceTokens, financeBalanceMap]);
+
   // Sort invoices: outstanding first, then by creation date descending
   const sortedTokens = [...invoiceTokens].sort((a, b) => {
-    const aOutstanding = !a.used && new Date(a.expiresAt) > new Date();
-    const bOutstanding = !b.used && new Date(b.expiresAt) > new Date();
+    const aInfo = tokenRemainingMap[a.id];
+    const bInfo = tokenRemainingMap[b.id];
+    const aOutstanding = aInfo ? !aInfo.isPaid : (!a.used && new Date(a.expiresAt) > new Date());
+    const bOutstanding = bInfo ? !bInfo.isPaid : (!b.used && new Date(b.expiresAt) > new Date());
     if (aOutstanding && !bOutstanding) return -1;
     if (!aOutstanding && bOutstanding) return 1;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
   const getStatus = (token: InvoiceToken): { label: string; color: 'success' | 'warning' | 'default' } => {
-    if (token.used) return { label: 'Paid', color: 'success' };
+    const info = tokenRemainingMap[token.id];
+    if (info?.isPaid || token.used) return { label: 'Paid', color: 'success' };
     if (new Date(token.expiresAt) < new Date()) return { label: 'Expired', color: 'default' };
     return { label: 'Outstanding', color: 'warning' };
   };
@@ -101,7 +162,8 @@ const PlayerInvoicesCard = ({ playerId, finances }: PlayerInvoicesCardProps) => 
                   <TableRow>
                     <TableCell sx={{ fontWeight: 600 }}>Invoice #</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Charge</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 600 }}>Amount</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600 }}>Invoiced</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600 }}>Remaining</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Due Date</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Action</TableCell>
@@ -110,13 +172,22 @@ const PlayerInvoicesCard = ({ playerId, finances }: PlayerInvoicesCardProps) => 
                 <TableBody>
                   {sortedTokens.map((token) => {
                     const status = getStatus(token);
-                    const isOutstanding = !token.used && new Date(token.expiresAt) > new Date();
+                    const info = tokenRemainingMap[token.id];
+                    const isOutstanding = info ? !info.isPaid : (!token.used && new Date(token.expiresAt) > new Date());
+                    const originalAmount = token.chargeAmount || token.amountDue || 0;
+                    const remaining = info ? info.remaining : originalAmount;
                     return (
                       <TableRow key={token.id}>
                         <TableCell>{token.invoiceNumber || '--'}</TableCell>
                         <TableCell>{token.chargeLabel || 'Full Balance'}</TableCell>
                         <TableCell align="right">
-                          ${(token.chargeAmount || token.amountDue || 0).toLocaleString('en-US', {
+                          ${originalAmount.toLocaleString('en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </TableCell>
+                        <TableCell align="right" sx={{ fontWeight: isOutstanding ? 600 : 400 }}>
+                          ${remaining.toLocaleString('en-US', {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}

@@ -36,15 +36,26 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendParentInvites = void 0;
+exports.sendInvoiceEmails = exports.sendParentInvites = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const cors_1 = __importDefault(require("cors"));
+const emails_1 = require("./emails");
 const corsHandler = (0, cors_1.default)({ origin: true });
 /**
+ * Compute fee total from a player finance document.
+ * Must match the formula in src/lib/api/finances.ts → computeFeeTotal.
+ */
+const computeFeeTotal = (data) => (data.registrationFee || 0) +
+    (data.uniformCost || 0) +
+    (data.tournamentFees || 0) +
+    (data.facilityFees || 0) +
+    (data.equipmentFees || 0) +
+    (data.otherFees || 0);
+/**
  * HTTP function to send invite emails to pending parent users.
- * Called by admin from the UI. Creates Firebase Auth accounts
- * and sends password reset emails (which serve as invites).
+ * Creates Firebase Auth accounts and sends branded invite emails
+ * with password reset links.
  *
  * Request body: { emails: string[] } or { all: true }
  */
@@ -55,7 +66,6 @@ exports.sendParentInvites = functions.https.onRequest((req, res) => {
             res.status(405).send('Method not allowed');
             return;
         }
-        // Verify admin auth
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             res.status(401).send('Unauthorized');
@@ -90,7 +100,6 @@ exports.sendParentInvites = functions.https.onRequest((req, res) => {
             const results = [];
             for (const email of pendingEmails) {
                 try {
-                    // Get pending user data
                     const pendingQuery = await db
                         .collection('pendingUsers')
                         .where('email', '==', email)
@@ -106,7 +115,6 @@ exports.sendParentInvites = functions.https.onRequest((req, res) => {
                         authUser = await admin.auth().getUserByEmail(email);
                     }
                     catch (_b) {
-                        // User doesn't exist, create one
                         authUser = await admin.auth().createUser({
                             email,
                             displayName: pendingData.displayName,
@@ -118,6 +126,7 @@ exports.sendParentInvites = functions.https.onRequest((req, res) => {
                         email,
                         displayName: pendingData.displayName,
                         role: 'parent',
+                        roles: ['parent'],
                         teamIds: pendingData.teamIds || [],
                         linkedPlayerIds: pendingData.linkedPlayerIds || [],
                         permissions: pendingData.permissions || {
@@ -129,11 +138,38 @@ exports.sendParentInvites = functions.https.onRequest((req, res) => {
                         createdAt: admin.firestore.Timestamp.now(),
                         updatedAt: admin.firestore.Timestamp.now(),
                     });
-                    // Send password reset email (serves as invite)
-                    const resetLink = await admin.auth().generatePasswordResetLink(email);
-                    // Note: In production, use SendGrid/Mailgun/etc. to send a branded invite email
-                    // For now, Firebase sends the default password reset email
-                    console.log(`Invite link for ${email}: ${resetLink}`);
+                    // Generate a custom invite token (never expires)
+                    const crypto = require('crypto');
+                    const inviteToken = crypto.randomUUID();
+                    // Store the invite token on the pending user doc
+                    await pendingQuery.docs[0].ref.update({
+                        inviteToken,
+                        updatedAt: admin.firestore.Timestamp.now(),
+                    });
+                    // Build the setup link (never expires)
+                    const resetLink = `https://nmwaves.com/setup-account?token=${inviteToken}&email=${encodeURIComponent(email)}`;
+                    // Resolve player names for the invite email
+                    const playerNames = [];
+                    const linkedPlayerIds = pendingData.linkedPlayerIds || [];
+                    for (const pid of linkedPlayerIds) {
+                        try {
+                            const playerDoc = await db.collection('players').doc(pid).get();
+                            if (playerDoc.exists) {
+                                const pd = playerDoc.data();
+                                playerNames.push(`${pd.firstName} ${pd.lastName}`);
+                            }
+                        }
+                        catch (_c) {
+                            // skip
+                        }
+                    }
+                    // Send branded invite email
+                    await (0, emails_1.sendParentInviteEmail)({
+                        email,
+                        parentName: pendingData.displayName || '',
+                        playerNames,
+                        resetLink,
+                    });
                     // Mark pending user as invited
                     await pendingQuery.docs[0].ref.update({
                         status: 'invited',
@@ -157,6 +193,136 @@ exports.sendParentInvites = functions.https.onRequest((req, res) => {
         }
         catch (error) {
             console.error('Invite error:', error);
+            res.status(500).json({ error: error.message });
+        }
+    });
+});
+/**
+ * HTTP function to send invoice notification emails to parents.
+ * Looks up player finance records and parent contact info, then
+ * sends branded invoice emails with fee breakdowns and payment links.
+ *
+ * Request body:
+ *   { teamId: string, dueDate?: string }   — send to all parents on a team
+ *   { financeIds: string[], dueDate?: string } — send to specific players
+ */
+exports.sendInvoiceEmails = functions.https.onRequest((req, res) => {
+    corsHandler(req, res, async () => {
+        var _a;
+        if (req.method !== 'POST') {
+            res.status(405).send('Method not allowed');
+            return;
+        }
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            res.status(401).send('Unauthorized');
+            return;
+        }
+        const db = admin.firestore();
+        try {
+            const token = authHeader.split('Bearer ')[1];
+            const decoded = await admin.auth().verifyIdToken(token);
+            const userDoc = await db.collection('users').doc(decoded.uid).get();
+            const userData = userDoc.data();
+            if (!userData || !(((_a = userData.roles) === null || _a === void 0 ? void 0 : _a.some((r) => ['admin', 'master-admin'].includes(r))) || ['admin', 'master-admin'].includes(userData.role))) {
+                res.status(403).send('Forbidden: Admin access required');
+                return;
+            }
+            const { teamId, financeIds, dueDate } = req.body;
+            // Fetch relevant playerFinances
+            let financeDocs = [];
+            if (teamId) {
+                const snap = await db.collection('playerFinances').where('teamId', '==', teamId).get();
+                financeDocs = snap.docs;
+            }
+            else if (Array.isArray(financeIds) && financeIds.length > 0) {
+                // Firestore 'in' query max is 30
+                for (let i = 0; i < financeIds.length; i += 30) {
+                    const batch = financeIds.slice(i, i + 30);
+                    const snap = await db.collection('playerFinances')
+                        .where(admin.firestore.FieldPath.documentId(), 'in', batch)
+                        .get();
+                    financeDocs.push(...snap.docs);
+                }
+            }
+            else {
+                res.status(400).send('Provide teamId or financeIds[]');
+                return;
+            }
+            // For each finance, look up parent email from players collection
+            const financeList = [];
+            for (const fDoc of financeDocs) {
+                const fData = fDoc.data();
+                const totalOwed = computeFeeTotal(fData);
+                const payments = fData.payments || [];
+                const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
+                const balanceDue = totalOwed - totalPaid - (fData.scholarshipAmount || 0);
+                // Skip paid-up players
+                if (balanceDue <= 0)
+                    continue;
+                // Lookup ALL parent/guardian emails from contacts
+                const parentEmails = [];
+                let parentName = '';
+                if (fData.playerId) {
+                    const playerDoc = await db.collection('players').doc(fData.playerId).get();
+                    if (playerDoc.exists) {
+                        const pd = playerDoc.data();
+                        parentName = pd.parentName || '';
+                        // Collect all contact emails (parents, guardians, etc.)
+                        const contacts = pd.contacts || [];
+                        for (const c of contacts) {
+                            if (c.email && !parentEmails.includes(c.email)) {
+                                parentEmails.push(c.email);
+                                if (!parentName)
+                                    parentName = c.name || '';
+                            }
+                        }
+                        // Fallback to legacy parentEmail field
+                        if (parentEmails.length === 0 && pd.parentEmail) {
+                            parentEmails.push(pd.parentEmail);
+                            parentName = pd.parentName || parentName;
+                        }
+                    }
+                }
+                if (parentEmails.length === 0)
+                    continue;
+                // Send invoice to EACH parent/guardian contact
+                for (const pEmail of parentEmails) {
+                    financeList.push({
+                        financeId: fDoc.id,
+                        playerName: fData.playerName || '',
+                        teamName: fData.teamName || '',
+                        season: fData.season || '',
+                        parentEmail: pEmail,
+                        parentName,
+                        totalOwed,
+                        totalPaid,
+                        balanceDue,
+                        feeBreakdown: {
+                            registrationFee: fData.registrationFee || 0,
+                            uniformCost: fData.uniformCost || 0,
+                            tournamentFees: fData.tournamentFees || 0,
+                            facilityFees: fData.facilityFees || 0,
+                            equipmentFees: fData.equipmentFees || 0,
+                            otherFees: fData.otherFees || 0,
+                        },
+                        scholarshipAmount: fData.scholarshipAmount || 0,
+                    });
+                }
+            }
+            const result = await (0, emails_1.sendBatchInvoiceNotifications)({
+                finances: financeList,
+                dueDate,
+            });
+            res.json({
+                success: true,
+                ...result,
+                totalFinances: financeDocs.length,
+                eligibleForEmail: financeList.length,
+            });
+        }
+        catch (error) {
+            console.error('Invoice email error:', error);
             res.status(500).json({ error: error.message });
         }
     });

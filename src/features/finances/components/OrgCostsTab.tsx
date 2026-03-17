@@ -54,7 +54,7 @@ const OrgCostsTab = ({ season }: OrgCostsTabProps) => {
       width: 150,
       renderCell: (params) => (
         <Chip
-          label={params.value === 'waves_fee' ? 'Waves Fee' : params.value === 'insurance' ? 'Insurance' : 'Administrative'}
+          label={params.value === 'waves_fee' ? 'Waves Fee' : params.value === 'insurance' ? 'Insurance' : params.value === 'facility' ? 'Facility' : 'Administrative'}
           size="small"
           variant="outlined"
         />

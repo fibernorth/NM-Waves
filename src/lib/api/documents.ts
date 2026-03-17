@@ -17,6 +17,15 @@ import { isResizableImage, resizeImage } from '@/lib/utils/imageResize';
 
 const COLLECTION = 'documents';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertDocument = (id: string, data: any): AppDocument => ({
   id,
   title: data.title,
@@ -81,10 +90,10 @@ export const documentsApi = {
   create: async (
     data: Omit<AppDocument, 'id' | 'createdAt'>
   ): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...data,
       createdAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
@@ -92,7 +101,7 @@ export const documentsApi = {
   update: async (id: string, data: Partial<AppDocument>): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
     const { id: _id, createdAt: _createdAt, ...updateData } = data as any;
-    await updateDoc(docRef, updateData);
+    await updateDoc(docRef, cleanData(updateData));
   },
 
   // Delete document

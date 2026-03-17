@@ -15,6 +15,15 @@ import type { ScheduleEvent } from '@/types/models';
 
 const COLLECTION = 'schedules';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertEvent = (id: string, data: any): ScheduleEvent => ({
   id,
   eventType: data.eventType,
@@ -59,7 +68,7 @@ export const schedulesApi = {
   create: async (
     eventData: Omit<ScheduleEvent, 'id'>
   ): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...eventData,
       startTime: Timestamp.fromDate(
         eventData.startTime instanceof Date
@@ -71,7 +80,7 @@ export const schedulesApi = {
           ? eventData.endTime
           : new Date(eventData.endTime)
       ),
-    });
+    }));
     return docRef.id;
   },
 
@@ -96,7 +105,7 @@ export const schedulesApi = {
       );
     }
     delete updateData.id;
-    await updateDoc(docRef, updateData);
+    await updateDoc(docRef, cleanData(updateData));
   },
 
   delete: async (id: string): Promise<void> => {

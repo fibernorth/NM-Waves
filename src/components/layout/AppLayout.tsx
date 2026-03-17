@@ -25,9 +25,9 @@ const AppLayout = () => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
+          p: { xs: 1.5, sm: 2, md: 3 },
           width: { sm: `calc(100% - ${DRAWER_WIDTH}px)` },
-          mt: 8,
+          mt: { xs: 7, md: 8 },
           backgroundColor: 'background.default',
           minHeight: '100vh',
         }}

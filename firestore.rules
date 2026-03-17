@@ -18,7 +18,7 @@ service cloud.firestore {
 
     function hasRole(role) {
       let data = getUserData(request.auth.uid);
-      return ('roles' in data && role in data.roles) ||
+      return ('roles' in data && data.roles.hasAny([role])) ||
              ('role' in data && data.role == role);
     }
 
@@ -38,13 +38,22 @@ service cloud.firestore {
       return isAuth() && hasRole('sponsor');
     }
 
+    // SITE SETTINGS (org name, logo, etc.)
+    match /siteSettings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // PUBLIC COLLECTIONS
     match /news/{docId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    match /players/{docId} {
+    // PLAYERS — public read for roster pages (public pages only expose safe fields:
+    // firstName, lastInitial, jerseyNumber, positions). PII fields like contacts
+    // and medical info should be filtered at the application level.
+    match /players/{playerId} {
       allow read: if true;
       allow write: if isCoach();
     }
@@ -72,11 +81,9 @@ service cloud.firestore {
       allow delete: if isMasterAdmin();
     }
 
-    // PENDING USERS (for sponsor signup, contact-based user creation)
+    // PENDING USERS (admin-managed user provisioning)
     match /pendingUsers/{docId} {
-      allow read: if isAdmin();
-      allow create: if true;
-      allow update, delete: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     // TRYOUTS
@@ -164,8 +171,12 @@ service cloud.firestore {
     }
 
     // PLAYER FINANCES
+    // Parents can read finance records for their linked children
     match /playerFinances/{docId} {
-      allow read: if isCoach();
+      allow read: if isCoach() || (
+        isAuth() && hasRole('parent') &&
+        resource.data.playerId in getUserData(request.auth.uid).linkedPlayerIds
+      );
       allow write: if isAdmin();
     }
 
@@ -182,6 +193,12 @@ service cloud.firestore {
     }
 
     // COST ASSUMPTIONS
+    // The 'global' document is publicly readable for the pricing page;
+    // all other cost docs require admin access.
+    match /costs/global {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
     match /costs/{docId} {
       allow read: if isAdmin();
       allow write: if isAdmin();
@@ -224,10 +241,12 @@ service cloud.firestore {
     }
 
     // INVOICE TOKENS (QR code payments)
+    // Public read so payment page works; only admins and cloud functions can create/update.
+    // The markUsed call is done by cloud function (stripe webhook), not client-side.
     match /invoiceTokens/{docId} {
       allow read: if true;
       allow create: if isAdmin();
-      allow update: if isAuth();
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -276,6 +295,72 @@ service cloud.firestore {
 
     match /gcGames/{docId} {
       allow read: if isCoach();
+      allow write: if isAdmin();
+    }
+
+    // COST ITEMS (3-tier cost management)
+    match /costItems/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // CHART OF ACCOUNTS
+    match /chartOfAccounts/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // GENERAL LEDGER
+    match /generalLedger/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // TEAM INVOICE BATCHES
+    match /teamInvoiceBatches/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // DONORS
+    match /donors/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // DONOR RECEIPTS
+    match /donorReceipts/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // BOARD MEETINGS
+    match /boardMeetings/{docId} {
+      allow read: if isCoach();
+      allow write: if isAdmin();
+    }
+
+    // GOVERNANCE DOCUMENTS
+    match /governanceDocuments/{docId} {
+      allow read: if isCoach();
+      allow write: if isAdmin();
+    }
+
+    // VOLUNTEER HOURS
+    match /volunteerHours/{docId} {
+      allow read: if isCoach();
+      allow write: if isCoach();
+    }
+
+    // BACKGROUND CHECKS
+    match /backgroundChecks/{docId} {
+      allow read: if isCoach();
+      allow write: if isAdmin();
+    }
+
+    // FORM 990 DATA
+    match /form990Data/{docId} {
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
   }

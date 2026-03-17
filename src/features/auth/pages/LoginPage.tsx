@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -16,10 +16,14 @@ import toast from 'react-hot-toast';
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get('returnTo');
+  const prefillEmail = searchParams.get('email') || '';
   const { signIn } = useAuthStore();
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(prefillEmail);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,18 +34,50 @@ const LoginPage = () => {
     try {
       await signIn(email, password);
       toast.success('Signed in successfully');
-      // Check role for redirect
-      const { user } = useAuthStore.getState();
-      if (user?.roles?.includes('sponsor')) {
-        navigate('/sponsor/dashboard');
+      if (returnTo && returnTo.startsWith('/')) {
+        navigate(returnTo);
       } else {
-        navigate('/dashboard');
+        const { user } = useAuthStore.getState();
+        if (user?.roles?.includes('sponsor')) {
+          navigate('/sponsor/dashboard');
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
       toast.error('Failed to sign in');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      toast.error('Enter your email address first');
+      return;
+    }
+    setResetLoading(true);
+    try {
+      const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+      const res = await fetch(
+        `https://us-central1-${projectId}.cloudfunctions.net/sendCustomPasswordReset`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('If an account exists with that email, a password reset link has been sent.');
+      } else {
+        toast.error(data.error || 'Failed to send password reset email');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to send password reset email');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -98,9 +134,18 @@ const LoginPage = () => {
         </form>
 
         <Box sx={{ textAlign: 'center', mt: 2 }}>
+          <Link
+            component="button"
+            variant="body2"
+            onClick={handleForgotPassword}
+            disabled={resetLoading}
+            sx={{ cursor: 'pointer', mb: 1, display: 'block' }}
+          >
+            {resetLoading ? 'Sending...' : 'Forgot Password?'}
+          </Link>
           <Typography variant="body2">
             Don't have an account?{' '}
-            <Link component={RouterLink} to="/signup">
+            <Link component={RouterLink} to={returnTo ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : '/signup'}>
               Sign up
             </Link>
           </Typography>

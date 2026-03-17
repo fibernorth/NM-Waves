@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Box, Typography, Button, Paper, Chip, Link, Grid, Card, CardContent } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import PaymentIcon from '@mui/icons-material/Payment';
 import { sponsorsApi } from '@/lib/api/sponsors';
 import { Sponsor } from '@/types/models';
 import toast from 'react-hot-toast';
@@ -19,8 +21,24 @@ const levelColorMap: Record<string, string> = {
   custom: '#6366f1',
 };
 
+const getSponsorStatus = (s: Sponsor): 'active' | 'expired' | 'upcoming' | 'no-dates' => {
+  if (!s.sponsorshipStart && !s.sponsorshipEnd) return 'no-dates';
+  const now = new Date();
+  if (s.sponsorshipStart && now < s.sponsorshipStart) return 'upcoming';
+  if (s.sponsorshipEnd && now > s.sponsorshipEnd) return 'expired';
+  return 'active';
+};
+
+const STATUS_CHIP: Record<string, { label: string; color: 'success' | 'error' | 'warning' | 'default' }> = {
+  active: { label: 'Active', color: 'success' },
+  expired: { label: 'Expired', color: 'error' },
+  upcoming: { label: 'Upcoming', color: 'warning' },
+  'no-dates': { label: 'No Dates', color: 'default' },
+};
+
 const SponsorsPage = () => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
   const [openDialog, setOpenDialog] = useState(false);
@@ -32,10 +50,11 @@ const SponsorsPage = () => {
   });
 
   const totalSponsored = useMemo(() => {
-    return sponsors.reduce((sum, s) => {
-      const playerTotal = (s.sponsoredPlayers || []).reduce((ps: number, sp: any) => ps + sp.amount, 0);
-      return sum + playerTotal;
-    }, 0);
+    return sponsors.reduce((sum, s) => sum + (s.amount || 0), 0);
+  }, [sponsors]);
+
+  const activeCount = useMemo(() => {
+    return sponsors.filter(s => getSponsorStatus(s) === 'active' || getSponsorStatus(s) === 'no-dates').length;
   }, [sponsors]);
 
   const deleteMutation = useMutation({
@@ -44,8 +63,8 @@ const SponsorsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['sponsors'] });
       toast.success('Sponsor deleted successfully');
     },
-    onError: () => {
-      toast.error('Failed to delete sponsor');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete sponsor');
     },
   });
 
@@ -71,11 +90,11 @@ const SponsorsPage = () => {
   };
 
   const columns: GridColDef[] = [
-    { field: 'businessName', headerName: 'Business Name', flex: 1, minWidth: 200 },
+    { field: 'businessName', headerName: 'Business Name', flex: 1, minWidth: 180 },
     {
       field: 'level',
       headerName: 'Level',
-      width: 120,
+      width: 100,
       renderCell: (params) => (
         <Chip
           label={params.value.charAt(0).toUpperCase() + params.value.slice(1)}
@@ -89,33 +108,27 @@ const SponsorsPage = () => {
       ),
     },
     {
-      field: 'amount',
-      headerName: 'Amount',
-      width: 120,
-      valueFormatter: (params) =>
-        params.value ? `$${Number(params.value).toFixed(2)}` : '-',
-    },
-    { field: 'season', headerName: 'Season', width: 140 },
-    {
-      field: 'sponsoredPlayers',
-      headerName: 'Sponsored Players',
-      width: 180,
+      field: 'status',
+      headerName: 'Status',
+      width: 100,
+      valueGetter: (params) => getSponsorStatus(params.row),
       renderCell: (params) => {
-        const players = params.value || [];
-        if (players.length === 0) return '-';
-        return (
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-            {players.map((sp: any, i: number) => (
-              <Chip key={i} label={sp.playerName} size="small" variant="outlined" />
-            ))}
-          </Box>
-        );
+        const cfg = STATUS_CHIP[params.value] || STATUS_CHIP['no-dates'];
+        return <Chip label={cfg.label} color={cfg.color} size="small" variant="outlined" />;
       },
     },
     {
+      field: 'amount',
+      headerName: 'Amount',
+      width: 100,
+      valueFormatter: (params) =>
+        params.value ? `$${Number(params.value).toFixed(2)}` : '-',
+    },
+    { field: 'season', headerName: 'Season', width: 120 },
+    {
       field: 'displayOnPublicSite',
-      headerName: 'Public Site',
-      width: 110,
+      headerName: 'Public',
+      width: 80,
       renderCell: (params) => (
         <Chip
           label={params.value ? 'Yes' : 'No'}
@@ -128,20 +141,13 @@ const SponsorsPage = () => {
     {
       field: 'websiteUrl',
       headerName: 'Website',
-      width: 160,
+      width: 100,
       renderCell: (params) =>
         params.value ? (
-          <Link
-            href={params.value}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="hover"
-          >
-            Visit Site
+          <Link href={params.value} target="_blank" rel="noopener noreferrer" underline="hover">
+            Visit
           </Link>
-        ) : (
-          '-'
-        ),
+        ) : '-',
     },
     ...(isAdmin
       ? [
@@ -152,19 +158,10 @@ const SponsorsPage = () => {
             sortable: false,
             renderCell: (params: any) => (
               <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button
-                  size="small"
-                  startIcon={<EditIcon />}
-                  onClick={() => handleEdit(params.row)}
-                >
+                <Button size="small" startIcon={<EditIcon />} onClick={() => handleEdit(params.row)}>
                   Edit
                 </Button>
-                <Button
-                  size="small"
-                  color="error"
-                  startIcon={<DeleteIcon />}
-                  onClick={() => handleDelete(params.row.id)}
-                >
+                <Button size="small" color="error" startIcon={<DeleteIcon />} onClick={() => handleDelete(params.row.id)}>
                   Delete
                 </Button>
               </Box>
@@ -178,15 +175,24 @@ const SponsorsPage = () => {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Sponsors</Typography>
-        {isAdmin && (
-          <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
-            Add Sponsor
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<PaymentIcon />}
+            onClick={() => navigate('/finances/billing?tab=sponsors')}
+          >
+            Sponsor Billing
           </Button>
-        )}
+          {isAdmin && (
+            <Button variant="contained" startIcon={<AddIcon />} onClick={handleAdd}>
+              Add Sponsor
+            </Button>
+          )}
+        </Box>
       </Box>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={4}>
+        <Grid item xs={12} sm={3}>
           <Card>
             <CardContent>
               <Typography variant="body2" color="text.secondary">Total Sponsors</Typography>
@@ -194,25 +200,33 @@ const SponsorsPage = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={4}>
+        <Grid item xs={12} sm={3}>
           <Card>
             <CardContent>
-              <Typography variant="body2" color="text.secondary">Total Sponsored Amount</Typography>
-              <Typography variant="h4" color="success.main">${totalSponsored.toFixed(2)}</Typography>
+              <Typography variant="body2" color="text.secondary">Active Sponsors</Typography>
+              <Typography variant="h4" color="success.main">{activeCount}</Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={4}>
+        <Grid item xs={12} sm={3}>
           <Card>
             <CardContent>
-              <Typography variant="body2" color="text.secondary">Public Sponsors</Typography>
+              <Typography variant="body2" color="text.secondary">Total Amount</Typography>
+              <Typography variant="h4" color="primary.main">${totalSponsored.toFixed(2)}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <Card>
+            <CardContent>
+              <Typography variant="body2" color="text.secondary">Public Display</Typography>
               <Typography variant="h4">{sponsors.filter(s => s.displayOnPublicSite).length}</Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      <Paper sx={{ height: 600, width: '100%' }}>
+      <Paper sx={{ height: { xs: 400, md: 600 }, width: '100%' }}>
         <DataGrid
           rows={sponsors}
           columns={columns}

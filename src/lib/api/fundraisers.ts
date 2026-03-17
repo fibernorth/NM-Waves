@@ -16,6 +16,15 @@ import type { Fundraiser, FundraiserDonation } from '@/types/models';
 
 const COLLECTION = 'fundraisers';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertFundraiser = (id: string, data: any): Fundraiser => ({
   id,
   name: data.name,
@@ -53,14 +62,14 @@ export const fundraisersApi = {
   },
 
   create: async (data: Omit<Fundraiser, 'id' | 'createdAt' | 'donations' | 'currentAmount'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...data,
       currentAmount: 0,
       donations: [],
       startDate: data.startDate ? Timestamp.fromDate(data.startDate) : null,
       endDate: data.endDate ? Timestamp.fromDate(data.endDate) : null,
       createdAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
@@ -75,7 +84,7 @@ export const fundraisersApi = {
     }
     // Remove donations from partial update - use addDonation instead
     delete updateData.donations;
-    await updateDoc(docRef, updateData);
+    await updateDoc(docRef, cleanData(updateData));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -85,12 +94,12 @@ export const fundraisersApi = {
 
   addDonation: async (id: string, donation: FundraiserDonation, newTotal: number): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       donations: arrayUnion({
         ...donation,
         date: Timestamp.fromDate(donation.date),
       }),
       currentAmount: newTotal,
-    });
+    }));
   },
 };

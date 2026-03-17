@@ -36,9 +36,17 @@ import SportsBaseballIcon from '@mui/icons-material/SportsBaseball';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import QrCodeIcon from '@mui/icons-material/QrCode';
+import PaymentIcon from '@mui/icons-material/Payment';
+import BalanceIcon from '@mui/icons-material/Balance';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import WebIcon from '@mui/icons-material/Web';
 import FolderZipIcon from '@mui/icons-material/FolderZip';
 import SettingsIcon from '@mui/icons-material/Settings';
+import HandshakeIcon from '@mui/icons-material/Handshake';
+import GavelIcon from '@mui/icons-material/Gavel';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import LinkIcon from '@mui/icons-material/Link';
 import ChildCareIcon from '@mui/icons-material/ChildCare';
 import { useAuthStore } from '@/stores/authStore';
@@ -94,14 +102,24 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Financial Reports', icon: <AssessmentIcon />, path: '/finances/reports', roles: ['admin', 'master-admin'] },
     { text: 'Reconciliation', icon: <AccountBalanceIcon />, path: '/finances/reconciliation', roles: ['admin', 'master-admin'] },
     { text: 'Invoices & QR', icon: <QrCodeIcon />, path: '/finances/invoices', roles: ['admin', 'master-admin'] },
+    { text: 'Trial Balance', icon: <BalanceIcon />, path: '/finances/trial-balance', roles: ['admin', 'master-admin'] },
+    { text: 'Balance Sheet', icon: <AccountTreeIcon />, path: '/finances/balance-sheet', roles: ['admin', 'master-admin'] },
+    { text: 'Budget vs Actual', icon: <CompareArrowsIcon />, path: '/finances/budget-vs-actual', roles: ['admin', 'master-admin'] },
+    { text: 'Aged AR / AP', icon: <ReceiptLongIcon />, path: '/finances/aged-receivables', roles: ['admin', 'master-admin'] },
   ];
 
   const operationsItems = [
     { text: 'Equipment', icon: <ChecklistIcon />, path: '/equipment', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Volunteers', icon: <VolunteerActivismIcon />, path: '/volunteers', roles: ['coach', 'admin', 'master-admin'] },
-    { text: 'Tournaments', icon: <EmojiEventsIcon />, path: '/tournaments', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Tournaments', icon: <EmojiEventsIcon />, path: '/tournaments', roles: ['parent', 'coach', 'admin', 'master-admin'] },
     { text: 'Documents', icon: <DescriptionIcon />, path: '/documents', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Media Gallery', icon: <PhotoLibraryIcon />, path: '/media', roles: ['coach', 'admin', 'master-admin'] },
+  ];
+
+  const complianceItems = [
+    { text: 'Donor Management', icon: <HandshakeIcon />, path: '/compliance/donors', roles: ['admin', 'master-admin'] },
+    { text: 'Governance & Board', icon: <GavelIcon />, path: '/compliance/governance', roles: ['admin', 'master-admin'] },
+    { text: 'Compliance', icon: <VerifiedUserIcon />, path: '/compliance/dashboard', roles: ['admin', 'master-admin'] },
   ];
 
   const managementItems = [
@@ -212,6 +230,19 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
                 }}
               />
             </ListItem>
+            <ListItem disablePadding>
+              <ListItemButton
+                selected={isSelected('/my-invoices')}
+                onClick={() => {
+                  navigate('/my-invoices');
+                  if (mobileOpen) onDrawerToggle();
+                }}
+                sx={{ bgcolor: isSelected('/my-invoices') ? undefined : 'primary.50' }}
+              >
+                <ListItemIcon><PaymentIcon color="primary" /></ListItemIcon>
+                <ListItemText primary="My Invoices & Pay" primaryTypographyProps={{ fontWeight: 600 }} />
+              </ListItemButton>
+            </ListItem>
             {(linkedPlayerQueries.data || []).map((player) => (
               <ListItem key={player.id} disablePadding>
                 <ListItemButton
@@ -241,6 +272,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
 
       {isAdmin && renderNavSection('Finances', financeItems)}
       {renderNavSection('Operations', operationsItems)}
+      {isAdmin && renderNavSection('Compliance', complianceItems)}
       {renderNavSection('Management', managementItems)}
     </div>
   );

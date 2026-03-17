@@ -26,8 +26,10 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import type { MediaItem } from '@/types/models';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 const PublicGalleryPage = () => {
+  useDocumentTitle('Gallery');
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +62,7 @@ const PublicGalleryPage = () => {
             caption: data.caption || undefined,
             mediaType: data.mediaType || 'image',
             moderationStatus: data.moderationStatus || undefined,
+            showInGallery: data.showInGallery ?? false,
             createdAt: data.createdAt?.toDate() || new Date(),
           } as MediaItem;
         });
@@ -75,9 +78,9 @@ const PublicGalleryPage = () => {
     fetchMedia();
   }, []);
 
-  // Filter out rejected and pending moderation items for public view
+  // Only show items explicitly marked for the public gallery
   const approvedMedia = media.filter(
-    (m) => !m.moderationStatus || m.moderationStatus === 'approved'
+    (m) => m.showInGallery && (!m.moderationStatus || m.moderationStatus === 'approved')
   );
 
   const teamNames = Array.from(new Set(approvedMedia.map((m) => m.teamName).filter(Boolean))) as string[];

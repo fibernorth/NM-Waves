@@ -69,8 +69,10 @@ const ReconciliationPage = () => {
   const allTransactions = useMemo((): ReconciliationRow[] => {
     const rows: ReconciliationRow[] = [];
 
-    // Income records
+    // Income records — skip any that were auto-created from player payments
+    // (those are already represented via the playerFinances payments below)
     income.forEach((inc) => {
+      if ((inc as any).sourcePaymentId || (inc as any).sourceFinanceId) return;
       rows.push({
         id: `inc_${inc.id}`,
         date: inc.date,
@@ -196,7 +198,7 @@ const ReconciliationPage = () => {
       setSelectedIds([]);
       toast.success('Reconciliation updated');
     },
-    onError: () => toast.error('Failed to update reconciliation'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to update reconciliation'),
   });
 
   const handleReconcileSelected = () => {
@@ -427,7 +429,7 @@ const ReconciliationPage = () => {
       </Paper>
 
       {/* Data Grid */}
-      <Paper sx={{ height: 600, width: '100%' }}>
+      <Paper sx={{ height: { xs: 400, md: 600 }, width: '100%' }}>
         <DataGrid
           rows={filteredTransactions}
           columns={columns}

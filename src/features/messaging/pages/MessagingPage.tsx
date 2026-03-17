@@ -76,8 +76,8 @@ const MessagingPage = () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       toast.success('Conversation created');
     },
-    onError: () => {
-      toast.error('Failed to create conversation');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to create conversation');
     },
   });
 
@@ -91,8 +91,8 @@ const MessagingPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
-    onError: () => {
-      toast.error('Failed to send message');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to send message');
     },
   });
 

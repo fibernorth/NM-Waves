@@ -63,8 +63,8 @@ const FundraisersPage = () => {
       queryClient.invalidateQueries({ queryKey: ['fundraisers'] });
       toast.success('Fundraiser deleted successfully');
     },
-    onError: () => {
-      toast.error('Failed to delete fundraiser');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete fundraiser');
     },
   });
 

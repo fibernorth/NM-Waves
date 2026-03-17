@@ -13,10 +13,19 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import type { GlobalCostAssumptions, PlayerFinance, Payment } from '@/types/models';
+import type { GlobalCostAssumptions, PlayerFinance, Payment, IncomeCategory, Income } from '@/types/models';
 
 const COSTS_COLLECTION = 'costs';
 const FINANCES_COLLECTION = 'playerFinances';
+
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
 
 // Global Cost Assumptions
 export const costAssumptionsApi = {
@@ -69,6 +78,7 @@ const convertPlayerFinance = (id: string, data: any): PlayerFinance => {
     payerEmail: p.payerEmail || '',
     sponsorId: p.sponsorId,
     sponsorName: p.sponsorName,
+    processingFee: p.processingFee,
     reconciled: p.reconciled || false,
     reconciledAt: p.reconciledAt?.toDate(),
     reconciledBy: p.reconciledBy,
@@ -76,13 +86,7 @@ const convertPlayerFinance = (id: string, data: any): PlayerFinance => {
     recordedAt: p.recordedAt?.toDate() || new Date(),
   }));
 
-  const totalOwed =
-    data.registrationFee +
-    data.uniformCost +
-    data.tournamentFees +
-    data.facilityFees +
-    data.equipmentFees +
-    data.otherFees;
+  const totalOwed = computeFeeTotal(data);
 
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
   const balance = totalPaid - totalOwed;
@@ -107,8 +111,8 @@ const convertPlayerFinance = (id: string, data: any): PlayerFinance => {
     payments,
     totalOwed,
     balance,
-    balanceDue: data.balanceDue ?? (totalOwed - totalPaid - (data.scholarshipAmount || 0)),
-    status: data.status || (totalPaid >= totalOwed ? 'paid' : 'current'),
+    balanceDue: totalOwed - totalPaid - (data.scholarshipAmount || 0),
+    status: data.status || ((totalOwed - totalPaid - (data.scholarshipAmount || 0)) <= 0 ? 'paid' : 'current'),
     createdAt: data.createdAt?.toDate() || new Date(),
     updatedAt: data.updatedAt?.toDate() || new Date(),
   };
@@ -126,33 +130,36 @@ export const playerFinancesApi = {
   getByPlayer: async (playerId: string): Promise<PlayerFinance[]> => {
     const q = query(
       collection(db, FINANCES_COLLECTION),
-      where('playerId', '==', playerId),
-      orderBy('season', 'desc')
+      where('playerId', '==', playerId)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => convertPlayerFinance(doc.id, doc.data()));
+    return snapshot.docs
+      .map(doc => convertPlayerFinance(doc.id, doc.data()))
+      .sort((a, b) => (b.season || '').localeCompare(a.season || ''));
   },
 
   // Get finances by team
   getByTeam: async (teamId: string): Promise<PlayerFinance[]> => {
     const q = query(
       collection(db, FINANCES_COLLECTION),
-      where('teamId', '==', teamId),
-      orderBy('playerName')
+      where('teamId', '==', teamId)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => convertPlayerFinance(doc.id, doc.data()));
+    return snapshot.docs
+      .map(doc => convertPlayerFinance(doc.id, doc.data()))
+      .sort((a, b) => (a.playerName || '').localeCompare(b.playerName || ''));
   },
 
   // Get finances by season
   getBySeason: async (season: string): Promise<PlayerFinance[]> => {
     const q = query(
       collection(db, FINANCES_COLLECTION),
-      where('season', '==', season),
-      orderBy('playerName')
+      where('season', '==', season)
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => convertPlayerFinance(doc.id, doc.data()));
+    return snapshot.docs
+      .map(doc => convertPlayerFinance(doc.id, doc.data()))
+      .sort((a, b) => (a.playerName || '').localeCompare(b.playerName || ''));
   },
 
   // Get finance by ID
@@ -164,12 +171,12 @@ export const playerFinancesApi = {
 
   // Create finance record
   create: async (financeData: Omit<PlayerFinance, 'id' | 'totalPaid' | 'totalOwed' | 'balance' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, FINANCES_COLLECTION), {
+    const docRef = await addDoc(collection(db, FINANCES_COLLECTION), cleanData({
       ...financeData,
       payments: financeData.payments || [],
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
@@ -184,10 +191,10 @@ export const playerFinancesApi = {
         recordedAt: p.recordedAt instanceof Date ? Timestamp.fromDate(p.recordedAt) : p.recordedAt,
       }));
     }
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       ...updateData,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   // Delete finance record
@@ -197,47 +204,166 @@ export const playerFinancesApi = {
   },
 
   // Add payment (returns the payment ID)
+  // Also creates an income record so the payment appears in financial reports.
   addPayment: async (financeId: string, payment: Omit<Payment, 'id' | 'recordedAt'>): Promise<string> => {
     const docRef = doc(db, FINANCES_COLLECTION, financeId);
     const docSnap = await getDoc(docRef);
 
     const paymentId = `payment_${Date.now()}`;
 
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      const payments = data.payments || [];
-
-      const newPayment: any = {
-        id: paymentId,
-        ...payment,
-        date: Timestamp.fromDate(payment.date),
-        recordedAt: Timestamp.now(),
-      };
-
-      payments.push(newPayment);
-
-      await updateDoc(docRef, {
-        payments,
-        updatedAt: Timestamp.now(),
-      });
+    if (!docSnap.exists()) {
+      throw new Error('Player finance record not found');
     }
+
+    const data = docSnap.data();
+    const payments = data.payments || [];
+
+    const newPayment: any = {
+      id: paymentId,
+      ...payment,
+      date: Timestamp.fromDate(payment.date),
+      recordedAt: Timestamp.now(),
+    };
+
+    // Also create an income record so the payment shows in Income page & financial reports
+    const incomeCategory: IncomeCategory = payment.sponsorId ? 'sponsorships' : 'player_payments';
+    const source = payment.sponsorName
+      ? `Sponsor: ${payment.sponsorName}`
+      : payment.payerName || data.playerName || 'Player Payment';
+
+    let incomeRecordId = '';
+    try {
+      const incomeRef = await addDoc(collection(db, 'income'), cleanData({
+        date: Timestamp.fromDate(payment.date),
+        category: incomeCategory,
+        amount: payment.amount,
+        source,
+        payerName: payment.payerName || '',
+        description: `Payment for ${data.playerName || 'player'} (${data.season || ''})`,
+        paymentMethod: payment.method || 'other',
+        referenceNumber: payment.reference || '',
+        teamId: data.teamId || '',
+        playerId: data.playerId || '',
+        season: data.season || '',
+        notes: payment.notes || '',
+        reconciled: false,
+        recordedBy: payment.recordedBy || '',
+        sourcePaymentId: paymentId,
+        sourceFinanceId: financeId,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      }));
+      incomeRecordId = incomeRef.id;
+
+      // Post GL entries (best-effort)
+      try {
+        const { generalLedgerApi } = await import('./generalLedger');
+        await generalLedgerApi.postIncome(
+          {
+            id: incomeRef.id,
+            date: payment.date,
+            category: incomeCategory,
+            amount: payment.amount,
+            source,
+            payerName: payment.payerName || '',
+            description: `Payment for ${data.playerName || 'player'} (${data.season || ''})`,
+            paymentMethod: (['cash', 'check', 'credit_card', 'bank_transfer', 'venmo', 'zelle'].includes(payment.method) ? payment.method : 'other') as Income['paymentMethod'],
+            season: data.season || '',
+            reconciled: false,
+            recordedBy: payment.recordedBy || '',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+          payment.recordedBy || '',
+        );
+      } catch (glErr) {
+        console.warn('[finances] GL posting skipped for payment:', glErr);
+      }
+    } catch (err) {
+      console.error('[finances] Failed to create income record for payment:', err);
+    }
+
+    // Store the income record ID on the payment so we can cascade-delete later
+    newPayment.incomeRecordId = incomeRecordId;
+    payments.push(newPayment);
+
+    await updateDoc(docRef, cleanData({
+      payments,
+      updatedAt: Timestamp.now(),
+    }));
 
     return paymentId;
   },
 
-  // Remove payment
+  // Remove payment — also cascade-deletes the linked income record and GL entries
   removePayment: async (financeId: string, paymentId: string): Promise<void> => {
     const docRef = doc(db, FINANCES_COLLECTION, financeId);
     const docSnap = await getDoc(docRef);
 
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      const payments = (data.payments || []).filter((p: any) => p.id !== paymentId);
+    if (!docSnap.exists()) {
+      throw new Error('Player finance record not found');
+    }
 
-      await updateDoc(docRef, {
-        payments,
-        updatedAt: Timestamp.now(),
-      });
+    const data = docSnap.data();
+    const allPayments = data.payments || [];
+    const deletedPayment = allPayments.find((p: any) => p.id === paymentId);
+    const payments = allPayments.filter((p: any) => p.id !== paymentId);
+
+    await updateDoc(docRef, cleanData({
+      payments,
+      updatedAt: Timestamp.now(),
+    }));
+
+    // Cascade-delete the linked income record (and its GL entries)
+    try {
+      let incomeRecordId = deletedPayment?.incomeRecordId;
+
+      // Fallback: find the income record by sourcePaymentId if not stored on payment
+      if (!incomeRecordId) {
+        const incomeQ = query(
+          collection(db, 'income'),
+          where('sourcePaymentId', '==', paymentId),
+        );
+        const incomeSnap = await getDocs(incomeQ);
+        if (!incomeSnap.empty) {
+          incomeRecordId = incomeSnap.docs[0].id;
+        }
+      }
+
+      // Second fallback: match by amount, player, and approximate date
+      if (!incomeRecordId && deletedPayment) {
+        const incomeQ = query(
+          collection(db, 'income'),
+          where('playerId', '==', data.playerId || ''),
+          where('amount', '==', deletedPayment.amount),
+          where('category', '==', deletedPayment.sponsorId ? 'sponsorships' : 'player_payments'),
+        );
+        const incomeSnap = await getDocs(incomeQ);
+        if (!incomeSnap.empty) {
+          incomeRecordId = incomeSnap.docs[0].id;
+        }
+      }
+
+      if (incomeRecordId) {
+        // Delete GL entries linked to this income record
+        try {
+          const glQ = query(
+            collection(db, 'generalLedger'),
+            where('sourceId', '==', incomeRecordId),
+          );
+          const glSnap = await getDocs(glQ);
+          for (const glDoc of glSnap.docs) {
+            await deleteDoc(glDoc.ref);
+          }
+        } catch (glErr) {
+          console.warn('[finances] GL cleanup failed for deleted payment:', glErr);
+        }
+
+        // Delete the income record
+        await deleteDoc(doc(db, 'income', incomeRecordId));
+      }
+    } catch (err) {
+      console.warn('[finances] Income/GL cleanup failed for deleted payment:', err);
     }
   },
 
@@ -246,39 +372,51 @@ export const playerFinancesApi = {
     const docRef = doc(db, FINANCES_COLLECTION, financeId);
     const docSnap = await getDoc(docRef);
 
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      const payments = (data.payments || []).map((p: any) => {
-        if (p.id === paymentId) {
-          return {
-            ...p,
-            reconciled,
-            reconciledAt: reconciled ? Timestamp.now() : null,
-            reconciledBy: reconciled ? userId : null,
-          };
-        }
-        return p;
-      });
-
-      await updateDoc(docRef, {
-        payments,
-        updatedAt: Timestamp.now(),
-      });
+    if (!docSnap.exists()) {
+      throw new Error('Player finance record not found');
     }
+
+    const data = docSnap.data();
+    const payments = (data.payments || []).map((p: any) => {
+      if (p.id === paymentId) {
+        return {
+          ...p,
+          reconciled,
+          reconciledAt: reconciled ? Timestamp.now() : null,
+          reconciledBy: reconciled ? userId : null,
+        };
+      }
+      return p;
+    });
+
+    await updateDoc(docRef, cleanData({
+      payments,
+      updatedAt: Timestamp.now(),
+    }));
   },
 };
 
+/** Shared fee total calculation — single source of truth */
+export const computeFeeTotal = (data: {
+  registrationFee?: number;
+  uniformCost?: number;
+  tournamentFees?: number;
+  facilityFees?: number;
+  equipmentFees?: number;
+  otherFees?: number;
+}): number =>
+  (data.registrationFee || 0) +
+  (data.uniformCost || 0) +
+  (data.tournamentFees || 0) +
+  (data.facilityFees || 0) +
+  (data.equipmentFees || 0) +
+  (data.otherFees || 0);
+
 // Utility functions for financial calculations
 export const calculateFinances = (finance: Omit<PlayerFinance, 'totalPaid' | 'totalOwed' | 'balance'>) => {
-  const totalOwed =
-    finance.registrationFee +
-    finance.uniformCost +
-    finance.tournamentFees +
-    finance.facilityFees +
-    finance.equipmentFees +
-    finance.otherFees;
+  const totalOwed = computeFeeTotal(finance);
 
-  const totalPaid = finance.payments.reduce((sum, p) => sum + p.amount, 0);
+  const totalPaid = (finance.payments || []).reduce((sum, p) => sum + p.amount, 0);
   const balance = totalPaid - totalOwed;
 
   return {

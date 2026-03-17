@@ -83,6 +83,8 @@ const TeamCostsTab = ({ season }: TeamCostsTabProps) => {
             ? 'Tournament'
             : params.value === 'equipment'
             ? 'Equipment'
+            : params.value === 'facility'
+            ? 'Facility'
             : 'Special';
         return <Chip label={label} size="small" variant="outlined" />;
       },

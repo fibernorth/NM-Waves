@@ -74,9 +74,10 @@ const LinkChildDialog = ({ open, onClose }: LinkChildDialogProps) => {
       await refreshUser();
       toast.success(`Linked ${player.firstName} ${player.lastName} to your account`);
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to link child:', err);
-      toast.error('Failed to link child. Please try again.');
+      const message = err?.message || 'Failed to link child. Please try again.';
+      toast.error(message);
     } finally {
       setLinking(false);
     }

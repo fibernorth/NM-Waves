@@ -103,8 +103,8 @@ const FundraiserFormDialog = ({ open, onClose, fundraiser }: FundraiserFormDialo
       toast.success('Fundraiser created successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to create fundraiser');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to create fundraiser');
     },
   });
 
@@ -124,8 +124,8 @@ const FundraiserFormDialog = ({ open, onClose, fundraiser }: FundraiserFormDialo
       toast.success('Fundraiser updated successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update fundraiser');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update fundraiser');
     },
   });
 

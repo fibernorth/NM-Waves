@@ -201,8 +201,8 @@ const PostFormDialog = ({ open, onClose, post }: PostFormDialogProps) => {
       toast.success('Post created');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to create post');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to create post');
     },
   });
 
@@ -237,8 +237,8 @@ const PostFormDialog = ({ open, onClose, post }: PostFormDialogProps) => {
       toast.success('Post updated');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update post');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update post');
     },
   });
 

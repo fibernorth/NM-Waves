@@ -63,7 +63,7 @@ const SponsorPaymentHistoryPage = () => {
         A record of all your sponsored player payments.
       </Typography>
 
-      <Paper sx={{ height: 500, width: '100%' }}>
+      <Paper sx={{ height: { xs: 350, md: 500 }, width: '100%' }}>
         <DataGrid
           rows={rows}
           columns={columns}

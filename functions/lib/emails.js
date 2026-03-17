@@ -34,105 +34,291 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendPaymentReceipt = sendPaymentReceipt;
+exports.sendInvoiceNotification = sendInvoiceNotification;
+exports.sendParentInviteEmail = sendParentInviteEmail;
+exports.sendPasswordResetCustomEmail = sendPasswordResetCustomEmail;
+exports.sendBatchInvoiceNotifications = sendBatchInvoiceNotifications;
 const admin = __importStar(require("firebase-admin"));
+const functions = __importStar(require("firebase-functions"));
+const nodemailer = __importStar(require("nodemailer"));
+const getDb = () => admin.firestore();
+const ORG_EMAIL = 'tcwavessoftball@gmail.com';
+// Shared email header/footer for brand consistency
+const emailHeader = `
+  <div style="background-color: #1565c0; color: white; padding: 20px; text-align: center;">
+    <h1 style="margin: 0;">TC Waves Ball Club</h1>
+  </div>`;
+const emailFooter = `
+  <div style="padding: 20px; text-align: center; color: #999; font-size: 12px;">
+    <p>TC Waves Ball Club, Inc. &bull; Traverse City, Michigan</p>
+    <p>${ORG_EMAIL}</p>
+  </div>`;
 /**
- * Sends a payment receipt email.
- * Uses Firestore 'mail' collection (Firebase Extension: Trigger Email).
- * If that extension isn't set up, this logs the receipt and stores it.
+ * Creates a Nodemailer transporter using Gmail SMTP.
+ * Requires firebase functions config: smtp.user and smtp.pass
+ * Set via: firebase functions:config:set smtp.user="tcwavessoftball@gmail.com" smtp.pass="YOUR_APP_PASSWORD"
  */
+function getTransporter() {
+    var _a, _b;
+    const config = functions.config();
+    const user = ((_a = config.smtp) === null || _a === void 0 ? void 0 : _a.user) || ORG_EMAIL;
+    const pass = (_b = config.smtp) === null || _b === void 0 ? void 0 : _b.pass;
+    if (!pass) {
+        console.warn('[email] SMTP password not configured. Set via: firebase functions:config:set smtp.pass="YOUR_APP_PASSWORD"');
+        return null;
+    }
+    return nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user, pass },
+    });
+}
+/**
+ * Sends an email directly via Gmail SMTP.
+ * CC's the org email on all outgoing mail.
+ * Falls back to storing in Firestore if SMTP not configured.
+ */
+async function queueEmail(to, subject, html) {
+    const transporter = getTransporter();
+    if (transporter) {
+        try {
+            await transporter.sendMail({
+                from: `"TC Waves Ball Club" <${ORG_EMAIL}>`,
+                to,
+                cc: to !== ORG_EMAIL ? ORG_EMAIL : undefined,
+                subject,
+                html,
+            });
+            console.log(`Email sent to ${to}: ${subject}`);
+            // Also log to Firestore for record keeping
+            await getDb().collection('mail').add({
+                to,
+                cc: ORG_EMAIL,
+                subject,
+                sent: true,
+                sentAt: admin.firestore.Timestamp.now(),
+                createdAt: admin.firestore.Timestamp.now(),
+            });
+            return;
+        }
+        catch (error) {
+            console.error(`[email] SMTP send failed for ${to}:`, error.message);
+        }
+    }
+    // Fallback: store in Firestore for manual review
+    console.log(`Email stored for ${to} (SMTP not configured or send failed)`);
+    await getDb().collection('mail').add({
+        to,
+        cc: ORG_EMAIL,
+        message: { subject, html },
+        sent: false,
+        createdAt: admin.firestore.Timestamp.now(),
+    });
+}
 async function sendPaymentReceipt(receiptData) {
     const { email, amount, playerName, teamName, season, date, sponsorBusinessName, stripeSessionId, } = receiptData;
     const formattedAmount = `$${amount.toFixed(2)}`;
     const formattedDate = date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
+        year: 'numeric', month: 'long', day: 'numeric',
     });
     const subject = `Payment Receipt - TC Waves Ball Club`;
     const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background-color: #1565c0; color: white; padding: 20px; text-align: center;">
-        <h1 style="margin: 0;">TC Waves Ball Club</h1>
-        <p style="margin: 5px 0 0 0;">Payment Receipt</p>
-      </div>
-
+      ${emailHeader}
       <div style="padding: 30px; background-color: #f5f5f5;">
         <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
           <h2 style="color: #333; margin-top: 0;">Payment Confirmation</h2>
           <p>Thank you for your payment! Here are the details:</p>
-
           <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-              <td style="padding: 8px 0; color: #666;">Date:</td>
-              <td style="padding: 8px 0; font-weight: bold;">${formattedDate}</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px 0; color: #666;">Amount:</td>
-              <td style="padding: 8px 0; font-weight: bold; color: #2e7d32;">${formattedAmount}</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px 0; color: #666;">Player:</td>
-              <td style="padding: 8px 0; font-weight: bold;">${playerName}</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px 0; color: #666;">Team:</td>
-              <td style="padding: 8px 0;">${teamName}</td>
-            </tr>
-            <tr>
-              <td style="padding: 8px 0; color: #666;">Season:</td>
-              <td style="padding: 8px 0;">${season}</td>
-            </tr>
-            ${sponsorBusinessName ? `
-            <tr>
-              <td style="padding: 8px 0; color: #666;">Sponsor:</td>
-              <td style="padding: 8px 0;">${sponsorBusinessName}</td>
-            </tr>
-            ` : ''}
-            ${stripeSessionId ? `
-            <tr>
-              <td style="padding: 8px 0; color: #666;">Reference:</td>
-              <td style="padding: 8px 0; font-size: 12px;">${stripeSessionId}</td>
-            </tr>
-            ` : ''}
+            <tr><td style="padding: 8px 0; color: #666;">Date:</td><td style="padding: 8px 0; font-weight: bold;">${formattedDate}</td></tr>
+            <tr><td style="padding: 8px 0; color: #666;">Amount:</td><td style="padding: 8px 0; font-weight: bold; color: #2e7d32;">${formattedAmount}</td></tr>
+            <tr><td style="padding: 8px 0; color: #666;">Player:</td><td style="padding: 8px 0; font-weight: bold;">${playerName}</td></tr>
+            <tr><td style="padding: 8px 0; color: #666;">Team:</td><td style="padding: 8px 0;">${teamName}</td></tr>
+            <tr><td style="padding: 8px 0; color: #666;">Season:</td><td style="padding: 8px 0;">${season}</td></tr>
+            ${sponsorBusinessName ? `<tr><td style="padding: 8px 0; color: #666;">Sponsor:</td><td style="padding: 8px 0;">${sponsorBusinessName}</td></tr>` : ''}
+            ${stripeSessionId ? `<tr><td style="padding: 8px 0; color: #666;">Reference:</td><td style="padding: 8px 0; font-size: 12px;">${stripeSessionId}</td></tr>` : ''}
           </table>
         </div>
-
         <div style="background-color: white; padding: 15px; border-radius: 8px; text-align: center;">
           <p style="margin: 0; color: #666; font-size: 14px;">
             This payment may be tax-deductible. Please consult your tax advisor.
           </p>
         </div>
       </div>
+      ${emailFooter}
+    </div>`;
+    await queueEmail(email, subject, html);
+}
+async function sendInvoiceNotification(data) {
+    const { email, parentName, playerName, teamName, season, totalOwed, totalPaid, balanceDue, feeBreakdown, scholarshipAmount, paymentUrl, dueDate, } = data;
+    const feeRows = [
+        feeBreakdown.registrationFee ? `<tr><td style="padding: 6px 0; color: #666;">Registration Fee</td><td style="padding: 6px 0; text-align: right;">$${feeBreakdown.registrationFee.toFixed(2)}</td></tr>` : '',
+        feeBreakdown.uniformCost ? `<tr><td style="padding: 6px 0; color: #666;">Uniform Cost</td><td style="padding: 6px 0; text-align: right;">$${feeBreakdown.uniformCost.toFixed(2)}</td></tr>` : '',
+        feeBreakdown.tournamentFees ? `<tr><td style="padding: 6px 0; color: #666;">Tournament Fees</td><td style="padding: 6px 0; text-align: right;">$${feeBreakdown.tournamentFees.toFixed(2)}</td></tr>` : '',
+        feeBreakdown.facilityFees ? `<tr><td style="padding: 6px 0; color: #666;">Facility Fees</td><td style="padding: 6px 0; text-align: right;">$${feeBreakdown.facilityFees.toFixed(2)}</td></tr>` : '',
+        feeBreakdown.equipmentFees ? `<tr><td style="padding: 6px 0; color: #666;">Equipment Fees</td><td style="padding: 6px 0; text-align: right;">$${feeBreakdown.equipmentFees.toFixed(2)}</td></tr>` : '',
+        feeBreakdown.otherFees ? `<tr><td style="padding: 6px 0; color: #666;">Other Fees</td><td style="padding: 6px 0; text-align: right;">$${feeBreakdown.otherFees.toFixed(2)}</td></tr>` : '',
+    ].filter(Boolean).join('');
+    const subject = `Invoice Notice: ${playerName} - TC Waves Ball Club`;
+    const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      ${emailHeader}
+      <div style="padding: 30px; background-color: #f5f5f5;">
+        <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <h2 style="color: #333; margin-top: 0;">Invoice Notice</h2>
+          <p>Hi ${parentName || 'Parent/Guardian'},</p>
+          <p>This is a billing notice for <strong>${playerName}</strong> on the <strong>${teamName}</strong> team for the <strong>${season}</strong> season.</p>
 
-      <div style="padding: 20px; text-align: center; color: #999; font-size: 12px;">
-        <p>TC Waves Ball Club, Inc. &bull; Traverse City, Michigan</p>
-        <p>tcwavessoftball@gmail.com</p>
+          <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+            ${feeRows}
+            <tr style="border-top: 2px solid #ddd;">
+              <td style="padding: 8px 0; font-weight: bold;">Total Charges</td>
+              <td style="padding: 8px 0; text-align: right; font-weight: bold;">$${totalOwed.toFixed(2)}</td>
+            </tr>
+            ${scholarshipAmount ? `
+            <tr>
+              <td style="padding: 6px 0; color: #1976d2;">Scholarship / Financial Aid</td>
+              <td style="padding: 6px 0; text-align: right; color: #1976d2;">-$${scholarshipAmount.toFixed(2)}</td>
+            </tr>` : ''}
+            <tr>
+              <td style="padding: 6px 0; color: #2e7d32;">Payments Received</td>
+              <td style="padding: 6px 0; text-align: right; color: #2e7d32;">-$${totalPaid.toFixed(2)}</td>
+            </tr>
+            <tr style="border-top: 2px solid #ddd; background-color: ${balanceDue > 0 ? '#fff3e0' : '#e8f5e9'};">
+              <td style="padding: 10px 0; font-weight: bold; font-size: 16px;">Balance Due</td>
+              <td style="padding: 10px 0; text-align: right; font-weight: bold; font-size: 16px; color: ${balanceDue > 0 ? '#e65100' : '#2e7d32'};">$${balanceDue.toFixed(2)}</td>
+            </tr>
+          </table>
+
+          ${dueDate ? `<p style="color: #e65100; font-weight: bold;">Payment due by: ${dueDate}</p>` : ''}
+
+          ${paymentUrl ? `
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${paymentUrl}" style="display: inline-block; background-color: #1565c0; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+              Pay Now
+            </a>
+          </div>
+          <p style="text-align: center; color: #666; font-size: 13px;">
+            Or log in to your parent account at <a href="https://tcwavesballclub.com">tcwavesballclub.com</a> to view details and make a payment.
+          </p>` : `
+          <p style="text-align: center; color: #666;">
+            Log in to your parent account at <a href="https://tcwavesballclub.com">tcwavesballclub.com</a> to view details and make a payment.
+          </p>`}
+        </div>
+
+        <div style="background-color: white; padding: 15px; border-radius: 8px; text-align: center;">
+          <p style="margin: 0; color: #666; font-size: 13px;">
+            Questions? Reply to this email or contact us at tcwavessoftball@gmail.com
+          </p>
+        </div>
       </div>
-    </div>
-  `;
-    try {
-        // Try to use Firebase Trigger Email extension (mail collection)
-        await admin.firestore().collection('mail').add({
-            to: email,
-            message: {
-                subject,
-                html,
-            },
-            createdAt: admin.firestore.Timestamp.now(),
-        });
-        console.log(`Receipt email queued for ${email}`);
+      ${emailFooter}
+    </div>`;
+    await queueEmail(email, subject, html);
+}
+async function sendParentInviteEmail(data) {
+    const { email, parentName, playerNames, resetLink } = data;
+    const playerList = playerNames.length > 0
+        ? playerNames.map(n => `<li><strong>${n}</strong></li>`).join('')
+        : '<li>Your child</li>';
+    const subject = `You're Invited - TC Waves Ball Club Parent Portal`;
+    const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      ${emailHeader}
+      <div style="padding: 30px; background-color: #f5f5f5;">
+        <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <h2 style="color: #333; margin-top: 0;">Welcome to TC Waves!</h2>
+          <p>Hi ${parentName || 'Parent/Guardian'},</p>
+          <p>An account has been created for you on the TC Waves Ball Club parent portal. You can use it to:</p>
+          <ul style="color: #555;">
+            <li>View invoices and payment history</li>
+            <li>Make payments online</li>
+            <li>Access team schedules and announcements</li>
+            <li>View your child's profile and documents</li>
+          </ul>
+
+          <p>Your linked player(s):</p>
+          <ul style="color: #555;">${playerList}</ul>
+
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${resetLink}" style="display: inline-block; background-color: #1565c0; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+              Set Your Password & Log In
+            </a>
+          </div>
+
+          <p style="color: #666; font-size: 13px;">
+            This link does not expire. You can use it any time to set your password.
+            If you have any issues, visit
+            <a href="https://nmwaves.com/login">nmwaves.com/login</a>
+            and click "Forgot Password" to get a new link.
+          </p>
+        </div>
+      </div>
+      ${emailFooter}
+    </div>`;
+    await queueEmail(email, subject, html);
+}
+async function sendPasswordResetCustomEmail(data) {
+    const { email, resetLink } = data;
+    const subject = `Password Reset - TC Waves Ball Club`;
+    const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      ${emailHeader}
+      <div style="padding: 30px; background-color: #f5f5f5;">
+        <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <h2 style="color: #333; margin-top: 0;">Password Reset Request</h2>
+          <p>Hi,</p>
+          <p>We received a request to reset the password for your TC Waves account. Click the button below to set a new password:</p>
+
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${resetLink}" style="display: inline-block; background-color: #1565c0; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+              Reset Your Password
+            </a>
+          </div>
+
+          <p style="color: #666; font-size: 13px;">
+            This link will expire in 48 hours. If you did not request a password reset,
+            you can safely ignore this email.
+          </p>
+        </div>
+      </div>
+      ${emailFooter}
+    </div>`;
+    await queueEmail(email, subject, html);
+}
+async function sendBatchInvoiceNotifications(params) {
+    let sent = 0;
+    let skipped = 0;
+    const errors = [];
+    for (const f of params.finances) {
+        if (!f.parentEmail) {
+            skipped++;
+            continue;
+        }
+        if (f.balanceDue <= 0) {
+            skipped++;
+            continue;
+        }
+        try {
+            await sendInvoiceNotification({
+                email: f.parentEmail,
+                parentName: f.parentName,
+                playerName: f.playerName,
+                teamName: f.teamName,
+                season: f.season,
+                totalOwed: f.totalOwed,
+                totalPaid: f.totalPaid,
+                balanceDue: f.balanceDue,
+                feeBreakdown: f.feeBreakdown,
+                scholarshipAmount: f.scholarshipAmount,
+                paymentUrl: f.paymentUrl,
+                dueDate: params.dueDate,
+            });
+            sent++;
+        }
+        catch (err) {
+            errors.push(`${f.parentEmail}: ${err.message}`);
+        }
     }
-    catch (error) {
-        // If mail collection doesn't work, store receipt for later
-        console.log(`Receipt stored for ${email} (email service may not be configured)`);
-        await admin.firestore().collection('receipts').add({
-            email,
-            subject,
-            html,
-            receiptData,
-            createdAt: admin.firestore.Timestamp.now(),
-            sent: false,
-        });
-    }
+    return { sent, skipped, errors };
 }
 //# sourceMappingURL=emails.js.map

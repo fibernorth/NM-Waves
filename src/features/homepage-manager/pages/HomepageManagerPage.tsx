@@ -86,7 +86,7 @@ const HomepageManagerPage = () => {
       queryClient.invalidateQueries({ queryKey: ['homepagePosts'] });
       toast.success('Post deleted');
     },
-    onError: () => toast.error('Failed to delete post'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to delete post'),
   });
 
   const togglePinMutation = useMutation({
@@ -96,7 +96,7 @@ const HomepageManagerPage = () => {
       queryClient.invalidateQueries({ queryKey: ['homepagePosts'] });
       toast.success('Pin status updated');
     },
-    onError: () => toast.error('Failed to update pin'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to update pin'),
   });
 
   const togglePublishMutation = useMutation({
@@ -106,7 +106,7 @@ const HomepageManagerPage = () => {
       queryClient.invalidateQueries({ queryKey: ['homepagePosts'] });
       toast.success('Publish status updated');
     },
-    onError: () => toast.error('Failed to update publish status'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to update publish status'),
   });
 
   const handleAdd = () => {

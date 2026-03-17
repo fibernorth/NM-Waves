@@ -45,8 +45,8 @@ const ScholarshipsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['scholarships'] });
       toast.success('Scholarship deleted successfully');
     },
-    onError: () => {
-      toast.error('Failed to delete scholarship');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete scholarship');
     },
   });
 
@@ -183,7 +183,7 @@ const ScholarshipsPage = () => {
         </Card>
       </Box>
 
-      <Paper sx={{ height: 600, width: '100%' }}>
+      <Paper sx={{ height: { xs: 400, md: 600 }, width: '100%' }}>
         <DataGrid
           rows={scholarships}
           columns={columns}

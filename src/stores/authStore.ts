@@ -147,6 +147,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         ...newUser,
+        onboardingComplete: false,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -173,9 +174,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   refreshUser: async () => {
     const { firebaseUser } = useAuthStore.getState();
     if (!firebaseUser) return;
-    const result = await loadUserProfile(firebaseUser.uid, firebaseUser.email!, firebaseUser);
-    if (result) {
-      set({ user: result.user, firebaseUser: result.firebaseUser });
+    try {
+      const result = await loadUserProfile(firebaseUser.uid, firebaseUser.email!, firebaseUser);
+      if (result) {
+        set({ user: result.user, firebaseUser: result.firebaseUser });
+      }
+    } catch (err) {
+      console.error('[Auth] Failed to refresh user profile:', err);
     }
   },
 }));

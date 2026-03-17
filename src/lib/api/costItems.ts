@@ -16,6 +16,15 @@ import type { CostItem, CostItemTier } from '@/types/models';
 
 const COLLECTION = 'costItems';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertCostItem = (id: string, data: any): CostItem => ({
   id,
   tier: data.tier,
@@ -100,11 +109,11 @@ export const costItemsApi = {
   },
 
   create: async (data: Omit<CostItem, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...data,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
@@ -113,10 +122,10 @@ export const costItemsApi = {
     const updateData: any = { ...data };
     delete updateData.id;
     delete updateData.createdAt;
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       ...updateData,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   delete: async (id: string): Promise<void> => {

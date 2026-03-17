@@ -5,14 +5,18 @@ import { APP_URL } from '@/lib/stripe-config';
 const functions = getFunctions(app);
 
 interface CheckoutSessionParams {
-  financeId: string;
-  playerId: string;
+  financeId?: string;
+  playerId?: string;
   amount: number;
   sponsorId?: string;
   isAnonymous?: boolean;
   invoiceToken?: string;
   payerEmail?: string;
   payerName?: string;
+  // Sponsor-only fields
+  sponsorBusinessName?: string;
+  sponsorshipTarget?: string;
+  sponsorNotes?: string;
 }
 
 interface CheckoutSessionResult {
@@ -42,9 +46,6 @@ export async function createCheckoutSession(params: CheckoutSessionParams): Prom
  */
 export async function redirectToCheckout(params: CheckoutSessionParams): Promise<void> {
   const { url } = await createCheckoutSession(params);
-  if (url) {
-    window.location.href = url;
-  } else {
-    throw new Error('No checkout URL returned from Stripe');
-  }
+  if (!url) throw new Error('No checkout URL returned from Stripe');
+  window.location.href = url;
 }

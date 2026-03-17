@@ -37,7 +37,7 @@ exports.listDrivePhotos = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const googleapis_1 = require("googleapis");
-const db = admin.firestore();
+const getDb = () => admin.firestore();
 /**
  * Callable Cloud Function: lists photos from a shared Google Drive folder.
  * Reads folder ID from appSettings/integrations.
@@ -50,7 +50,7 @@ exports.listDrivePhotos = functions.https.onCall(async (_data, context) => {
         throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated');
     }
     // Get integration settings
-    const settingsDoc = await db.doc('appSettings/integrations').get();
+    const settingsDoc = await getDb().doc('appSettings/integrations').get();
     const settings = settingsDoc.data();
     if (!((_a = settings === null || settings === void 0 ? void 0 : settings.googleDrive) === null || _a === void 0 ? void 0 : _a.enabled) || !((_b = settings === null || settings === void 0 ? void 0 : settings.googleDrive) === null || _b === void 0 ? void 0 : _b.folderId)) {
         return { photos: [] };

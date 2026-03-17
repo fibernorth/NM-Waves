@@ -10,6 +10,8 @@ import {
   MenuItem,
   FormControlLabel,
   Checkbox,
+  Typography,
+  Avatar,
 } from '@mui/material';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,6 +21,9 @@ import { sponsorsApi } from '@/lib/api/sponsors';
 import { Sponsor } from '@/types/models';
 import toast from 'react-hot-toast';
 
+const fmtDateInput = (d?: Date) =>
+  d ? new Date(d).toISOString().split('T')[0] : '';
+
 const sponsorSchema = z.object({
   businessName: z.string().min(1, 'Business name is required'),
   level: z.enum(['gold', 'silver', 'bronze', 'custom']),
@@ -26,8 +31,11 @@ const sponsorSchema = z.object({
   contactEmail: z.string().email('Invalid email').optional().or(z.literal('')),
   contactPhone: z.string().optional(),
   websiteUrl: z.string().url('Invalid URL').optional().or(z.literal('')),
+  logoUrl: z.string().url('Invalid URL').optional().or(z.literal('')),
   amount: z.number().min(0, 'Amount must be 0 or greater').optional(),
   season: z.string().min(1, 'Season is required'),
+  sponsorshipStart: z.string().optional().or(z.literal('')),
+  sponsorshipEnd: z.string().optional().or(z.literal('')),
   displayOnPublicSite: z.boolean(),
   sponsorshipType: z.string().optional(),
 });
@@ -47,6 +55,7 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<SponsorFormData>({
     resolver: zodResolver(sponsorSchema),
@@ -57,8 +66,11 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
       contactEmail: '',
       contactPhone: '',
       websiteUrl: '',
+      logoUrl: '',
       amount: 0,
       season: '',
+      sponsorshipStart: '',
+      sponsorshipEnd: '',
       displayOnPublicSite: false,
       sponsorshipType: '',
     },
@@ -73,12 +85,19 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
         contactEmail: sponsor.contactEmail || '',
         contactPhone: sponsor.contactPhone || '',
         websiteUrl: sponsor.websiteUrl || '',
+        logoUrl: sponsor.logoUrl || '',
         amount: sponsor.amount || 0,
         season: sponsor.season,
+        sponsorshipStart: fmtDateInput(sponsor.sponsorshipStart),
+        sponsorshipEnd: fmtDateInput(sponsor.sponsorshipEnd),
         displayOnPublicSite: sponsor.displayOnPublicSite,
         sponsorshipType: sponsor.sponsorshipType || '',
       });
     } else {
+      // Default: Aug 1 current year to Jul 30 next year
+      const year = new Date().getFullYear();
+      const month = new Date().getMonth();
+      const seasonYear = month >= 7 ? year : year - 1; // Aug=7
       reset({
         businessName: '',
         level: 'bronze',
@@ -86,59 +105,54 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
         contactEmail: '',
         contactPhone: '',
         websiteUrl: '',
+        logoUrl: '',
         amount: 0,
-        season: '',
+        season: `${seasonYear}-${seasonYear + 1}`,
+        sponsorshipStart: `${seasonYear}-08-01`,
+        sponsorshipEnd: `${seasonYear + 1}-07-30`,
         displayOnPublicSite: false,
         sponsorshipType: '',
       });
     }
   }, [sponsor, reset]);
 
+  const buildSponsorData = (data: SponsorFormData) => ({
+    businessName: data.businessName,
+    level: data.level,
+    contactName: data.contactName,
+    contactEmail: data.contactEmail,
+    contactPhone: data.contactPhone,
+    websiteUrl: data.websiteUrl,
+    logoUrl: data.logoUrl || '',
+    amount: data.amount,
+    season: data.season,
+    sponsorshipStart: data.sponsorshipStart ? new Date(data.sponsorshipStart + 'T00:00:00') : undefined,
+    sponsorshipEnd: data.sponsorshipEnd ? new Date(data.sponsorshipEnd + 'T23:59:59') : undefined,
+    displayOnPublicSite: data.displayOnPublicSite,
+    sponsorshipType: (data.sponsorshipType as 'player_sponsor' | 'team_sponsor' | 'general') || undefined,
+  });
+
   const createMutation = useMutation({
-    mutationFn: (data: SponsorFormData) =>
-      sponsorsApi.create({
-        businessName: data.businessName,
-        level: data.level,
-        contactName: data.contactName,
-        contactEmail: data.contactEmail,
-        contactPhone: data.contactPhone,
-        websiteUrl: data.websiteUrl,
-        amount: data.amount,
-        season: data.season,
-        displayOnPublicSite: data.displayOnPublicSite,
-        sponsorshipType: (data.sponsorshipType as 'player_sponsor' | 'team_sponsor' | 'general') || undefined,
-      }),
+    mutationFn: (data: SponsorFormData) => sponsorsApi.create(buildSponsorData(data)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sponsors'] });
       toast.success('Sponsor created successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to create sponsor');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to create sponsor');
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: SponsorFormData) =>
-      sponsorsApi.update(sponsor!.id, {
-        businessName: data.businessName,
-        level: data.level,
-        contactName: data.contactName,
-        contactEmail: data.contactEmail,
-        contactPhone: data.contactPhone,
-        websiteUrl: data.websiteUrl,
-        amount: data.amount,
-        season: data.season,
-        displayOnPublicSite: data.displayOnPublicSite,
-        sponsorshipType: (data.sponsorshipType as 'player_sponsor' | 'team_sponsor' | 'general') || undefined,
-      }),
+    mutationFn: (data: SponsorFormData) => sponsorsApi.update(sponsor!.id, buildSponsorData(data)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sponsors'] });
       toast.success('Sponsor updated successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update sponsor');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update sponsor');
     },
   });
 
@@ -165,52 +179,52 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
               helperText={errors.businessName?.message}
               fullWidth
             />
-            <TextField
-              label="Sponsorship Level"
-              select
-              {...register('level')}
-              error={!!errors.level}
-              helperText={errors.level?.message}
-              fullWidth
-              defaultValue={sponsor?.level || 'bronze'}
-            >
-              <MenuItem value="gold">Gold</MenuItem>
-              <MenuItem value="silver">Silver</MenuItem>
-              <MenuItem value="bronze">Bronze</MenuItem>
-              <MenuItem value="custom">Custom</MenuItem>
-            </TextField>
-            <TextField
-              label="Sponsorship Type"
-              select
-              {...register('sponsorshipType')}
-              fullWidth
-              defaultValue={sponsor?.sponsorshipType || ''}
-            >
-              <MenuItem value="">Not specified</MenuItem>
-              <MenuItem value="player_sponsor">Player Sponsor</MenuItem>
-              <MenuItem value="team_sponsor">Team Sponsor</MenuItem>
-              <MenuItem value="general">General Sponsor</MenuItem>
-            </TextField>
-            <TextField
-              label="Contact Name"
-              {...register('contactName')}
-              error={!!errors.contactName}
-              helperText={errors.contactName?.message}
-              fullWidth
-            />
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Sponsorship Level"
+                select
+                {...register('level')}
+                error={!!errors.level}
+                helperText={errors.level?.message}
+                fullWidth
+                defaultValue={sponsor?.level || 'bronze'}
+              >
+                <MenuItem value="gold">Gold ($1,000+)</MenuItem>
+                <MenuItem value="silver">Silver ($500+)</MenuItem>
+                <MenuItem value="bronze">Bronze ($250+)</MenuItem>
+                <MenuItem value="custom">Custom</MenuItem>
+              </TextField>
+              <TextField
+                label="Sponsorship Type"
+                select
+                {...register('sponsorshipType')}
+                fullWidth
+                defaultValue={sponsor?.sponsorshipType || ''}
+              >
+                <MenuItem value="">Not specified</MenuItem>
+                <MenuItem value="player_sponsor">Player Sponsor</MenuItem>
+                <MenuItem value="team_sponsor">Team Sponsor</MenuItem>
+                <MenuItem value="general">General Sponsor</MenuItem>
+              </TextField>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Contact Name"
+                {...register('contactName')}
+                fullWidth
+              />
+              <TextField
+                label="Contact Phone"
+                {...register('contactPhone')}
+                fullWidth
+              />
+            </Box>
             <TextField
               label="Contact Email"
               type="email"
               {...register('contactEmail')}
               error={!!errors.contactEmail}
               helperText={errors.contactEmail?.message}
-              fullWidth
-            />
-            <TextField
-              label="Contact Phone"
-              {...register('contactPhone')}
-              error={!!errors.contactPhone}
-              helperText={errors.contactPhone?.message}
               fullWidth
             />
             <TextField
@@ -221,24 +235,65 @@ const SponsorFormDialog = ({ open, onClose, sponsor }: SponsorFormDialogProps) =
               placeholder="https://example.com"
               fullWidth
             />
-            <TextField
-              label="Sponsorship Amount"
-              type="number"
-              {...register('amount', { valueAsNumber: true })}
-              error={!!errors.amount}
-              helperText={errors.amount?.message}
-              fullWidth
-              InputProps={{ startAdornment: '$' }}
-              inputProps={{ step: '0.01', min: '0' }}
-            />
-            <TextField
-              label="Season"
-              placeholder="e.g., 2025 Spring"
-              {...register('season')}
-              error={!!errors.season}
-              helperText={errors.season?.message}
-              fullWidth
-            />
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <TextField
+                label="Logo URL"
+                {...register('logoUrl')}
+                error={!!errors.logoUrl}
+                helperText={errors.logoUrl?.message || 'Direct link to logo image (PNG, JPG, SVG)'}
+                placeholder="https://example.com/logo.png"
+                fullWidth
+              />
+              {watch('logoUrl') && (
+                <Avatar
+                  src={watch('logoUrl')}
+                  variant="rounded"
+                  sx={{ width: 56, height: 56, flexShrink: 0, bgcolor: '#fafafa', border: '1px solid #eee' }}
+                  imgProps={{ style: { objectFit: 'contain' } }}
+                />
+              )}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Sponsorship Amount"
+                type="number"
+                {...register('amount', { valueAsNumber: true })}
+                error={!!errors.amount}
+                helperText={errors.amount?.message}
+                fullWidth
+                InputProps={{ startAdornment: '$' }}
+                inputProps={{ step: '0.01', min: '0' }}
+              />
+              <TextField
+                label="Season"
+                placeholder="e.g., 2025-2026"
+                {...register('season')}
+                error={!!errors.season}
+                helperText={errors.season?.message}
+                fullWidth
+              />
+            </Box>
+
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+              Active Period (sponsor hides from public site outside these dates)
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Start Date"
+                type="date"
+                {...register('sponsorshipStart')}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+              />
+              <TextField
+                label="End Date"
+                type="date"
+                {...register('sponsorshipEnd')}
+                InputLabelProps={{ shrink: true }}
+                fullWidth
+              />
+            </Box>
+
             <FormControlLabel
               control={<Checkbox {...register('displayOnPublicSite')} defaultChecked={sponsor?.displayOnPublicSite || false} />}
               label="Display on Public Site"

@@ -131,8 +131,8 @@ const MetricFormDialog = ({ open, onClose, metric }: MetricFormDialogProps) => {
       toast.success('Metric recorded successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to record metric');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to record metric');
     },
   });
 
@@ -157,8 +157,8 @@ const MetricFormDialog = ({ open, onClose, metric }: MetricFormDialogProps) => {
       toast.success('Metric updated successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update metric');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update metric');
     },
   });
 

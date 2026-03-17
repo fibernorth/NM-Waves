@@ -30,10 +30,27 @@ const typeLabels: Record<string, string> = {
   jersey: 'Jersey',
   pants: 'Pants',
   helmet: 'Helmet',
-  bag: 'Bag',
+  bag: 'Backpack Bag',
   belt: 'Belt',
   socks: 'Socks',
   guest_jersey: 'Guest Jersey',
+  bat: 'Bat',
+  softball: 'Softball',
+  glove: 'Glove',
+  catcher_gear: 'Catcher Gear',
+  other: 'Other',
+};
+
+const ownershipLabels: Record<string, string> = {
+  player: 'Player',
+  organization: 'Org',
+  consumable: 'Consumable',
+};
+
+const ownershipColors: Record<string, 'primary' | 'secondary' | 'warning'> = {
+  player: 'primary',
+  organization: 'secondary',
+  consumable: 'warning',
 };
 
 const statusColors: Record<string, 'success' | 'info' | 'warning' | 'error' | 'default'> = {
@@ -41,6 +58,7 @@ const statusColors: Record<string, 'success' | 'info' | 'warning' | 'error' | 'd
   assigned: 'info',
   damaged: 'warning',
   retired: 'default',
+  consumed: 'default',
 };
 
 const conditionColors: Record<string, 'success' | 'info' | 'warning' | 'error'> = {
@@ -61,6 +79,7 @@ const EquipmentPage = () => {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterTeam, setFilterTeam] = useState<string>('all');
+  const [filterOwnership, setFilterOwnership] = useState<string>('all');
 
   const { data: equipment = [], isLoading } = useQuery({
     queryKey: ['equipment'],
@@ -78,7 +97,7 @@ const EquipmentPage = () => {
       queryClient.invalidateQueries({ queryKey: ['equipment'] });
       toast.success('Equipment deleted');
     },
-    onError: () => toast.error('Failed to delete equipment'),
+    onError: (err: Error) => toast.error(err.message || 'Failed to delete equipment'),
   });
 
   const filteredEquipment = useMemo(() => {
@@ -86,8 +105,9 @@ const EquipmentPage = () => {
     if (filterType !== 'all') result = result.filter((e) => e.type === filterType);
     if (filterStatus !== 'all') result = result.filter((e) => e.status === filterStatus);
     if (filterTeam !== 'all') result = result.filter((e) => e.teamId === filterTeam);
+    if (filterOwnership !== 'all') result = result.filter((e) => (e.ownership || 'organization') === filterOwnership);
     return result;
-  }, [equipment, filterType, filterStatus, filterTeam]);
+  }, [equipment, filterType, filterStatus, filterTeam, filterOwnership]);
 
   const handleAdd = () => {
     setSelectedEquipment(null);
@@ -124,6 +144,28 @@ const EquipmentPage = () => {
       renderCell: (params) => (
         <Chip label={typeLabels[params.value] || params.value} size="small" variant="outlined" />
       ),
+    },
+    {
+      field: 'ownership',
+      headerName: 'Ownership',
+      width: 110,
+      renderCell: (params) => {
+        const val = params.value || 'organization';
+        return (
+          <Chip
+            label={ownershipLabels[val] || val}
+            size="small"
+            color={ownershipColors[val] || 'default'}
+            variant="outlined"
+          />
+        );
+      },
+    },
+    {
+      field: 'variant',
+      headerName: 'Variant',
+      width: 140,
+      renderCell: (params) => params.value || '-',
     },
     {
       field: 'number',
@@ -263,6 +305,20 @@ const EquipmentPage = () => {
 
           <TextField
             select
+            label="Ownership"
+            value={filterOwnership}
+            onChange={(e) => setFilterOwnership(e.target.value)}
+            size="small"
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="all">All Ownership</MenuItem>
+            <MenuItem value="player">Player-Owned</MenuItem>
+            <MenuItem value="organization">Org-Owned</MenuItem>
+            <MenuItem value="consumable">Consumable</MenuItem>
+          </TextField>
+
+          <TextField
+            select
             label="Team"
             value={filterTeam}
             onChange={(e) => setFilterTeam(e.target.value)}
@@ -277,7 +333,7 @@ const EquipmentPage = () => {
         </Box>
       </Paper>
 
-      <Paper sx={{ height: 600, width: '100%' }}>
+      <Paper sx={{ height: { xs: 400, md: 600 }, width: '100%' }}>
         <DataGrid
           rows={filteredEquipment}
           columns={columns}

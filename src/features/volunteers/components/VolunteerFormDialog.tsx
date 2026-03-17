@@ -130,8 +130,8 @@ const VolunteerFormDialog = ({
       toast.success('Volunteer assigned successfully');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to assign volunteer');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to assign volunteer');
     },
   });
 
@@ -155,8 +155,8 @@ const VolunteerFormDialog = ({
       toast.success('Volunteer assignment updated');
       onClose();
     },
-    onError: () => {
-      toast.error('Failed to update assignment');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update assignment');
     },
   });
 

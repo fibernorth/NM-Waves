@@ -15,6 +15,15 @@ import type { Volunteer } from '@/types/models';
 
 const COLLECTION = 'volunteers';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertVolunteer = (id: string, data: any): Volunteer => ({
   id,
   eventId: data.eventId,
@@ -58,10 +67,10 @@ export const volunteersApi = {
   create: async (
     volunteerData: Omit<Volunteer, 'id' | 'createdAt'>
   ): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...volunteerData,
       createdAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
@@ -73,7 +82,7 @@ export const volunteersApi = {
     const updateData: any = { ...volunteerData };
     delete updateData.id;
     delete updateData.createdAt;
-    await updateDoc(docRef, updateData);
+    await updateDoc(docRef, cleanData(updateData));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -86,6 +95,6 @@ export const volunteersApi = {
     status: Volunteer['status']
   ): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
-    await updateDoc(docRef, { status });
+    await updateDoc(docRef, cleanData({ status }));
   },
 };

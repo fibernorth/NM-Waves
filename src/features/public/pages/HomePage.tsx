@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import {
   Box,
   Container,
@@ -18,9 +20,15 @@ import SchoolIcon from '@mui/icons-material/School';
 import GroupsIcon from '@mui/icons-material/Groups';
 import SportsBaseballIcon from '@mui/icons-material/SportsBaseball';
 import StarIcon from '@mui/icons-material/Star';
+import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 import { useQuery } from '@tanstack/react-query';
 import { homepagePostsApi } from '@/lib/api/homepagePosts';
-import type { HomepagePost } from '@/types/models';
+import { siteSettingsApi } from '@/lib/api/siteSettings';
+import { schedulesApi } from '@/lib/api/schedules';
+import { teamsApi } from '@/lib/api/teams';
+import type { HomepagePost, SwagStoreSettings } from '@/types/models';
 import { format } from 'date-fns';
 
 const features = [
@@ -162,11 +170,181 @@ const MediaCard = ({ post }: { post: HomepagePost }) => {
   );
 };
 
+// ============================================
+// Swag Store Banner
+// ============================================
+const useCountdown = (closesAt: Date | null) => {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    if (!closesAt) return;
+    const timer = setInterval(() => setNow(new Date()), 60_000); // update every minute
+    return () => clearInterval(timer);
+  }, [closesAt]);
+
+  if (!closesAt) return null;
+
+  const diff = new Date(closesAt).getTime() - now.getTime();
+  if (diff <= 0) return null;
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (days > 0) return `Store closes in ${days} day${days !== 1 ? 's' : ''}!`;
+  if (hours > 0) return `Store closes in ${hours} hour${hours !== 1 ? 's' : ''}!`;
+  return `Store closes in ${minutes} minute${minutes !== 1 ? 's' : ''}!`;
+};
+
+const SwagStoreBanner = ({ settings }: { settings: SwagStoreSettings }) => {
+  const countdown = useCountdown(settings.closesAt);
+
+  // Don't render if store is not active, has no URL, or is past close date
+  const isOpen =
+    settings.active &&
+    settings.url &&
+    (settings.closesAt === null || new Date(settings.closesAt) > new Date());
+
+  if (!isOpen) return null;
+
+  return (
+    <Box
+      sx={{
+        background: 'linear-gradient(135deg, #ff6b35 0%, #f7c948 50%, #ff6b35 100%)',
+        backgroundSize: '200% 200%',
+        animation: 'shimmer 3s ease infinite',
+        '@keyframes shimmer': {
+          '0%': { backgroundPosition: '0% 50%' },
+          '50%': { backgroundPosition: '100% 50%' },
+          '100%': { backgroundPosition: '0% 50%' },
+        },
+        py: { xs: 2.5, md: 3 },
+        textAlign: 'center',
+      }}
+    >
+      <Container maxWidth="md">
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: { xs: 1.5, sm: 2 },
+          }}
+        >
+          <ShoppingBagIcon sx={{ fontSize: { xs: 32, md: 40 }, color: 'white' }} />
+          <Box sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
+            <Typography
+              variant="h5"
+              sx={{
+                color: 'white',
+                fontWeight: 700,
+                fontSize: { xs: '1.2rem', md: '1.5rem' },
+                textShadow: '0 1px 3px rgba(0,0,0,0.2)',
+              }}
+            >
+              {settings.label}
+            </Typography>
+            {countdown && (
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'rgba(255,255,255,0.9)',
+                  fontWeight: 500,
+                  fontSize: { xs: '0.8rem', md: '0.9rem' },
+                }}
+              >
+                {countdown}
+              </Typography>
+            )}
+          </Box>
+          <Button
+            variant="contained"
+            href={settings.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            size="large"
+            sx={{
+              backgroundColor: 'white',
+              color: '#ff6b35',
+              fontWeight: 700,
+              px: 4,
+              ml: { sm: 2 },
+              '&:hover': {
+                backgroundColor: 'rgba(255,255,255,0.9)',
+              },
+            }}
+          >
+            Shop Now
+          </Button>
+        </Box>
+      </Container>
+    </Box>
+  );
+};
+
+const ORG_SCHEMA = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'SportsOrganization',
+  name: 'TC Waves Ball Club',
+  description: 'Youth travel softball organization in Traverse City, Michigan',
+  url: window.location.origin,
+  logo: `${window.location.origin}/images/logo.png`,
+  sport: 'Softball',
+  location: {
+    '@type': 'Place',
+    address: {
+      '@type': 'PostalAddress',
+      addressLocality: 'Traverse City',
+      addressRegion: 'MI',
+      addressCountry: 'US',
+    },
+  },
+  email: 'tcwavessoftball@gmail.com',
+  nonprofitStatus: '501(c)(3)',
+});
+
 const HomePage = () => {
+  useDocumentTitle();
+
+  // Inject schema.org JSON-LD for SEO
+  useEffect(() => {
+    const id = 'tc-waves-schema';
+    if (!document.getElementById(id)) {
+      const script = document.createElement('script');
+      script.id = id;
+      script.type = 'application/ld+json';
+      script.textContent = ORG_SCHEMA;
+      document.head.appendChild(script);
+    }
+    return () => {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    };
+  }, []);
+
   const { data: allPosts = [], isLoading } = useQuery({
     queryKey: ['homepagePosts', 'published'],
     queryFn: () => homepagePostsApi.getPublished(),
     staleTime: 60_000,
+  });
+
+  const { data: swagStore } = useQuery({
+    queryKey: ['siteSettings', 'swagStore'],
+    queryFn: () => siteSettingsApi.getSwagStore(),
+    staleTime: 60_000,
+  });
+
+  const { data: upcomingEvents = [] } = useQuery({
+    queryKey: ['schedules', 'upcoming'],
+    queryFn: () => schedulesApi.getUpcoming(),
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: activeTeams = [] } = useQuery({
+    queryKey: ['teams', 'active'],
+    queryFn: () => teamsApi.getActive(),
+    staleTime: 5 * 60_000,
   });
 
   const newsPosts = allPosts.filter((p) => p.type === 'news' || p.type === 'announcement');
@@ -273,6 +451,9 @@ const HomePage = () => {
         </Container>
       </Box>
 
+      {/* Swag Store Banner */}
+      {swagStore && <SwagStoreBanner settings={swagStore} />}
+
       {/* Latest News & Updates */}
       {!isLoading && newsPosts.length > 0 && (
         <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
@@ -361,6 +542,121 @@ const HomePage = () => {
             ))}
           </Grid>
         </Container>
+      )}
+
+      {/* Upcoming Events */}
+      {upcomingEvents.length > 0 && (
+        <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
+          <Typography
+            variant="h4"
+            fontWeight={600}
+            gutterBottom
+            sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, mb: 3 }}
+          >
+            Upcoming Events
+          </Typography>
+          <Grid container spacing={2}>
+            {upcomingEvents.slice(0, 6).map((event) => (
+              <Grid item xs={12} sm={6} md={4} key={event.id}>
+                <Card sx={{ height: '100%' }}>
+                  <CardContent>
+                    <Chip
+                      label={event.eventType}
+                      size="small"
+                      color={
+                        event.eventType === 'game'
+                          ? 'primary'
+                          : event.eventType === 'tournament'
+                            ? 'warning'
+                            : 'default'
+                      }
+                      variant="outlined"
+                      sx={{ mb: 1, textTransform: 'capitalize' }}
+                    />
+                    <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 600, mb: 0.5 }}>
+                      {event.title}
+                    </Typography>
+                    {event.teamName && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        {event.teamName}
+                      </Typography>
+                    )}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                      <CalendarTodayIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                      <Typography variant="caption" color="text.secondary">
+                        {format(event.startTime, 'EEE, MMM d \u2022 h:mm a')}
+                      </Typography>
+                    </Box>
+                    {event.location && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <LocationOnIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                        <Typography variant="caption" color="text.secondary">
+                          {event.location}
+                        </Typography>
+                      </Box>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+          <Box sx={{ textAlign: 'center', mt: 3 }}>
+            <Button component={RouterLink} to="/schedule" variant="outlined">
+              View Full Schedule
+            </Button>
+          </Box>
+        </Container>
+      )}
+
+      {/* Active Teams */}
+      {activeTeams.length > 0 && (
+        <Box sx={{ backgroundColor: upcomingEvents.length > 0 ? 'grey.50' : 'white', py: { xs: 4, md: 6 } }}>
+          <Container maxWidth="lg">
+            <Typography
+              variant="h4"
+              fontWeight={600}
+              gutterBottom
+              sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, mb: 3 }}
+            >
+              Our Teams
+            </Typography>
+            <Grid container spacing={2}>
+              {activeTeams.map((team) => (
+                <Grid item xs={6} sm={4} md={3} key={team.id}>
+                  <Card
+                    component={RouterLink}
+                    to={`/teams-roster/${team.id}`}
+                    sx={{
+                      textDecoration: 'none',
+                      textAlign: 'center',
+                      transition: 'transform 0.2s, box-shadow 0.2s',
+                      '&:hover': { transform: 'translateY(-2px)', boxShadow: 3 },
+                    }}
+                  >
+                    <CardContent sx={{ py: 2 }}>
+                      <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 700, color: 'text.primary' }}>
+                        {team.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {team.ageGroup}
+                      </Typography>
+                      {team.coachName && (
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                          Coach: {team.coachName}
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+            <Box sx={{ textAlign: 'center', mt: 3 }}>
+              <Button component={RouterLink} to="/teams-roster" variant="outlined">
+                View All Teams
+              </Button>
+            </Box>
+          </Container>
+        </Box>
       )}
 
       {/* Team Photos Section */}

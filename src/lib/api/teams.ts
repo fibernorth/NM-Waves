@@ -16,6 +16,15 @@ import type { Team } from '@/types/models';
 
 const COLLECTION = 'teams';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 // Convert Firestore timestamp to Date
 const convertTeam = (id: string, data: any): Team => ({
   id,
@@ -61,21 +70,21 @@ export const teamsApi = {
 
   // Create team
   create: async (teamData: Omit<Team, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...teamData,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
   // Update team
   update: async (id: string, teamData: Partial<Team>): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       ...teamData,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   // Delete team
@@ -87,21 +96,21 @@ export const teamsApi = {
   // Assign coach
   assignCoach: async (teamId: string, coachId: string, coachName: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, teamId);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       coachId,
       coachName,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   // Remove coach
   removeCoach: async (teamId: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, teamId);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       coachId: null,
       coachName: null,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   // Sync rosters: match players to teams by teamName and fix teamId references
@@ -139,10 +148,10 @@ export const teamsApi = {
 
       // Fix player's teamId if it doesn't match
       if (p.teamId !== correctTeamId) {
-        await updateDoc(doc(db, 'players', player.id), {
+        await updateDoc(doc(db, 'players', player.id), cleanData({
           teamId: correctTeamId,
           updatedAt: Timestamp.now(),
-        });
+        }));
         updated++;
       }
     }
@@ -150,10 +159,10 @@ export const teamsApi = {
     // Update each team's playerIds array
     let teamsUpdated = 0;
     for (const [teamId, playerIds] of Object.entries(teamPlayerMap)) {
-      await updateDoc(doc(db, COLLECTION, teamId), {
+      await updateDoc(doc(db, COLLECTION, teamId), cleanData({
         playerIds,
         updatedAt: Timestamp.now(),
-      });
+      }));
       teamsUpdated++;
     }
 

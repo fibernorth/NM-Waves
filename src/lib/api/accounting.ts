@@ -22,13 +22,43 @@ import type {
   ExpenseCategory,
   IncomeCategory,
 } from '@/types/models';
+import { computeFeeTotal } from './finances';
 
 // Collection names
 const EXPENSES_COLLECTION = 'expenses';
 const INCOME_COLLECTION = 'income';
 const BUDGETS_COLLECTION = 'budgets';
+
+/**
+ * Flexible season matching: "2026" matches "2026", "2025-2026", "2026-2027".
+ * Also handles "2025-2026" matching "2025" or "2026".
+ */
+export const matchesSeason = (recordSeason: string, filterSeason: string): boolean => {
+  if (!recordSeason || !filterSeason) return false;
+  if (recordSeason === filterSeason) return true;
+  // "2026" matches "2025-2026" or "2026-2027"
+  if (recordSeason.includes('-')) {
+    const parts = recordSeason.split('-');
+    return parts.includes(filterSeason);
+  }
+  // "2025-2026" filter matches "2025" or "2026"
+  if (filterSeason.includes('-')) {
+    const parts = filterSeason.split('-');
+    return parts.includes(recordSeason);
+  }
+  return false;
+};
 const ACCOUNTS_COLLECTION = 'accounts';
 const VENDORS_COLLECTION = 'vendors';
+
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
 
 // ============================================
 // EXPENSES API
@@ -45,6 +75,11 @@ const convertExpense = (id: string, data: any): Expense => ({
   checkNumber: data.checkNumber,
   receiptUrl: data.receiptUrl,
   teamId: data.teamId,
+  teamName: data.teamName,
+  playerId: data.playerId,
+  playerName: data.playerName,
+  tournamentId: data.tournamentId,
+  tournamentName: data.tournamentName,
   season: data.season,
   isPaid: data.isPaid,
   paidDate: data.paidDate?.toDate(),
@@ -65,13 +100,10 @@ export const expensesApi = {
   },
 
   getBySeason: async (season: string): Promise<Expense[]> => {
-    const q = query(
-      collection(db, EXPENSES_COLLECTION),
-      where('season', '==', season),
-      orderBy('date', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => convertExpense(doc.id, doc.data()));
+    const snapshot = await getDocs(query(collection(db, EXPENSES_COLLECTION), orderBy('date', 'desc')));
+    return snapshot.docs
+      .map(doc => convertExpense(doc.id, doc.data()))
+      .filter(e => matchesSeason(e.season, season));
   },
 
   getByTeam: async (teamId: string): Promise<Expense[]> => {
@@ -132,13 +164,28 @@ export const expensesApi = {
   },
 
   create: async (expenseData: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, EXPENSES_COLLECTION), {
+    const docRef = await addDoc(collection(db, EXPENSES_COLLECTION), cleanData({
       ...expenseData,
       date: Timestamp.fromDate(expenseData.date),
       paidDate: expenseData.paidDate ? Timestamp.fromDate(expenseData.paidDate) : null,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
+    }));
+
+    // Auto-post GL entries (best-effort — won't fail if COA not set up yet)
+    try {
+      const { generalLedgerApi } = await import('./generalLedger');
+      const expenseRecord: Expense = {
+        ...expenseData,
+        id: docRef.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await generalLedgerApi.postExpense(expenseRecord, expenseData.recordedBy);
+    } catch (err) {
+      console.warn('[accounting] GL posting skipped for expense:', err);
+    }
+
     return docRef.id;
   },
 
@@ -156,7 +203,7 @@ export const expensesApi = {
       updateData.paidDate = Timestamp.fromDate(expenseData.paidDate);
     }
 
-    await updateDoc(docRef, updateData);
+    await updateDoc(docRef, cleanData(updateData));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -166,11 +213,11 @@ export const expensesApi = {
 
   markAsPaid: async (id: string, paidDate: Date): Promise<void> => {
     const docRef = doc(db, EXPENSES_COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       isPaid: true,
       paidDate: Timestamp.fromDate(paidDate),
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 };
 
@@ -209,13 +256,10 @@ export const incomeApi = {
   },
 
   getBySeason: async (season: string): Promise<Income[]> => {
-    const q = query(
-      collection(db, INCOME_COLLECTION),
-      where('season', '==', season),
-      orderBy('date', 'desc')
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => convertIncome(doc.id, doc.data()));
+    const snapshot = await getDocs(query(collection(db, INCOME_COLLECTION), orderBy('date', 'desc')));
+    return snapshot.docs
+      .map(doc => convertIncome(doc.id, doc.data()))
+      .filter(i => matchesSeason(i.season, season));
   },
 
   getByTeam: async (teamId: string): Promise<Income[]> => {
@@ -266,12 +310,27 @@ export const incomeApi = {
   },
 
   create: async (incomeData: Omit<Income, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, INCOME_COLLECTION), {
+    const docRef = await addDoc(collection(db, INCOME_COLLECTION), cleanData({
       ...incomeData,
       date: Timestamp.fromDate(incomeData.date),
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
+    }));
+
+    // Auto-post GL entries (best-effort — won't fail if COA not set up yet)
+    try {
+      const { generalLedgerApi } = await import('./generalLedger');
+      const incomeRecord: Income = {
+        ...incomeData,
+        id: docRef.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await generalLedgerApi.postIncome(incomeRecord, incomeData.recordedBy);
+    } catch (err) {
+      console.warn('[accounting] GL posting skipped for income:', err);
+    }
+
     return docRef.id;
   },
 
@@ -286,7 +345,7 @@ export const incomeApi = {
       updateData.date = Timestamp.fromDate(incomeData.date);
     }
 
-    await updateDoc(docRef, updateData);
+    await updateDoc(docRef, cleanData(updateData));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -323,12 +382,11 @@ export const budgetsApi = {
   },
 
   getBySeason: async (season: string): Promise<Budget[]> => {
-    const q = query(
-      collection(db, BUDGETS_COLLECTION),
-      where('season', '==', season)
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => convertBudget(doc.id, doc.data()));
+    // Fetch all budgets and filter client-side for flexible season matching
+    const snapshot = await getDocs(collection(db, BUDGETS_COLLECTION));
+    return snapshot.docs
+      .map(doc => convertBudget(doc.id, doc.data()))
+      .filter(b => matchesSeason(b.season, season));
   },
 
   getByTeam: async (teamId: string): Promise<Budget[]> => {
@@ -348,20 +406,20 @@ export const budgetsApi = {
   },
 
   create: async (budgetData: Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, BUDGETS_COLLECTION), {
+    const docRef = await addDoc(collection(db, BUDGETS_COLLECTION), cleanData({
       ...budgetData,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
   update: async (id: string, budgetData: Partial<Budget>): Promise<void> => {
     const docRef = doc(db, BUDGETS_COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       ...budgetData,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -412,12 +470,12 @@ export const accountsApi = {
   },
 
   create: async (accountData: Omit<Account, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, ACCOUNTS_COLLECTION), {
+    const docRef = await addDoc(collection(db, ACCOUNTS_COLLECTION), cleanData({
       ...accountData,
       lastReconciled: accountData.lastReconciled ? Timestamp.fromDate(accountData.lastReconciled) : null,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
@@ -432,7 +490,7 @@ export const accountsApi = {
       updateData.lastReconciled = Timestamp.fromDate(accountData.lastReconciled);
     }
 
-    await updateDoc(docRef, updateData);
+    await updateDoc(docRef, cleanData(updateData));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -494,20 +552,20 @@ export const vendorsApi = {
   },
 
   create: async (vendorData: Omit<Vendor, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, VENDORS_COLLECTION), {
+    const docRef = await addDoc(collection(db, VENDORS_COLLECTION), cleanData({
       ...vendorData,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
   update: async (id: string, vendorData: Partial<Vendor>): Promise<void> => {
     const docRef = doc(db, VENDORS_COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       ...vendorData,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -523,42 +581,42 @@ export const vendorsApi = {
 export const reconciliationApi = {
   reconcileIncome: async (id: string, userId: string): Promise<void> => {
     const docRef = doc(db, INCOME_COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       reconciled: true,
       reconciledAt: Timestamp.now(),
       reconciledBy: userId,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   unreconcileIncome: async (id: string): Promise<void> => {
     const docRef = doc(db, INCOME_COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       reconciled: false,
       reconciledAt: null,
       reconciledBy: null,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   reconcileExpense: async (id: string, userId: string): Promise<void> => {
     const docRef = doc(db, EXPENSES_COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       reconciled: true,
       reconciledAt: Timestamp.now(),
       reconciledBy: userId,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   unreconcileExpense: async (id: string): Promise<void> => {
     const docRef = doc(db, EXPENSES_COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       reconciled: false,
       reconciledAt: null,
       reconciledBy: null,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 };
 
@@ -576,30 +634,26 @@ export const reportsApi = {
     startDate?: Date,
     endDate?: Date
   ): Promise<FinancialSummary> => {
-    // Fetch all income and expenses for the period
+    // Fetch income and expenses, then filter client-side for flexible season matching
     const incomeQuery = teamId
-      ? query(
-          collection(db, INCOME_COLLECTION),
-          where('season', '==', season),
-          where('teamId', '==', teamId)
-        )
-      : query(collection(db, INCOME_COLLECTION), where('season', '==', season));
+      ? query(collection(db, INCOME_COLLECTION), where('teamId', '==', teamId))
+      : query(collection(db, INCOME_COLLECTION));
 
     const expensesQuery = teamId
-      ? query(
-          collection(db, EXPENSES_COLLECTION),
-          where('season', '==', season),
-          where('teamId', '==', teamId)
-        )
-      : query(collection(db, EXPENSES_COLLECTION), where('season', '==', season));
+      ? query(collection(db, EXPENSES_COLLECTION), where('teamId', '==', teamId))
+      : query(collection(db, EXPENSES_COLLECTION));
 
     const [incomeSnapshot, expensesSnapshot] = await Promise.all([
       getDocs(incomeQuery),
       getDocs(expensesQuery),
     ]);
 
-    const incomes = incomeSnapshot.docs.map(doc => convertIncome(doc.id, doc.data()));
-    const expenses = expensesSnapshot.docs.map(doc => convertExpense(doc.id, doc.data()));
+    const allIncomes = incomeSnapshot.docs.map(doc => convertIncome(doc.id, doc.data()));
+    const allExpenses = expensesSnapshot.docs.map(doc => convertExpense(doc.id, doc.data()));
+
+    // Flexible season matching
+    const incomes = season ? allIncomes.filter(i => matchesSeason(i.season, season)) : allIncomes;
+    const expenses = season ? allExpenses.filter(e => matchesSeason(e.season, season)) : allExpenses;
 
     // Calculate income by category
     const income = {
@@ -629,7 +683,7 @@ export const reportsApi = {
         .reduce((sum, i) => sum + i.amount, 0),
       total: 0,
     };
-    income.total = Object.values(income).reduce((sum, val) => sum + val, 0);
+    income.total = income.playerPayments + income.sponsorships + income.fundraisers + income.donations + income.grants + income.merchandise + income.concessions + income.other;
 
     // Calculate expenses by category
     const expensesBreakdown = {
@@ -660,6 +714,9 @@ export const reportsApi = {
       administrative: expenses
         .filter(e => e.category === 'administrative')
         .reduce((sum, e) => sum + e.amount, 0),
+      processingFees: expenses
+        .filter(e => e.category === 'processing_fees')
+        .reduce((sum, e) => sum + e.amount, 0),
       marketing: expenses
         .filter(e => e.category === 'marketing')
         .reduce((sum, e) => sum + e.amount, 0),
@@ -674,16 +731,34 @@ export const reportsApi = {
         .reduce((sum, e) => sum + e.amount, 0),
       total: 0,
     };
-    expensesBreakdown.total = Object.values(expensesBreakdown).reduce((sum, val) => sum + val, 0);
+    expensesBreakdown.total = expensesBreakdown.facilities + expensesBreakdown.equipment + expensesBreakdown.uniforms + expensesBreakdown.tournaments + expensesBreakdown.travel + expensesBreakdown.insurance + expensesBreakdown.leagueFees + expensesBreakdown.coaching + expensesBreakdown.administrative + expensesBreakdown.processingFees + expensesBreakdown.marketing + expensesBreakdown.fundraising + expensesBreakdown.maintenance + expensesBreakdown.other;
 
     const netIncome = income.total - expensesBreakdown.total;
     const outstandingPayables = expenses
       .filter(e => !e.isPaid)
       .reduce((sum, e) => sum + e.amount, 0);
 
-    // For outstanding receivables, would need to fetch player finances
-    // Simplified here
-    const outstandingReceivables = 0;
+    // Compute outstanding receivables from player finances.
+    // playerFinances use team-style seasons ("2025-2026") while reports
+    // filter by plain year ("2026"), so we match flexibly.
+    let outstandingReceivables = 0;
+    try {
+      const pfQuery = teamId
+        ? query(collection(db, 'playerFinances'), where('teamId', '==', teamId))
+        : query(collection(db, 'playerFinances'));
+      const pfSnapshot = await getDocs(pfQuery);
+      for (const pfDoc of pfSnapshot.docs) {
+        const d = pfDoc.data();
+        if (d.season && !matchesSeason(d.season, season)) continue;
+        const owed = computeFeeTotal(d);
+        const paid = (d.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
+        const scholarship = d.scholarshipAmount || 0;
+        const due = owed - paid - scholarship;
+        if (due > 0) outstandingReceivables += due;
+      }
+    } catch {
+      // Gracefully degrade if player finances fetch fails
+    }
 
     return {
       season,

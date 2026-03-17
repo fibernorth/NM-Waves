@@ -11,11 +11,22 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { httpsCallable } from 'firebase/functions';
 import { db, storage } from '@/lib/firebase/config';
+import { functions } from '@/lib/firebase/config';
 import type { MediaItem } from '@/types/models';
 import { isResizableImage, resizeImage, generateThumbnail } from '@/lib/utils/imageResize';
 
 const COLLECTION = 'media';
+
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
 
 const VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'webm', 'mkv', 'wmv', 'flv', 'm4v'];
 
@@ -42,6 +53,15 @@ const convertMediaItem = (id: string, data: any): MediaItem => ({
   moderationReviewedAt: data.moderationReviewedAt?.toDate() || undefined,
   moderationOverriddenBy: data.moderationOverriddenBy || undefined,
   source: data.source || undefined,
+  detectedText: data.detectedText || undefined,
+  detectedLabels: data.detectedLabels || undefined,
+  detectedJerseyNumbers: data.detectedJerseyNumbers || undefined,
+  suggestedPlayerIds: data.suggestedPlayerIds || undefined,
+  suggestedPlayerNames: data.suggestedPlayerNames || undefined,
+  suggestedTeamId: data.suggestedTeamId || undefined,
+  photoDate: data.photoDate?.toDate() || undefined,
+  analysisStatus: data.analysisStatus || undefined,
+  showInGallery: data.showInGallery ?? false,
   createdAt: data.createdAt?.toDate() || new Date(),
 });
 
@@ -67,11 +87,11 @@ export const mediaApi = {
   // Create media item
   create: async (data: Omit<MediaItem, 'id' | 'createdAt'>): Promise<string> => {
     const moderationStatus = data.mediaType === 'video' ? 'approved' : 'pending';
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...data,
       moderationStatus,
       createdAt: Timestamp.now(),
-    });
+    }));
     return docRef.id;
   },
 
@@ -140,6 +160,31 @@ export const mediaApi = {
     };
   },
 
+  // Update a single media item's fields
+  update: async (id: string, updates: Partial<Pick<MediaItem, 'tags' | 'showInGallery' | 'caption'>>): Promise<void> => {
+    const docRef = doc(db, COLLECTION, id);
+    await updateDoc(docRef, cleanData(updates as Record<string, unknown>));
+  },
+
+  // Bulk update multiple media items (team, tags)
+  bulkUpdate: async (
+    ids: string[],
+    updates: { teamId?: string; teamName?: string; tags?: string[] }
+  ): Promise<void> => {
+    const { writeBatch } = await import('firebase/firestore');
+    const BATCH_LIMIT = 400;
+    for (let i = 0; i < ids.length; i += BATCH_LIMIT) {
+      const batch = writeBatch(db);
+      const chunk = ids.slice(i, i + BATCH_LIMIT);
+      const cleaned = cleanData(updates as Record<string, unknown>);
+      for (const id of chunk) {
+        const docRef = doc(db, COLLECTION, id);
+        batch.update(docRef, cleaned);
+      }
+      await batch.commit();
+    }
+  },
+
   // Admin override of moderation status
   overrideModeration: async (
     id: string,
@@ -147,10 +192,51 @@ export const mediaApi = {
     overriddenBy: string
   ): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       moderationStatus: status,
       moderationOverriddenBy: overriddenBy,
       moderationReviewedAt: Timestamp.now(),
-    });
+    }));
+  },
+
+  // Trigger batch analysis of unanalyzed media via Cloud Function
+  triggerBatchAnalysis: async (
+    batchSize = 50
+  ): Promise<{ total: number; processed: number; failed: number }> => {
+    const callable = httpsCallable<{ batchSize: number }, { total: number; processed: number; failed: number }>(
+      functions,
+      'batchAnalyzeMedia'
+    );
+    const result = await callable({ batchSize });
+    return result.data;
+  },
+
+  // Accept suggested tags/team/player from analysis
+  acceptSuggestions: async (
+    id: string,
+    updates: {
+      teamId?: string;
+      teamName?: string;
+      tags?: string[];
+      playerIds?: string[];
+      playerNames?: string[];
+    }
+  ): Promise<void> => {
+    const docRef = doc(db, COLLECTION, id);
+    const updateData: Record<string, unknown> = {};
+    if (updates.teamId) {
+      updateData.teamId = updates.teamId;
+      if (updates.teamName) updateData.teamName = updates.teamName;
+    }
+    if (updates.tags && updates.tags.length > 0) {
+      updateData.tags = updates.tags;
+    }
+    if (updates.playerIds) {
+      updateData.taggedPlayerIds = updates.playerIds;
+      updateData.taggedPlayerNames = updates.playerNames || [];
+    }
+    if (Object.keys(updateData).length > 0) {
+      await updateDoc(docRef, cleanData(updateData));
+    }
   },
 };

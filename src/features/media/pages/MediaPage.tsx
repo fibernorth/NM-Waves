@@ -30,8 +30,15 @@ import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import BlockIcon from '@mui/icons-material/Block';
 import GoogleIcon from '@mui/icons-material/Google';
+import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
+import CheckBoxIcon from '@mui/icons-material/CheckBox';
+import SelectAllIcon from '@mui/icons-material/SelectAll';
+import LabelIcon from '@mui/icons-material/Label';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import Checkbox from '@mui/material/Checkbox';
 import { mediaApi } from '@/lib/api/media';
 import { teamsApi } from '@/lib/api/teams';
+import MediaAnalysisPanel from '@/features/media/components/MediaAnalysisPanel';
 import { googleDriveApi } from '@/lib/api/googleDrive';
 import { appSettingsApi } from '@/lib/api/appSettings';
 import { MediaItem } from '@/types/models';
@@ -53,10 +60,17 @@ const MediaPage = () => {
 
   const [filterTeam, setFilterTeam] = useState<string>('all');
   const [filterTag, setFilterTag] = useState<string>('');
+  const [filterAnalysis, setFilterAnalysis] = useState<string>('all');
   const [lightboxItem, setLightboxItem] = useState<MediaItem | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
 
-  const { data: firebaseMedia = [], isLoading } = useQuery({
+  // Bulk selection state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkTeamId, setBulkTeamId] = useState<string>('');
+  const [bulkTagsInput, setBulkTagsInput] = useState<string>('');
+
+  const { data: firebaseMedia = [], isLoading, isError: mediaError } = useQuery({
     queryKey: ['media'],
     queryFn: () => mediaApi.getAll(),
   });
@@ -90,8 +104,8 @@ const MediaPage = () => {
       toast.success('Media deleted successfully');
       setLightboxItem(null);
     },
-    onError: () => {
-      toast.error('Failed to delete media');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete media');
     },
   });
 
@@ -119,8 +133,27 @@ const MediaPage = () => {
         m.tags?.some((t) => t.toLowerCase().includes(tagLower))
       );
     }
+    if (filterAnalysis !== 'all') {
+      if (filterAnalysis === 'unanalyzed') {
+        result = result.filter((m) => !m.analysisStatus);
+      } else {
+        result = result.filter((m) => m.analysisStatus === filterAnalysis);
+      }
+    }
     return result;
-  }, [mediaItems, filterTeam, filterTag, isAdmin]);
+  }, [mediaItems, filterTeam, filterTag, filterAnalysis, isAdmin]);
+
+  const updateItemMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<Pick<MediaItem, 'tags' | 'showInGallery'>> }) =>
+      mediaApi.update(id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['media'] });
+      toast.success('Updated');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update media item');
+    },
+  });
 
   const moderationMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: 'approved' | 'rejected' }) =>
@@ -129,10 +162,64 @@ const MediaPage = () => {
       queryClient.invalidateQueries({ queryKey: ['media'] });
       toast.success('Moderation status updated');
     },
-    onError: () => {
-      toast.error('Failed to update moderation status');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update moderation status');
     },
   });
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async () => {
+      const ids = Array.from(selectedIds);
+      if (ids.length === 0) throw new Error('No items selected');
+      const updates: { teamId?: string; teamName?: string; tags?: string[] } = {};
+      if (bulkTeamId) {
+        updates.teamId = bulkTeamId;
+        const team = teams.find((t) => t.id === bulkTeamId);
+        updates.teamName = team?.name || '';
+      }
+      if (bulkTagsInput.trim()) {
+        const newTags = bulkTagsInput.split(',').map((t) => t.trim()).filter(Boolean);
+        updates.tags = newTags;
+      }
+      if (!updates.teamId && !updates.tags) throw new Error('Select a team or enter tags');
+      await mediaApi.bulkUpdate(ids, updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['media'] });
+      toast.success(`Updated ${selectedIds.size} items`);
+      setSelectedIds(new Set());
+      setSelectMode(false);
+      setBulkTeamId('');
+      setBulkTagsInput('');
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Bulk update failed');
+    },
+  });
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedIds(new Set(filteredMedia.map((m) => m.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setBulkTeamId('');
+    setBulkTagsInput('');
+  };
 
   const teamNameMap = useMemo(() => {
     const map: Record<string, string> = { all: 'All Teams' };
@@ -168,16 +255,33 @@ const MediaPage = () => {
           <PhotoLibraryIcon sx={{ fontSize: 40, mr: 2, color: 'primary.main' }} />
           <Typography variant="h4">Media Gallery</Typography>
         </Box>
-        {canUpload && (
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setUploadDialogOpen(true)}
-          >
-            Upload
-          </Button>
-        )}
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {isAdmin && (
+            <Button
+              variant={selectMode ? 'contained' : 'outlined'}
+              color={selectMode ? 'secondary' : 'primary'}
+              startIcon={<SelectAllIcon />}
+              onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+            >
+              {selectMode ? 'Cancel' : 'Select'}
+            </Button>
+          )}
+          {canUpload && (
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setUploadDialogOpen(true)}
+            >
+              Upload
+            </Button>
+          )}
+        </Box>
       </Box>
+
+      {/* Analysis Panel (admin only) */}
+      {isAdmin && (
+        <MediaAnalysisPanel mediaItems={mediaItems} teams={teams} />
+      )}
 
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 2 }}>
@@ -205,6 +309,22 @@ const MediaPage = () => {
             sx={{ minWidth: 200 }}
             placeholder="Type to filter tags..."
           />
+          {isAdmin && (
+            <TextField
+              select
+              label="Analysis Status"
+              value={filterAnalysis}
+              onChange={(e) => setFilterAnalysis(e.target.value)}
+              size="small"
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="unanalyzed">Unanalyzed</MenuItem>
+              <MenuItem value="analyzed">Analyzed</MenuItem>
+              <MenuItem value="pending">Processing</MenuItem>
+              <MenuItem value="failed">Failed</MenuItem>
+            </TextField>
+          )}
         </Box>
         {allTags.length > 0 && (
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 1 }}>
@@ -223,8 +343,106 @@ const MediaPage = () => {
         )}
       </Paper>
 
+      {/* Bulk Action Bar */}
+      {selectMode && (
+        <Paper
+          sx={{
+            p: 2,
+            mb: 2,
+            bgcolor: 'primary.50',
+            border: '2px solid',
+            borderColor: 'primary.main',
+            position: 'sticky',
+            top: 64,
+            zIndex: 10,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
+            <Typography variant="subtitle2" sx={{ mr: 1 }}>
+              {selectedIds.size} selected
+            </Typography>
+            <Button size="small" variant="outlined" onClick={selectAll}>
+              Select All ({filteredMedia.length})
+            </Button>
+            <Button size="small" variant="outlined" onClick={deselectAll} disabled={selectedIds.size === 0}>
+              Deselect All
+            </Button>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <TextField
+              select
+              label="Assign Team"
+              value={bulkTeamId}
+              onChange={(e) => setBulkTeamId(e.target.value)}
+              size="small"
+              sx={{ minWidth: 200 }}
+            >
+              <MenuItem value="">-- No Change --</MenuItem>
+              <MenuItem value="all">All Teams</MenuItem>
+              {teams
+                .filter((t) => t.active)
+                .map((team) => (
+                  <MenuItem key={team.id} value={team.id}>
+                    {team.name}
+                  </MenuItem>
+                ))}
+            </TextField>
+            <TextField
+              label="Set Tags"
+              value={bulkTagsInput}
+              onChange={(e) => setBulkTagsInput(e.target.value)}
+              size="small"
+              sx={{ minWidth: 250 }}
+              placeholder="e.g. Archives, Game Day"
+              helperText="Comma separated. Replaces existing tags."
+            />
+            <Button
+              variant="contained"
+              startIcon={<LabelIcon />}
+              onClick={() => bulkUpdateMutation.mutate()}
+              disabled={selectedIds.size === 0 || bulkUpdateMutation.isPending || (!bulkTeamId && !bulkTagsInput.trim())}
+            >
+              {bulkUpdateMutation.isPending ? 'Updating...' : `Apply to ${selectedIds.size}`}
+            </Button>
+          </Box>
+          {allTags.length > 0 && (
+            <Box sx={{ mt: 1.5 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                Quick tags (click to add):
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                {allTags.map((tag) => (
+                  <Chip
+                    key={tag}
+                    label={tag}
+                    size="small"
+                    variant={bulkTagsInput.split(',').map(t => t.trim()).includes(tag) ? 'filled' : 'outlined'}
+                    color={bulkTagsInput.split(',').map(t => t.trim()).includes(tag) ? 'primary' : 'default'}
+                    onClick={() => {
+                      const current = bulkTagsInput.split(',').map(t => t.trim()).filter(Boolean);
+                      if (current.includes(tag)) {
+                        setBulkTagsInput(current.filter(t => t !== tag).join(', '));
+                      } else {
+                        setBulkTagsInput([...current, tag].join(', '));
+                      }
+                    }}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                ))}
+              </Box>
+            </Box>
+          )}
+        </Paper>
+      )}
+
       {/* Media Grid */}
-      {isLoading ? (
+      {mediaError ? (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography color="error">
+            Failed to load media. Please refresh the page.
+          </Typography>
+        </Paper>
+      ) : isLoading ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <LinearProgress />
           <Typography sx={{ mt: 2 }}>Loading media...</Typography>
@@ -248,7 +466,7 @@ const MediaPage = () => {
                 overflow: 'hidden',
                 boxShadow: 1,
                 '&:hover': { boxShadow: 4 },
-                transition: 'box-shadow 0.2s',
+                transition: 'box-shadow 0.2s, outline 0.15s',
                 ...(item.moderationStatus === 'rejected' && {
                   border: '3px solid',
                   borderColor: 'error.main',
@@ -257,10 +475,35 @@ const MediaPage = () => {
                   border: '2px solid',
                   borderColor: 'warning.main',
                 }),
+                ...(selectMode && selectedIds.has(item.id) && {
+                  outline: '3px solid',
+                  outlineColor: 'primary.main',
+                  outlineOffset: -1,
+                }),
                 position: 'relative',
               }}
-              onClick={() => setLightboxItem(item)}
+              onClick={() => selectMode ? toggleSelect(item.id) : setLightboxItem(item)}
             >
+              {/* Selection checkbox */}
+              {selectMode && (
+                <Checkbox
+                  checked={selectedIds.has(item.id)}
+                  onChange={() => toggleSelect(item.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  icon={<CheckBoxOutlineBlankIcon />}
+                  checkedIcon={<CheckBoxIcon />}
+                  sx={{
+                    position: 'absolute',
+                    top: 4,
+                    left: 4,
+                    zIndex: 2,
+                    bgcolor: 'rgba(255,255,255,0.8)',
+                    borderRadius: 1,
+                    p: 0.25,
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.95)' },
+                  }}
+                />
+              )}
               {item.mediaType === 'video' ? (
                 <Box
                   sx={{
@@ -301,6 +544,21 @@ const MediaPage = () => {
                   color="warning"
                   size="small"
                   sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
+                />
+              )}
+              {isAdmin && item.analysisStatus === 'analyzed' && (
+                <Chip
+                  icon={<AutoFixHighIcon />}
+                  label="Analyzed"
+                  size="small"
+                  color="success"
+                  sx={{
+                    position: 'absolute',
+                    top: 8,
+                    left: selectMode ? 40 : (item.moderationStatus === 'rejected' || item.moderationStatus === 'pending' ? 90 : 8),
+                    zIndex: 1,
+                    bgcolor: 'rgba(255,255,255,0.85)',
+                  }}
                 />
               )}
               {item.source === 'google_drive' && (
@@ -372,6 +630,7 @@ const MediaPage = () => {
         teamNameMap={teamNameMap}
         isAdmin={isAdmin}
         onModerate={(id, status) => moderationMutation.mutate({ id, status })}
+        onUpdateItem={(id, updates) => updateItemMutation.mutate({ id, updates })}
       />
 
       {/* Upload Dialog */}
@@ -394,10 +653,36 @@ interface LightboxDialogProps {
   teamNameMap: Record<string, string>;
   isAdmin?: boolean;
   onModerate?: (id: string, status: 'approved' | 'rejected') => void;
+  onUpdateItem?: (id: string, updates: Partial<Pick<MediaItem, 'tags' | 'showInGallery'>>) => void;
 }
 
-const LightboxDialog = ({ item, onClose, canDelete, onDelete, teamNameMap, isAdmin, onModerate }: LightboxDialogProps) => {
+const LightboxDialog = ({ item, onClose, canDelete, onDelete, teamNameMap, isAdmin, onModerate, onUpdateItem }: LightboxDialogProps) => {
+  const [editTags, setEditTags] = useState('');
+  const [galleryChecked, setGalleryChecked] = useState(false);
+  const [tagsChanged, setTagsChanged] = useState(false);
+
+  // Sync local state when item changes
+  useEffect(() => {
+    if (item) {
+      setEditTags(item.tags?.join(', ') || '');
+      setGalleryChecked(item.showInGallery ?? false);
+      setTagsChanged(false);
+    }
+  }, [item?.id]);
+
   if (!item) return null;
+
+  const handleGalleryToggle = () => {
+    const newVal = !galleryChecked;
+    setGalleryChecked(newVal);
+    onUpdateItem?.(item.id, { showInGallery: newVal });
+  };
+
+  const handleTagsSave = () => {
+    const newTags = editTags.split(',').map((t) => t.trim()).filter(Boolean);
+    onUpdateItem?.(item.id, { tags: newTags });
+    setTagsChanged(false);
+  };
 
   return (
     <Dialog open={!!item} onClose={onClose} maxWidth="lg" fullWidth>
@@ -424,6 +709,41 @@ const LightboxDialog = ({ item, onClose, canDelete, onDelete, teamNameMap, isAdm
           />
         )}
         <Box sx={{ mt: 2, textAlign: 'left' }}>
+          {/* Gallery checkbox + Tags editor (admin) */}
+          {isAdmin && (
+            <Box sx={{ mb: 2, p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Checkbox
+                  checked={galleryChecked}
+                  onChange={handleGalleryToggle}
+                  size="small"
+                />
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  Show in public gallery
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                <TextField
+                  label="Tags"
+                  value={editTags}
+                  onChange={(e) => { setEditTags(e.target.value); setTagsChanged(true); }}
+                  size="small"
+                  fullWidth
+                  helperText="Comma separated"
+                />
+                {tagsChanged && (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={handleTagsSave}
+                    sx={{ mt: 0.5, whiteSpace: 'nowrap' }}
+                  >
+                    Save Tags
+                  </Button>
+                )}
+              </Box>
+            </Box>
+          )}
           {item.caption && (
             <Typography variant="body1" gutterBottom>
               {item.caption}
@@ -442,11 +762,38 @@ const LightboxDialog = ({ item, onClose, canDelete, onDelete, teamNameMap, isAdm
               Date: {format(item.createdAt, 'MMMM d, yyyy')}
             </Typography>
           )}
-          {item.tags && item.tags.length > 0 && (
+          {item.tags && item.tags.length > 0 && !isAdmin && (
             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 1 }}>
               {item.tags.map((tag) => (
                 <Chip key={tag} label={tag} size="small" />
               ))}
+            </Box>
+          )}
+          {isAdmin && item.analysisStatus === 'analyzed' && (
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Analysis Results
+              </Typography>
+              {item.detectedLabels && item.detectedLabels.length > 0 && (
+                <Typography variant="body2" color="text.secondary">
+                  Labels: {item.detectedLabels.join(', ')}
+                </Typography>
+              )}
+              {item.detectedJerseyNumbers && item.detectedJerseyNumbers.length > 0 && (
+                <Typography variant="body2" color="text.secondary">
+                  Jersey numbers: #{item.detectedJerseyNumbers.join(', #')}
+                </Typography>
+              )}
+              {item.suggestedPlayerNames && item.suggestedPlayerNames.length > 0 && (
+                <Typography variant="body2" color="text.secondary">
+                  Suggested players: {item.suggestedPlayerNames.join(', ')}
+                </Typography>
+              )}
+              {item.photoDate && (
+                <Typography variant="body2" color="text.secondary">
+                  Photo date: {format(item.photoDate, 'MMMM d, yyyy')}
+                </Typography>
+              )}
             </Box>
           )}
         </Box>

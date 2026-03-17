@@ -33,6 +33,7 @@ dist-ssr
 .firebaserc
 firebase-debug.log
 firestore-debug.log
+serviceAccountKey.json
 
 # Data imports (contain PII)
 imports/

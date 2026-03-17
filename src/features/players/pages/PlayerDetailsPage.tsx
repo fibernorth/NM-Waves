@@ -23,6 +23,10 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonIcon from '@mui/icons-material/Person';
 import LockIcon from '@mui/icons-material/Lock';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import SchoolIcon from '@mui/icons-material/School';
+import PaymentIcon from '@mui/icons-material/Payment';
 import { playersApi } from '@/lib/api/players';
 import { equipmentApi } from '@/lib/api/equipment';
 import { playerFinancesApi } from '@/lib/api/finances';
@@ -32,6 +36,7 @@ import GCStatsPanel from '@/features/gamechanger/components/GCStatsPanel';
 import { format, differenceInYears } from 'date-fns';
 import PlayerFormDialog from '../components/PlayerFormDialog';
 import PlayerDocumentsCard from '../components/PlayerDocumentsCard';
+import PlayerComplianceCard from '../components/PlayerComplianceCard';
 import PlayerInvoicesCard from '../components/PlayerInvoicesCard';
 
 /**
@@ -59,6 +64,54 @@ const formatBatsThrows = (value?: 'L' | 'R' | 'S'): string => {
       return 'Switch';
     default:
       return value;
+  }
+};
+
+const methodLabels: Record<string, string> = {
+  cash: 'Cash',
+  check: 'Check',
+  venmo: 'Venmo',
+  zelle: 'Zelle',
+  credit_card: 'Credit Card',
+  card: 'Card',
+  bank_transfer: 'Bank Transfer',
+  sponsor: 'Sponsor',
+  stripe: 'Stripe',
+  other: 'Other',
+};
+
+/** Safely format a date that may be a Date, Firestore Timestamp, or string. */
+const safeFormatDate = (value: unknown): string => {
+  try {
+    if (!value) return '--';
+    // Firestore Timestamp has a toDate() method
+    const dateObj =
+      value instanceof Date
+        ? value
+        : typeof value === 'object' && value !== null && 'toDate' in value
+        ? (value as { toDate: () => Date }).toDate()
+        : new Date(value as string);
+    if (isNaN(dateObj.getTime())) return '--';
+    return format(dateObj, 'MMM d, yyyy');
+  } catch {
+    return '--';
+  }
+};
+
+/** Extract a sortable timestamp (ms) from an unknown date value. */
+const safeGetTime = (value: unknown): number => {
+  try {
+    if (!value) return 0;
+    const dateObj =
+      value instanceof Date
+        ? value
+        : typeof value === 'object' && value !== null && 'toDate' in value
+        ? (value as { toDate: () => Date }).toDate()
+        : new Date(value as string);
+    const t = dateObj.getTime();
+    return isNaN(t) ? 0 : t;
+  } catch {
+    return 0;
   }
 };
 
@@ -174,9 +227,26 @@ const PlayerDetailsPage = () => {
       totalOwed: acc.totalOwed + fin.totalOwed,
       totalPaid: acc.totalPaid + fin.totalPaid,
       balance: acc.balance + fin.balance,
+      balanceDue: acc.balanceDue + (fin.balanceDue ?? (fin.totalOwed - fin.totalPaid)),
     }),
-    { totalOwed: 0, totalPaid: 0, balance: 0 }
+    { totalOwed: 0, totalPaid: 0, balance: 0, balanceDue: 0 }
   );
+
+  const isParentOnly = !isAdmin && !isCoachOrAbove;
+
+  // Flatten all payments from all finance records, enriched with season.
+  // Non-admins should not see sponsor payment details.
+  const allPayments = finances
+    .flatMap((fin) =>
+      (fin.payments ?? []).map((p) => ({
+        ...p,
+        season: fin.season,
+      }))
+    )
+    .filter((p) => isAdmin || p.method !== 'sponsor')
+    .sort((a, b) => safeGetTime(b.date) - safeGetTime(a.date));
+
+  const paymentsTotalAmount = allPayments.reduce((sum, p) => sum + (p.amount ?? 0), 0);
 
   return (
     <Box>
@@ -205,9 +275,21 @@ const PlayerDetailsPage = () => {
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
                 <Chip
-                  label={player.active ? 'Active' : 'Inactive'}
+                  label={
+                    player.status === 'quit'
+                      ? 'Quit'
+                      : player.active
+                      ? 'Active'
+                      : 'Inactive'
+                  }
                   size="small"
-                  color={player.active ? 'success' : 'default'}
+                  color={
+                    player.status === 'quit'
+                      ? 'error'
+                      : player.active
+                      ? 'success'
+                      : 'default'
+                  }
                 />
                 {player.playingUpFrom && (
                   <Chip
@@ -300,6 +382,20 @@ const PlayerDetailsPage = () => {
               <InfoRow label="Throws" value={formatBatsThrows(player.throws)} />
               {player.playingUpFrom && (
                 <InfoRow label="Playing Up From" value={player.playingUpFrom} />
+              )}
+              {player.status === 'quit' && (
+                <>
+                  <Divider sx={{ my: 1.5 }} />
+                  <Typography variant="subtitle2" color="error" sx={{ mb: 0.5, fontWeight: 600 }}>
+                    Player Quit
+                  </Typography>
+                  {player.quitDate && (
+                    <InfoRow label="Quit Date" value={safeFormatDate(player.quitDate)} />
+                  )}
+                  {player.quitReason && (
+                    <InfoRow label="Reason" value={player.quitReason} />
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -428,13 +524,25 @@ const PlayerDetailsPage = () => {
           <PlayerDocumentsCard player={player} />
         </Grid>
 
+        {/* Compliance & Agreements */}
+        <Grid item xs={12} md={6}>
+          <PlayerComplianceCard player={player} />
+        </Grid>
+
         {/* Equipment */}
         <Grid item xs={12} md={6}>
           <Card variant="outlined" sx={{ height: '100%' }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                Assigned Equipment
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                  Assigned Equipment
+                </Typography>
+                {equipment.length > 0 && (
+                  <Typography variant="body2" color="primary.main" fontWeight={600}>
+                    Total: ${equipment.reduce((s, e) => s + (e.cost || 0), 0).toFixed(2)}
+                  </Typography>
+                )}
+              </Box>
               <Divider sx={{ mb: 2 }} />
 
               {equipment.length === 0 ? (
@@ -447,10 +555,10 @@ const PlayerDetailsPage = () => {
                     <TableHead>
                       <TableRow>
                         <TableCell sx={{ fontWeight: 600 }}>Type</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Number</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Variant</TableCell>
                         <TableCell sx={{ fontWeight: 600 }}>Size</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Condition</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Ownership</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }} align="right">Cost</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -458,45 +566,20 @@ const PlayerDetailsPage = () => {
                         <TableRow key={item.id}>
                           <TableCell sx={{ textTransform: 'capitalize' }}>
                             {item.type.replace('_', ' ')}
+                            {item.number ? ` #${item.number}` : ''}
                           </TableCell>
-                          <TableCell>
-                            {item.number !== undefined && item.number !== null
-                              ? `#${item.number}`
-                              : '--'}
-                          </TableCell>
+                          <TableCell>{item.variant || '--'}</TableCell>
                           <TableCell>{item.size || '--'}</TableCell>
                           <TableCell>
                             <Chip
-                              label={item.condition}
+                              label={item.ownership === 'player' ? 'Player' : item.ownership === 'consumable' ? 'Consumable' : 'Org'}
                               size="small"
-                              color={
-                                item.condition === 'new'
-                                  ? 'success'
-                                  : item.condition === 'good'
-                                  ? 'primary'
-                                  : item.condition === 'fair'
-                                  ? 'warning'
-                                  : 'error'
-                              }
+                              color={item.ownership === 'player' ? 'primary' : item.ownership === 'consumable' ? 'warning' : 'default'}
                               variant="outlined"
-                              sx={{ textTransform: 'capitalize' }}
                             />
                           </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={item.status}
-                              size="small"
-                              color={
-                                item.status === 'assigned'
-                                  ? 'info'
-                                  : item.status === 'available'
-                                  ? 'success'
-                                  : item.status === 'damaged'
-                                  ? 'error'
-                                  : 'default'
-                              }
-                              sx={{ textTransform: 'capitalize' }}
-                            />
+                          <TableCell align="right">
+                            ${(item.cost || 0).toFixed(2)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -513,9 +596,35 @@ const PlayerDetailsPage = () => {
           <Grid item xs={12}>
             <Card variant="outlined">
               <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                  Financial Summary
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <AccountBalanceWalletIcon color="primary" />
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      Financial Summary
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    {isAdmin && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => navigate('/finances/billing')}
+                      >
+                        Go to Billing
+                      </Button>
+                    )}
+                    {isParentOnly && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<PaymentIcon />}
+                        onClick={() => navigate('/my-invoices')}
+                      >
+                        View Invoices & Pay
+                      </Button>
+                    )}
+                  </Box>
+                </Box>
                 <Divider sx={{ mb: 2 }} />
 
                 {finances.length === 0 ? (
@@ -524,6 +633,7 @@ const PlayerDetailsPage = () => {
                   </Typography>
                 ) : (
                   <Grid container spacing={3}>
+                    {/* Aggregate summary cards */}
                     <Grid item xs={12} sm={4}>
                       <Paper
                         sx={{
@@ -533,46 +643,21 @@ const PlayerDetailsPage = () => {
                           borderRadius: 2,
                         }}
                       >
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ mb: 0.5, fontWeight: 500 }}
-                        >
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, fontWeight: 500 }}>
                           Total Owed
                         </Typography>
                         <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                          ${financialSummary.totalOwed.toLocaleString('en-US', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
+                          ${financialSummary.totalOwed.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </Typography>
                       </Paper>
                     </Grid>
                     <Grid item xs={12} sm={4}>
-                      <Paper
-                        sx={{
-                          p: 2.5,
-                          textAlign: 'center',
-                          bgcolor: 'success.50',
-                          borderRadius: 2,
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ mb: 0.5, fontWeight: 500 }}
-                        >
+                      <Paper sx={{ p: 2.5, textAlign: 'center', bgcolor: 'success.50', borderRadius: 2 }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, fontWeight: 500 }}>
                           Total Paid
                         </Typography>
-                        <Typography
-                          variant="h5"
-                          color="success.main"
-                          sx={{ fontWeight: 700 }}
-                        >
-                          ${financialSummary.totalPaid.toLocaleString('en-US', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
+                        <Typography variant="h5" color="success.main" sx={{ fontWeight: 700 }}>
+                          ${financialSummary.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </Typography>
                       </Paper>
                     </Grid>
@@ -581,120 +666,272 @@ const PlayerDetailsPage = () => {
                         sx={{
                           p: 2.5,
                           textAlign: 'center',
-                          bgcolor:
-                            financialSummary.balance >= 0 ? 'success.50' : 'error.50',
+                          bgcolor: isAdmin
+                            ? (financialSummary.balance >= 0 ? 'success.50' : 'error.50')
+                            : (financialSummary.balanceDue > 0 ? 'error.50' : 'success.50'),
                           borderRadius: 2,
                         }}
                       >
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ mb: 0.5, fontWeight: 500 }}
-                        >
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, fontWeight: 500 }}>
                           Balance
                         </Typography>
                         <Typography
                           variant="h5"
-                          color={
-                            financialSummary.balance >= 0
-                              ? 'success.main'
-                              : 'error.main'
-                          }
+                          color={isAdmin
+                            ? (financialSummary.balance >= 0 ? 'success.main' : 'error.main')
+                            : (financialSummary.balanceDue > 0 ? 'error.main' : 'success.main')}
                           sx={{ fontWeight: 700 }}
                         >
-                          ${Math.abs(financialSummary.balance).toLocaleString('en-US', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                          {financialSummary.balance < 0 && ' owed'}
+                          {isAdmin ? (
+                            <>
+                              ${Math.abs(financialSummary.balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {financialSummary.balance < 0 && ' owed'}
+                            </>
+                          ) : (
+                            <>
+                              ${Math.max(0, financialSummary.balanceDue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              {financialSummary.balanceDue > 0 && ' owed'}
+                            </>
+                          )}
                         </Typography>
                       </Paper>
                     </Grid>
 
-                    {/* Per-season breakdown */}
-                    {finances.length > 1 && (
-                      <Grid item xs={12}>
-                        <Typography
-                          variant="subtitle2"
-                          color="text.secondary"
-                          sx={{ mt: 1, mb: 1.5, fontWeight: 600 }}
-                        >
-                          By Season
-                        </Typography>
-                        <TableContainer>
-                          <Table size="small">
-                            <TableHead>
-                              <TableRow>
-                                <TableCell sx={{ fontWeight: 600 }}>Season</TableCell>
-                                <TableCell align="right" sx={{ fontWeight: 600 }}>
-                                  Total Owed
-                                </TableCell>
-                                <TableCell align="right" sx={{ fontWeight: 600 }}>
-                                  Total Paid
-                                </TableCell>
-                                <TableCell align="right" sx={{ fontWeight: 600 }}>
-                                  Balance
-                                </TableCell>
-                                <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              {finances.map((fin) => (
-                                <TableRow key={fin.id}>
-                                  <TableCell>{fin.season}</TableCell>
-                                  <TableCell align="right">
-                                    $
-                                    {fin.totalOwed.toLocaleString('en-US', {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })}
+                    {/* Per-season fee itemization */}
+                    {finances.map((fin) => (
+                      <Grid item xs={12} key={fin.id}>
+                        <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+                          {/* Season header */}
+                          <Box sx={{ px: 2, py: 1.5, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Box>
+                              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                {fin.season} — {fin.teamName || 'No Team'}
+                              </Typography>
+                            </Box>
+                            <Chip
+                              label={fin.status}
+                              size="small"
+                              sx={{
+                                textTransform: 'capitalize',
+                                bgcolor: fin.status === 'paid' ? 'success.main' : fin.status === 'overdue' ? 'error.main' : 'warning.main',
+                                color: 'white',
+                                fontWeight: 600,
+                              }}
+                            />
+                          </Box>
+
+                          {/* Fee itemization table */}
+                          <TableContainer>
+                            <Table size="small">
+                              <TableHead>
+                                <TableRow>
+                                  <TableCell sx={{ fontWeight: 600, width: '60%' }}>Fee Category</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 600 }}>Amount</TableCell>
+                                </TableRow>
+                              </TableHead>
+                              <TableBody>
+                                {fin.registrationFee > 0 && (
+                                  <TableRow>
+                                    <TableCell>Registration Fee</TableCell>
+                                    <TableCell align="right">${fin.registrationFee.toFixed(2)}</TableCell>
+                                  </TableRow>
+                                )}
+                                {fin.uniformCost > 0 && (
+                                  <TableRow>
+                                    <TableCell>Uniform Cost</TableCell>
+                                    <TableCell align="right">${fin.uniformCost.toFixed(2)}</TableCell>
+                                  </TableRow>
+                                )}
+                                {fin.tournamentFees > 0 && (
+                                  <TableRow>
+                                    <TableCell>Tournament Fees</TableCell>
+                                    <TableCell align="right">${fin.tournamentFees.toFixed(2)}</TableCell>
+                                  </TableRow>
+                                )}
+                                {fin.facilityFees > 0 && (
+                                  <TableRow>
+                                    <TableCell>Facility Fees</TableCell>
+                                    <TableCell align="right">${fin.facilityFees.toFixed(2)}</TableCell>
+                                  </TableRow>
+                                )}
+                                {fin.equipmentFees > 0 && (
+                                  <TableRow>
+                                    <TableCell>Equipment Fees</TableCell>
+                                    <TableCell align="right">${fin.equipmentFees.toFixed(2)}</TableCell>
+                                  </TableRow>
+                                )}
+                                {fin.otherFees > 0 && (
+                                  <TableRow>
+                                    <TableCell>Other Fees</TableCell>
+                                    <TableCell align="right">${fin.otherFees.toFixed(2)}</TableCell>
+                                  </TableRow>
+                                )}
+                                {/* Total Owed row */}
+                                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                                  <TableCell sx={{ fontWeight: 700 }}>Total Charges</TableCell>
+                                  <TableCell align="right" sx={{ fontWeight: 700 }}>${fin.totalOwed.toFixed(2)}</TableCell>
+                                </TableRow>
+                                {/* Scholarship discount */}
+                                {isAdmin && fin.scholarshipAmount > 0 && (
+                                  <TableRow>
+                                    <TableCell sx={{ color: 'info.main' }}>
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                        <SchoolIcon fontSize="small" />
+                                        Scholarship / Financial Aid
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell align="right" sx={{ color: 'info.main', fontWeight: 600 }}>
+                                      -${fin.scholarshipAmount.toFixed(2)}
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                                {/* Payments total */}
+                                <TableRow>
+                                  <TableCell sx={{ color: 'success.main', fontWeight: 600 }}>Payments Received</TableCell>
+                                  <TableCell align="right" sx={{ color: 'success.main', fontWeight: 600 }}>
+                                    -${fin.totalPaid.toFixed(2)}
                                   </TableCell>
-                                  <TableCell align="right">
-                                    $
-                                    {fin.totalPaid.toLocaleString('en-US', {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })}
-                                  </TableCell>
+                                </TableRow>
+                                {/* Balance due row */}
+                                <TableRow sx={{ bgcolor: isAdmin ? (fin.balance >= 0 ? 'success.50' : 'error.50') : ((fin.balanceDue ?? 0) > 0 ? 'error.50' : 'success.50') }}>
+                                  <TableCell sx={{ fontWeight: 700, fontSize: '0.95rem' }}>Balance Due</TableCell>
                                   <TableCell
                                     align="right"
                                     sx={{
-                                      color:
-                                        fin.balance >= 0
-                                          ? 'success.main'
-                                          : 'error.main',
-                                      fontWeight: 600,
+                                      fontWeight: 700,
+                                      fontSize: '0.95rem',
+                                      color: isAdmin ? (fin.balance >= 0 ? 'success.main' : 'error.main') : ((fin.balanceDue ?? 0) > 0 ? 'error.main' : 'success.main'),
                                     }}
                                   >
-                                    $
-                                    {Math.abs(fin.balance).toLocaleString('en-US', {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })}
-                                    {fin.balance < 0 ? ' owed' : ''}
-                                  </TableCell>
-                                  <TableCell>
-                                    <Chip
-                                      label={fin.status}
-                                      size="small"
-                                      color={
-                                        fin.status === 'paid'
-                                          ? 'success'
-                                          : fin.status === 'overdue'
-                                          ? 'error'
-                                          : 'warning'
-                                      }
-                                      sx={{ textTransform: 'capitalize' }}
-                                    />
+                                    {isAdmin ? (
+                                      <>
+                                        ${Math.abs(fin.balance).toFixed(2)}
+                                        {fin.balance < 0 ? ' owed' : fin.balance > 0 ? ' credit' : ''}
+                                      </>
+                                    ) : (
+                                      <>
+                                        ${Math.max(0, fin.balanceDue ?? 0).toFixed(2)}
+                                        {(fin.balanceDue ?? 0) > 0 && ' owed'}
+                                      </>
+                                    )}
                                   </TableCell>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </TableContainer>
+                              </TableBody>
+                            </Table>
+                          </TableContainer>
+                        </Paper>
                       </Grid>
-                    )}
+                    ))}
                   </Grid>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+
+        {/* Payment History (admin or parent-with-linked-child) */}
+        {showFinances && (
+          <Grid item xs={12}>
+            <Card variant="outlined">
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <ReceiptLongIcon color="primary" />
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Payment History
+                  </Typography>
+                </Box>
+                <Divider sx={{ mb: 2 }} />
+
+                {allPayments.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                    No payments recorded yet.
+                  </Typography>
+                ) : (
+                  <>
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 600 }}>Date</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 600 }}>Amount</TableCell>
+                            <TableCell sx={{ fontWeight: 600 }}>Method</TableCell>
+                            <TableCell sx={{ fontWeight: 600 }}>Payer</TableCell>
+                            <TableCell sx={{ fontWeight: 600 }}>Reference</TableCell>
+                            <TableCell sx={{ fontWeight: 600 }}>Season</TableCell>
+                            <TableCell sx={{ fontWeight: 600 }}>Notes</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {allPayments.map((payment, idx) => (
+                            <TableRow key={payment.id ?? idx} hover>
+                              <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                                {safeFormatDate(payment.date)}
+                              </TableCell>
+                              <TableCell
+                                align="right"
+                                sx={{ color: 'success.main', fontWeight: 700, whiteSpace: 'nowrap' }}
+                              >
+                                ${(payment.amount ?? 0).toLocaleString('en-US', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={methodLabels[payment.method] ?? payment.method ?? '--'}
+                                  size="small"
+                                  variant="outlined"
+                                  color={
+                                    payment.method === 'sponsor'
+                                      ? 'secondary'
+                                      : payment.method === 'stripe' || payment.method === 'credit_card' || payment.method === 'card'
+                                      ? 'info'
+                                      : 'default'
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>
+                                {payment.payerName || payment.sponsorName || '--'}
+                              </TableCell>
+                              <TableCell>
+                                {payment.reference || '--'}
+                              </TableCell>
+                              <TableCell>
+                                <Chip label={payment.season} size="small" variant="outlined" />
+                              </TableCell>
+                              <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {payment.notes || '--'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+
+                    {/* Summary footer */}
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        mt: 2,
+                        pt: 2,
+                        borderTop: '1px solid',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <Typography variant="body2" color="text.secondary">
+                        {allPayments.length} payment{allPayments.length !== 1 ? 's' : ''} recorded
+                      </Typography>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 700, color: 'success.main' }}>
+                        Total: $
+                        {paymentsTotalAmount.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </Typography>
+                    </Box>
+                  </>
                 )}
               </CardContent>
             </Card>

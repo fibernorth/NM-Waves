@@ -15,6 +15,15 @@ import type { Scholarship } from '@/types/models';
 
 const COLLECTION = 'scholarships';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertScholarship = (id: string, data: any): Scholarship => ({
   id,
   playerId: data.playerId,
@@ -46,10 +55,10 @@ export const scholarshipsApi = {
 
   // Create scholarship
   create: async (scholarshipData: Omit<Scholarship, 'id'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...scholarshipData,
       approvedAt: Timestamp.fromDate(scholarshipData.approvedAt),
-    });
+    }));
     return docRef.id;
   },
 
@@ -61,7 +70,7 @@ export const scholarshipsApi = {
       updateData.approvedAt = Timestamp.fromDate(scholarshipData.approvedAt);
     }
     delete updateData.id;
-    await updateDoc(docRef, updateData);
+    await updateDoc(docRef, cleanData(updateData));
   },
 
   // Delete scholarship

@@ -70,8 +70,8 @@ const DocumentsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['documents'] });
       toast.success('Document deleted successfully');
     },
-    onError: () => {
-      toast.error('Failed to delete document');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete document');
     },
   });
 
@@ -280,7 +280,7 @@ const DocumentsPage = () => {
         </Box>
       </Paper>
 
-      <Paper sx={{ height: 600, width: '100%' }}>
+      <Paper sx={{ height: { xs: 400, md: 600 }, width: '100%' }}>
         <DataGrid
           rows={filteredDocuments}
           columns={columns}

@@ -1,12 +1,16 @@
-import { Outlet, Navigate } from 'react-router-dom';
+import { Outlet, Navigate, useSearchParams } from 'react-router-dom';
 import { Box, Container } from '@mui/material';
 import { useAuthStore } from '@/stores/authStore';
 
 const AuthLayout = () => {
   const { user } = useAuthStore();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get('returnTo');
 
   if (user) {
-    return <Navigate to="/dashboard" replace />;
+    // If returnTo is present and valid (starts with /), redirect there instead of dashboard
+    const destination = returnTo && returnTo.startsWith('/') ? returnTo : '/dashboard';
+    return <Navigate to={destination} replace />;
   }
 
   return (

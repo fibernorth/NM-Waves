@@ -109,8 +109,8 @@ const SchedulesPage = () => {
       toast.success('Event deleted successfully');
       setDetailEvent(null);
     },
-    onError: () => {
-      toast.error('Failed to delete event');
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to delete event');
     },
   });
 

@@ -19,6 +19,15 @@ import type { User, UserRole } from '@/types/models';
 
 const COLLECTION = 'users';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertUser = (id: string, data: any): User => ({
   uid: id,
   email: data.email,
@@ -68,10 +77,10 @@ export const usersApi = {
     userData: Partial<Pick<User, 'roles' | 'permissions' | 'teamIds' | 'linkedPlayerIds'>>
   ): Promise<void> => {
     const docRef = doc(db, COLLECTION, uid);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       ...userData,
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   // Create a new user (auth account + Firestore doc)
@@ -104,7 +113,7 @@ export const usersApi = {
       const uid = cred.user.uid;
 
       // Create user doc in Firestore
-      await setDoc(doc(db, COLLECTION, uid), {
+      await setDoc(doc(db, COLLECTION, uid), cleanData({
         email: data.email,
         displayName: data.displayName,
         roles: data.roles,
@@ -118,7 +127,7 @@ export const usersApi = {
         },
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
-      });
+      }));
 
       // Sign out and clean up the secondary app
       await secondaryAuth.signOut();
@@ -138,10 +147,10 @@ export const usersApi = {
   // Add a linked player to a user's linkedPlayerIds array
   addLinkedPlayer: async (uid: string, playerId: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, uid);
-    await updateDoc(docRef, {
+    await updateDoc(docRef, cleanData({
       linkedPlayerIds: arrayUnion(playerId),
       updatedAt: Timestamp.now(),
-    });
+    }));
   },
 
   // Delete user document

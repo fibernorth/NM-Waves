@@ -15,6 +15,15 @@ import type { PlayerMetric } from '@/types/models';
 
 const COLLECTION = 'playerMetrics';
 
+/** Strip undefined values from an object before writing to Firestore */
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) result[key] = value;
+  }
+  return result as T;
+};
+
 const convertMetric = (id: string, data: any): PlayerMetric => ({
   id,
   playerId: data.playerId,
@@ -47,10 +56,10 @@ export const metricsApi = {
 
   // Create metric
   create: async (metricData: Omit<PlayerMetric, 'id'>): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), cleanData({
       ...metricData,
       date: Timestamp.fromDate(metricData.date),
-    });
+    }));
     return docRef.id;
   },
 
@@ -62,7 +71,7 @@ export const metricsApi = {
       updateData.date = Timestamp.fromDate(metricData.date);
     }
     delete updateData.id;
-    await updateDoc(docRef, updateData);
+    await updateDoc(docRef, cleanData(updateData));
   },
 
   // Delete metric

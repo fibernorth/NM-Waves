@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { google } from 'googleapis';
 
-const db = admin.firestore();
+const getDb = () => admin.firestore();
 
 /**
  * Callable Cloud Function: lists photos from a shared Google Drive folder.
@@ -16,7 +16,7 @@ export const listDrivePhotos = functions.https.onCall(async (_data, context) => 
   }
 
   // Get integration settings
-  const settingsDoc = await db.doc('appSettings/integrations').get();
+  const settingsDoc = await getDb().doc('appSettings/integrations').get();
   const settings = settingsDoc.data();
 
   if (!settings?.googleDrive?.enabled || !settings?.googleDrive?.folderId) {
