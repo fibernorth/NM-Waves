@@ -5,7 +5,6 @@ import {
   getDocs,
   addDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   orderBy,
@@ -87,10 +86,35 @@ export const teamsApi = {
     }));
   },
 
-  // Delete team
+  // Soft-delete team (archive instead of hard delete to preserve references)
   delete: async (id: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
-    await deleteDoc(docRef);
+    await updateDoc(docRef, {
+      active: false,
+      status: 'archived',
+      updatedAt: Timestamp.now(),
+      deletedAt: Timestamp.now(),
+    });
+
+    // Unassign all players from this team
+    const playersQuery = query(collection(db, 'players'), where('teamId', '==', id));
+    const playersSnap = await getDocs(playersQuery);
+    for (const playerDoc of playersSnap.docs) {
+      await updateDoc(playerDoc.ref, {
+        teamId: null,
+        teamName: null,
+        updatedAt: Timestamp.now(),
+      });
+    }
+
+    // Clean up user teamIds references
+    const usersQuery = query(collection(db, 'users'), where('teamIds', 'array-contains', id));
+    const usersSnap = await getDocs(usersQuery);
+    for (const userDoc of usersSnap.docs) {
+      const userData = userDoc.data();
+      const updatedIds = (userData.teamIds || []).filter((tid: string) => tid !== id);
+      await updateDoc(userDoc.ref, { teamIds: updatedIds, updatedAt: Timestamp.now() });
+    }
   },
 
   // Assign coach

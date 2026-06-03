@@ -18,14 +18,8 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
-import {
-  collection,
-  query,
-  getDocs,
-  orderBy,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
 import type { MediaItem } from '@/types/models';
+import { mediaApi } from '@/lib/api/media';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
 const PublicGalleryPage = () => {
@@ -42,30 +36,7 @@ const PublicGalleryPage = () => {
   useEffect(() => {
     const fetchMedia = async () => {
       try {
-        const q = query(
-          collection(db, 'media'),
-          orderBy('createdAt', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        const items = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            fileUrl: data.fileUrl,
-            thumbnailUrl: data.thumbnailUrl || undefined,
-            fileName: data.fileName || undefined,
-            teamId: data.teamId,
-            teamName: data.teamName || undefined,
-            uploadedBy: data.uploadedBy,
-            uploadedByName: data.uploadedByName || undefined,
-            tags: data.tags || [],
-            caption: data.caption || undefined,
-            mediaType: data.mediaType || 'image',
-            moderationStatus: data.moderationStatus || undefined,
-            showInGallery: data.showInGallery ?? false,
-            createdAt: data.createdAt?.toDate() || new Date(),
-          } as MediaItem;
-        });
+        const items = await mediaApi.getApprovedForGallery();
         setMedia(items);
       } catch (err) {
         console.error('Error fetching media:', err);

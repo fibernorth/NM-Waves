@@ -12,8 +12,10 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { playersApi } from '@/lib/api/players';
 import { playerFinancesApi } from '@/lib/api/finances';
+import { getAuth } from 'firebase/auth';
 import { Player } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -154,6 +156,39 @@ const PlayersPage = () => {
     setSelectedPlayer(null);
   };
 
+  const handleResendInvite = async (player: Player) => {
+    const emails: string[] = [];
+    for (const c of (player.contacts || [])) {
+      if (c.email) emails.push(c.email);
+    }
+    if (!emails.length && player.parentEmail) emails.push(player.parentEmail);
+    if (!emails.length) {
+      toast.error(`No parent email found for ${player.firstName} ${player.lastName}`);
+      return;
+    }
+    try {
+      const token = await getAuth().currentUser?.getIdToken();
+      if (!token) throw new Error('Not authenticated');
+      const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+      const res = await fetch(
+        `https://us-central1-${projectId}.cloudfunctions.net/sendParentInvites`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ emails }),
+        }
+      );
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Invite sent to ${emails.join(', ')} for ${player.firstName} ${player.lastName}`);
+      } else {
+        toast.error(data.error || 'Failed to send invite');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to send invite');
+    }
+  };
+
   const columns: GridColDef[] = [
     {
       field: 'lastName',
@@ -285,7 +320,7 @@ const PlayersPage = () => {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 180,
+      width: 210,
       sortable: false,
       renderCell: (params) => (
         <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -303,6 +338,11 @@ const PlayersPage = () => {
           )}
           {isAdmin && (
             <>
+              <Tooltip title="Resend Invite">
+                <IconButton size="small" color="info" onClick={() => handleResendInvite(params.row as Player)}>
+                  <PersonAddIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
               <Tooltip title="Edit">
                 <IconButton size="small" color="primary" onClick={() => handleEdit(params.row)}>
                   <EditIcon fontSize="small" />

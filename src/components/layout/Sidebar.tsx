@@ -49,6 +49,13 @@ import GavelIcon from '@mui/icons-material/Gavel';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import LinkIcon from '@mui/icons-material/Link';
 import ChildCareIcon from '@mui/icons-material/ChildCare';
+import ScoreboardIcon from '@mui/icons-material/Scoreboard';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import LockClockIcon from '@mui/icons-material/LockClock';
+import EditNoteIcon from '@mui/icons-material/EditNote';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import ArticleIcon from '@mui/icons-material/Article';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin, isMasterAdmin, isParent as checkIsParent } from '@/lib/auth/roles';
 import { playersApi } from '@/lib/api/players';
@@ -91,6 +98,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Schedule', icon: <CalendarMonthIcon />, path: '/schedules', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Announcements', icon: <CampaignIcon />, path: '/announcements', roles: ['all'] },
     { text: 'Messaging', icon: <ChatIcon />, path: '/messaging', roles: ['all'] },
+    { text: 'Stats', icon: <ScoreboardIcon />, path: '/stats', roles: ['all'] },
     { text: 'Homepage Manager', icon: <WebIcon />, path: '/homepage-manager', roles: ['admin', 'master-admin'] },
   ];
 
@@ -106,6 +114,13 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Balance Sheet', icon: <AccountTreeIcon />, path: '/finances/balance-sheet', roles: ['admin', 'master-admin'] },
     { text: 'Budget vs Actual', icon: <CompareArrowsIcon />, path: '/finances/budget-vs-actual', roles: ['admin', 'master-admin'] },
     { text: 'Aged AR / AP', icon: <ReceiptLongIcon />, path: '/finances/aged-receivables', roles: ['admin', 'master-admin'] },
+    { text: 'Functional Expenses', icon: <TableChartIcon />, path: '/finances/functional-expenses', roles: ['admin', 'master-admin'] },
+    { text: 'Cash Flow', icon: <WaterDropIcon />, path: '/finances/cash-flow', roles: ['admin', 'master-admin'] },
+    { text: 'Comparative', icon: <CompareArrowsIcon />, path: '/finances/comparative', roles: ['admin', 'master-admin'] },
+    { text: 'Journal Entries', icon: <EditNoteIcon />, path: '/finances/journal-entries', roles: ['admin', 'master-admin'] },
+    { text: 'Fixed Assets', icon: <InventoryIcon />, path: '/finances/depreciation', roles: ['admin', 'master-admin'] },
+    { text: 'Bank Recon', icon: <AccountBalanceIcon />, path: '/finances/bank-reconciliation', roles: ['admin', 'master-admin'] },
+    { text: 'Year-End Close', icon: <LockClockIcon />, path: '/finances/year-end-closing', roles: ['master-admin'] },
   ];
 
   const operationsItems = [
@@ -120,6 +135,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Donor Management', icon: <HandshakeIcon />, path: '/compliance/donors', roles: ['admin', 'master-admin'] },
     { text: 'Governance & Board', icon: <GavelIcon />, path: '/compliance/governance', roles: ['admin', 'master-admin'] },
     { text: 'Compliance', icon: <VerifiedUserIcon />, path: '/compliance/dashboard', roles: ['admin', 'master-admin'] },
+    { text: '1099 Reporting', icon: <ArticleIcon />, path: '/compliance/1099', roles: ['admin', 'master-admin'] },
   ];
 
   const managementItems = [

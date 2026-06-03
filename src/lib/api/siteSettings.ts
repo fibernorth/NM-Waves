@@ -32,7 +32,7 @@ export const siteSettingsApi = {
 
   updateSwagStore: async (data: Partial<SwagStoreSettings>): Promise<void> => {
     const docRef = doc(db, SWAG_STORE_DOC);
-    const payload: Record<string, unknown> = { ...data, updatedAt: new Date() };
+    const payload: Record<string, unknown> = { ...data, updatedAt: Timestamp.now() };
     // Convert null closesAt explicitly so Firestore stores null
     if (data.closesAt === null) payload.closesAt = null;
     await setDoc(docRef, payload, { merge: true });

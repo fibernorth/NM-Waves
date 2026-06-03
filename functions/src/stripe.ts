@@ -61,6 +61,27 @@ export const createCheckoutSession = functions.https.onCall(
     if (amount < 0.5) {
       throw new functions.https.HttpsError('invalid-argument', 'Amount must be at least $0.50');
     }
+    if (amount > 10000) {
+      throw new functions.https.HttpsError('invalid-argument', 'Amount cannot exceed $10,000. Contact admin for larger payments.');
+    }
+
+    // Server-side invoice token validation (if provided)
+    if (invoiceToken) {
+      const tokenQuery = await getDb().collection('invoiceTokens')
+        .where('token', '==', invoiceToken)
+        .limit(1)
+        .get();
+      if (tokenQuery.empty) {
+        throw new functions.https.HttpsError('not-found', 'Invalid invoice token');
+      }
+      const tokenData = tokenQuery.docs[0].data();
+      if (tokenData.used) {
+        throw new functions.https.HttpsError('failed-precondition', 'This invoice has already been paid');
+      }
+      if (tokenData.expiresAt?.toDate() < new Date()) {
+        throw new functions.https.HttpsError('failed-precondition', 'This invoice has expired');
+      }
+    }
 
     const stripe = getStripe();
     const metadata: Record<string, string> = {};
@@ -208,6 +229,18 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
         const target = metadata.sponsorshipTarget || 'organization';
         const notes = metadata.sponsorNotes || '';
 
+        // Idempotency check: see if this session was already processed
+        const existingSponsorIncome = await getDb().collection('income')
+          .where('referenceNumber', '==', session.id)
+          .where('category', '==', 'sponsorships')
+          .limit(1)
+          .get();
+        if (!existingSponsorIncome.empty) {
+          console.log(`Sponsor payment already processed for session ${session.id}, skipping`);
+          res.status(200).json({ received: true });
+          return;
+        }
+
         // 1. Create sponsor record
         const sponsorRef = await getDb().collection('sponsors').add({
           businessName,
@@ -296,7 +329,18 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
           });
           await glBatch.commit();
         } catch (glErr) {
-          console.warn('GL posting failed for sponsor payment (non-fatal):', glErr);
+          console.error('GL posting failed for sponsor payment:', glErr);
+          // Write admin notification so failed GL postings are visible
+          await getDb().collection('adminNotifications').add({
+            type: 'gl_posting_failure',
+            severity: 'high',
+            message: `GL posting failed for sponsor payment from ${businessName} ($${amount.toFixed(2)}). Session: ${session.id}`,
+            sourceType: 'income',
+            sourceId: sponsorIncomeRef.id,
+            error: String(glErr),
+            createdAt: paymentDate,
+            read: false,
+          });
         }
 
         console.log(`Sponsor payment processed: $${amount} from ${businessName} (${target}), sponsor doc: ${sponsorRef.id}`);
@@ -319,8 +363,8 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
       } = metadata;
 
       if (!financeId || !playerId) {
-        console.error('Missing financeId or playerId in session metadata');
-        res.status(400).send('Missing metadata');
+        console.error('Missing financeId or playerId in session metadata — skipping (not retryable)');
+        res.status(200).json({ received: true, skipped: 'missing metadata' });
         return;
       }
 
@@ -489,7 +533,17 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
         });
         await glBatch.commit();
       } catch (glErr) {
-        console.warn('GL posting failed for Stripe payment (non-fatal):', glErr);
+        console.error('GL posting failed for player payment:', glErr);
+        await getDb().collection('adminNotifications').add({
+          type: 'gl_posting_failure',
+          severity: 'high',
+          message: `GL posting failed for player payment ($${amount.toFixed(2)}) - ${playerName || 'unknown'}. Session: ${session.id}`,
+          sourceType: 'income',
+          sourceId: incomeRef.id,
+          error: String(glErr),
+          createdAt: paymentDate,
+          read: false,
+        });
       }
 
       // 3. If sponsor: update sponsor record
@@ -558,8 +612,184 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
       console.log(`Payment processed: ${amount} for player ${playerName} (finance: ${financeId})`);
     } catch (error) {
       console.error('Error processing webhook:', error);
-      res.status(500).send('Internal error processing payment');
+      // Return 200 to prevent Stripe retry storms on permanent failures.
+      // The error is logged for admin review.
+      res.status(200).json({ received: true, error: 'Processing failed — logged for review' });
       return;
+    }
+  }
+
+  // === REFUND HANDLING ===
+  if (event.type === 'charge.refunded') {
+    try {
+      const charge = event.data.object as Stripe.Charge;
+      const refundAmount = (charge.amount_refunded || 0) / 100;
+      const sessionId = charge.payment_intent as string;
+      const refundDate = admin.firestore.Timestamp.now();
+
+      // Find the income record linked to this payment
+      const incomeQuery = await getDb().collection('income')
+        .where('referenceNumber', '==', sessionId)
+        .limit(1)
+        .get();
+
+      if (incomeQuery.empty) {
+        // Try matching by Stripe session ID in the charge metadata
+        const metaSessionId = charge.metadata?.stripeSessionId || charge.metadata?.session_id;
+        if (metaSessionId) {
+          const altQuery = await getDb().collection('income')
+            .where('referenceNumber', '==', metaSessionId)
+            .limit(1)
+            .get();
+          if (altQuery.empty) {
+            console.warn(`Refund: No income record found for charge ${charge.id}`);
+            res.status(200).json({ received: true, skipped: 'no matching income record' });
+            return;
+          }
+        } else {
+          console.warn(`Refund: No income record found for charge ${charge.id}`);
+          res.status(200).json({ received: true, skipped: 'no matching income record' });
+          return;
+        }
+      }
+
+      const incomeDoc = incomeQuery.empty ? null : incomeQuery.docs[0];
+      if (!incomeDoc) {
+        res.status(200).json({ received: true, skipped: 'no matching income record' });
+        return;
+      }
+
+      const incomeData = incomeDoc.data();
+
+      // Idempotency: check if we already processed this refund
+      const existingRefund = await getDb().collection('income')
+        .where('referenceNumber', '==', `refund_${charge.id}`)
+        .limit(1)
+        .get();
+      if (!existingRefund.empty) {
+        console.log(`Refund already processed for charge ${charge.id}, skipping`);
+        res.status(200).json({ received: true });
+        return;
+      }
+
+      // 1. Create a negative income record (refund)
+      const refundIncomeRef = await getDb().collection('income').add({
+        date: refundDate,
+        category: incomeData.category || 'player_payments',
+        amount: -refundAmount,
+        source: incomeData.source || 'Stripe Refund',
+        description: `Refund: ${incomeData.description || 'Stripe payment'}`,
+        payerName: incomeData.payerName || '',
+        paymentMethod: 'credit_card',
+        referenceNumber: `refund_${charge.id}`,
+        playerId: incomeData.playerId || '',
+        teamId: incomeData.teamId || '',
+        season: incomeData.season || '',
+        notes: `Stripe refund on charge ${charge.id}. Original income: ${incomeDoc.id}`,
+        sourcePaymentId: incomeData.sourcePaymentId || '',
+        sourceFinanceId: incomeData.sourceFinanceId || '',
+        reconciled: false,
+        recordedBy: 'stripe_webhook',
+        createdAt: refundDate,
+        updatedAt: refundDate,
+      });
+
+      // 2. Post reversing GL entries (debit Revenue, credit Cash)
+      try {
+        const revenueAccount = incomeData.category === 'sponsorships' ? '4100' : '4000';
+        const glBatch = getDb().batch();
+        glBatch.set(getDb().collection('generalLedger').doc(), {
+          date: refundDate,
+          accountNumber: revenueAccount,
+          accountName: revenueAccount === '4100' ? 'Sponsorship Revenue' : 'Player Payment Revenue',
+          type: 'debit',
+          amount: refundAmount,
+          description: `Refund reversal: ${incomeData.description || 'payment'}`,
+          sourceType: 'income',
+          sourceId: refundIncomeRef.id,
+          createdBy: 'stripe_webhook',
+          createdAt: refundDate,
+        });
+        glBatch.set(getDb().collection('generalLedger').doc(), {
+          date: refundDate,
+          accountNumber: '1000',
+          accountName: 'Cash - Checking',
+          type: 'credit',
+          amount: refundAmount,
+          description: `Refund reversal: ${incomeData.description || 'payment'}`,
+          sourceType: 'income',
+          sourceId: refundIncomeRef.id,
+          createdBy: 'stripe_webhook',
+          createdAt: refundDate,
+        });
+        await glBatch.commit();
+      } catch (glErr) {
+        console.error('GL posting failed for refund:', glErr);
+        await getDb().collection('adminNotifications').add({
+          type: 'gl_posting_failure',
+          severity: 'high',
+          message: `GL posting failed for refund of $${refundAmount.toFixed(2)}. Charge: ${charge.id}`,
+          sourceType: 'income',
+          sourceId: refundIncomeRef.id,
+          error: String(glErr),
+          createdAt: refundDate,
+          read: false,
+        });
+      }
+
+      // 3. Update the player finance record if applicable
+      if (incomeData.sourceFinanceId) {
+        const financeRef = getDb().collection('playerFinances').doc(incomeData.sourceFinanceId);
+        const financeDoc = await financeRef.get();
+        if (financeDoc.exists) {
+          const payments: any[] = financeDoc.data()!.payments || [];
+          // Mark the original payment as refunded
+          const updatedPayments = payments.map((p: any) => {
+            if (p.stripeSessionId === sessionId || p.reference === sessionId) {
+              return { ...p, refunded: true, refundAmount, refundDate, refundChargeId: charge.id };
+            }
+            return p;
+          });
+          await financeRef.update({ payments: updatedPayments, updatedAt: refundDate });
+        }
+      }
+
+      // 4. Create admin notification
+      await getDb().collection('adminNotifications').add({
+        type: 'payment_refunded',
+        severity: 'medium',
+        message: `Refund of $${refundAmount.toFixed(2)} processed for ${incomeData.payerName || 'unknown payer'}. Charge: ${charge.id}`,
+        createdAt: refundDate,
+        read: false,
+      });
+
+      console.log(`Refund processed: $${refundAmount} for charge ${charge.id}`);
+    } catch (error) {
+      console.error('Error processing refund webhook:', error);
+      res.status(200).json({ received: true, error: 'Refund processing failed — logged for review' });
+      return;
+    }
+  }
+
+  // === DISPUTE HANDLING ===
+  if (event.type === 'charge.dispute.created') {
+    try {
+      const dispute = event.data.object as Stripe.Dispute;
+      const disputeAmount = (dispute.amount || 0) / 100;
+      await getDb().collection('adminNotifications').add({
+        type: 'payment_dispute',
+        severity: 'critical',
+        message: `Chargeback dispute opened for $${disputeAmount.toFixed(2)}. Charge: ${dispute.charge}. Reason: ${dispute.reason}. Respond by ${new Date((dispute.evidence_details?.due_by || 0) * 1000).toLocaleDateString()}.`,
+        disputeId: dispute.id,
+        chargeId: dispute.charge,
+        amount: disputeAmount,
+        reason: dispute.reason,
+        createdAt: admin.firestore.Timestamp.now(),
+        read: false,
+      });
+      console.log(`Dispute notification created for charge ${dispute.charge}`);
+    } catch (error) {
+      console.error('Error processing dispute webhook:', error);
     }
   }
 

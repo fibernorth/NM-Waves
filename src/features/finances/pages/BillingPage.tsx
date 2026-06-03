@@ -905,7 +905,9 @@ const PaymentHistoryDialog = ({ open, onClose, finance, isAdmin, onPlayerQuit, q
     onSuccess: () => {
       toast.success('Payment deleted');
       queryClient.invalidateQueries({ queryKey: ['playerFinances'] });
-      queryClient.invalidateQueries({ queryKey: ['billing'] });
+      queryClient.invalidateQueries({ queryKey: ['income'] });
+      queryClient.invalidateQueries({ queryKey: ['generalLedger'] });
+      queryClient.invalidateQueries({ queryKey: ['financialReport'] });
       setDeletingPaymentId(null);
       onClose();
     },

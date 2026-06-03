@@ -10,6 +10,8 @@ import {
   where,
   orderBy,
   Timestamp,
+  increment,
+  runTransaction,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import type { Donor, DonorReceipt } from '@/types/models';
@@ -86,21 +88,23 @@ export const donorsApi = {
   },
 
   /**
-   * Record a donation and update donor totals.
+   * Record a donation and update donor totals atomically.
    */
   recordDonation: async (donorId: string, amount: number, date: Date): Promise<void> => {
-    const donor = await donorsApi.getById(donorId);
-    if (!donor) throw new Error('Donor not found');
+    const donorRef = doc(db, DONORS_COLLECTION, donorId);
+    const donorSnap = await getDoc(donorRef);
+    if (!donorSnap.exists()) throw new Error('Donor not found');
+    const donorData = donorSnap.data();
 
-    const updates: Partial<Donor> = {
-      totalGiven: donor.totalGiven + amount,
-      donationCount: donor.donationCount + 1,
-      lastDonationDate: date,
+    const updates: Record<string, unknown> = {
+      totalGiven: increment(amount),
+      donationCount: increment(1),
+      lastDonationDate: Timestamp.fromDate(date),
     };
-    if (!donor.firstDonationDate) {
-      updates.firstDonationDate = date;
+    if (!donorData.firstDonationDate) {
+      updates.firstDonationDate = Timestamp.fromDate(date);
     }
-    await donorsApi.update(donorId, updates);
+    await updateDoc(donorRef, updates);
   },
 };
 
@@ -130,15 +134,17 @@ const convertReceipt = (id: string, data: any): DonorReceipt => ({
 });
 
 /**
- * Get next receipt number: REC-YYYY-XXXX
+ * Get next receipt number: REC-YYYY-XXXX (uses a counter doc for atomicity)
  */
 async function getNextReceiptNumber(taxYear: number): Promise<string> {
-  const q = query(
-    collection(db, RECEIPTS_COLLECTION),
-    where('taxYear', '==', taxYear)
-  );
-  const snapshot = await getDocs(q);
-  const nextNum = snapshot.size + 1;
+  const counterRef = doc(db, RECEIPTS_COLLECTION, `_counter_${taxYear}`);
+  const nextNum = await runTransaction(db, async (transaction) => {
+    const counterSnap = await transaction.get(counterRef);
+    const current = counterSnap.exists() ? (counterSnap.data().count || 0) : 0;
+    const next = current + 1;
+    transaction.set(counterRef, { count: next, taxYear }, { merge: true });
+    return next;
+  });
   return `REC-${taxYear}-${String(nextNum).padStart(4, '0')}`;
 }
 

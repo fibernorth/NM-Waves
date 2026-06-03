@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   addDoc,
   updateDoc,
@@ -38,6 +39,19 @@ const convertEvent = (id: string, data: any): ScheduleEvent => ({
 });
 
 export const schedulesApi = {
+  getById: async (id: string): Promise<ScheduleEvent | null> => {
+    const docSnap = await getDoc(doc(db, COLLECTION, id));
+    if (!docSnap.exists()) return null;
+    return convertEvent(docSnap.id, docSnap.data());
+  },
+
+  getUpcoming: async (): Promise<ScheduleEvent[]> => {
+    const now = Timestamp.now();
+    const q = query(collection(db, COLLECTION), where('startTime', '>=', now), orderBy('startTime', 'asc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => convertEvent(d.id, d.data()));
+  },
+
   getAll: async (): Promise<ScheduleEvent[]> => {
     const q = query(collection(db, COLLECTION), orderBy('startTime', 'asc'));
     const snapshot = await getDocs(q);
@@ -48,17 +62,6 @@ export const schedulesApi = {
     const q = query(
       collection(db, COLLECTION),
       where('teamId', '==', teamId),
-      orderBy('startTime', 'asc')
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => convertEvent(d.id, d.data()));
-  },
-
-  getUpcoming: async (): Promise<ScheduleEvent[]> => {
-    const now = Timestamp.now();
-    const q = query(
-      collection(db, COLLECTION),
-      where('startTime', '>=', now),
       orderBy('startTime', 'asc')
     );
     const snapshot = await getDocs(q);
@@ -80,6 +83,8 @@ export const schedulesApi = {
           ? eventData.endTime
           : new Date(eventData.endTime)
       ),
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     }));
     return docRef.id;
   },

@@ -42,6 +42,7 @@ import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
 import { playerFinancesApi } from '@/lib/api/finances';
 import { costCalculationApi } from '@/lib/api/costCalculation';
+import { teamStatsApi, type PlayerStats } from '@/lib/api/teamStats';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import GCStatsPanel from '@/features/gamechanger/components/GCStatsPanel';
@@ -132,6 +133,38 @@ const TeamDetailsPage = () => {
     }
     return map;
   }, [teamFinances]);
+
+  // Fetch team stats (GC CSV imports) to show batting stats on roster
+  const { data: allTeamStats = [] } = useQuery({
+    queryKey: ['teamStats'],
+    queryFn: () => teamStatsApi.getAll(),
+    staleTime: 5 * 60_000,
+  });
+
+  // Match stats players to roster by name (case-insensitive)
+  const playerStatsMap = useMemo(() => {
+    const map = new Map<string, PlayerStats>();
+    if (!team || players.length === 0) return map;
+
+    // Find stat docs matching this team name (fuzzy: check if team name contains age group like "12U", "13U")
+    const teamNameLower = team.name.toLowerCase();
+    const matchingStats = allTeamStats.filter(s => {
+      const sName = s.teamName.toLowerCase();
+      // Match if stat teamName contains team name or vice versa, or age group matches
+      return sName.includes(teamNameLower) || teamNameLower.includes(sName)
+        || (team.ageGroup && sName.includes(team.ageGroup.toLowerCase()));
+    });
+
+    // Use the most recent matching stat doc
+    if (matchingStats.length > 0) {
+      const statDoc = matchingStats[0]; // already sorted by importedAt desc
+      for (const sp of statDoc.players) {
+        const key = `${sp.firstName.toLowerCase()} ${sp.lastName.toLowerCase()}`;
+        map.set(key, sp);
+      }
+    }
+    return map;
+  }, [allTeamStats, team, players]);
 
   const { data: allPlayers = [] } = useQuery({
     queryKey: ['players', 'all'],
@@ -291,6 +324,102 @@ const TeamDetailsPage = () => {
       headerAlign: 'center',
       renderCell: (params) => params.value || '--',
     },
+    // --- Batting stats columns (from GC CSV import) ---
+    ...(playerStatsMap.size > 0 ? [
+      {
+        field: 'statAvg',
+        headerName: 'AVG',
+        width: 70,
+        align: 'center' as const,
+        headerAlign: 'center' as const,
+        valueGetter: (params: any) => {
+          const key = `${(params.row.firstName || '').toLowerCase()} ${(params.row.lastName || '').toLowerCase()}`;
+          return playerStatsMap.get(key)?.batting.avg || '--';
+        },
+      },
+      {
+        field: 'statH',
+        headerName: 'H',
+        width: 50,
+        align: 'center' as const,
+        headerAlign: 'center' as const,
+        valueGetter: (params: any) => {
+          const key = `${(params.row.firstName || '').toLowerCase()} ${(params.row.lastName || '').toLowerCase()}`;
+          const s = playerStatsMap.get(key);
+          return s ? s.batting.h : '--';
+        },
+      },
+      {
+        field: 'statRBI',
+        headerName: 'RBI',
+        width: 55,
+        align: 'center' as const,
+        headerAlign: 'center' as const,
+        valueGetter: (params: any) => {
+          const key = `${(params.row.firstName || '').toLowerCase()} ${(params.row.lastName || '').toLowerCase()}`;
+          const s = playerStatsMap.get(key);
+          return s ? s.batting.rbi : '--';
+        },
+      },
+      {
+        field: 'statR',
+        headerName: 'R',
+        width: 50,
+        align: 'center' as const,
+        headerAlign: 'center' as const,
+        valueGetter: (params: any) => {
+          const key = `${(params.row.firstName || '').toLowerCase()} ${(params.row.lastName || '').toLowerCase()}`;
+          const s = playerStatsMap.get(key);
+          return s ? s.batting.r : '--';
+        },
+      },
+      {
+        field: 'statSB',
+        headerName: 'SB',
+        width: 50,
+        align: 'center' as const,
+        headerAlign: 'center' as const,
+        valueGetter: (params: any) => {
+          const key = `${(params.row.firstName || '').toLowerCase()} ${(params.row.lastName || '').toLowerCase()}`;
+          const s = playerStatsMap.get(key);
+          return s ? s.batting.sb : '--';
+        },
+      },
+      {
+        field: 'statSO',
+        headerName: 'SO',
+        width: 50,
+        align: 'center' as const,
+        headerAlign: 'center' as const,
+        valueGetter: (params: any) => {
+          const key = `${(params.row.firstName || '').toLowerCase()} ${(params.row.lastName || '').toLowerCase()}`;
+          const s = playerStatsMap.get(key);
+          return s ? s.batting.so : '--';
+        },
+      },
+      {
+        field: 'statOBP',
+        headerName: 'OBP',
+        width: 70,
+        align: 'center' as const,
+        headerAlign: 'center' as const,
+        valueGetter: (params: any) => {
+          const key = `${(params.row.firstName || '').toLowerCase()} ${(params.row.lastName || '').toLowerCase()}`;
+          return playerStatsMap.get(key)?.batting.obp || '--';
+        },
+      },
+      {
+        field: 'statSLG',
+        headerName: 'SLG',
+        width: 70,
+        align: 'center' as const,
+        headerAlign: 'center' as const,
+        valueGetter: (params: any) => {
+          const key = `${(params.row.firstName || '').toLowerCase()} ${(params.row.lastName || '').toLowerCase()}`;
+          return playerStatsMap.get(key)?.batting.slg || '--';
+        },
+      },
+    ] : []),
     {
       field: 'dateOfBirth',
       headerName: 'DOB',

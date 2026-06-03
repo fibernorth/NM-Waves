@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -18,11 +18,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { generalLedgerApi } from '@/lib/api/generalLedger';
 import { chartOfAccountsApi } from '@/lib/api/chartOfAccounts';
 import { expensesApi, incomeApi } from '@/lib/api/accounting';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
+import { downloadCSV } from '@/lib/utils/exportReports';
 import toast from 'react-hot-toast';
 
 const currentYear = new Date().getFullYear().toString();
@@ -128,6 +130,21 @@ const TrialBalancePage = () => {
     ...a,
   }));
 
+  const handleExportCSV = useCallback(() => {
+    if (!trialBalance) return;
+    const headers = ['Account #', 'Account Name', 'Type', 'Debits', 'Credits', 'Balance'];
+    const csvRows = trialBalance.accounts.map(a => [
+      a.accountNumber,
+      a.accountName,
+      a.accountType,
+      a.totalDebit > 0 ? a.totalDebit.toFixed(2) : '',
+      a.totalCredit > 0 ? a.totalCredit.toFixed(2) : '',
+      a.balance !== 0 ? `${Math.abs(a.balance).toFixed(2)} ${a.balance > 0 ? 'Dr' : 'Cr'}` : '',
+    ]);
+    csvRows.push(['', '', 'TOTALS', trialBalance.totalDebits.toFixed(2), trialBalance.totalCredits.toFixed(2), trialBalance.isBalanced ? 'Balanced' : 'Unbalanced']);
+    downloadCSV(`trial-balance-${season || 'all'}.csv`, headers, csvRows);
+  }, [trialBalance, season]);
+
   if (!isAdmin) {
     return (
       <Box>
@@ -161,6 +178,14 @@ const TrialBalancePage = () => {
             disabled={backfillMutation.isPending}
           >
             {backfillMutation.isPending ? 'Posting...' : 'Backfill GL from Transactions'}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<FileDownloadIcon />}
+            onClick={handleExportCSV}
+            disabled={!trialBalance}
+          >
+            Download CSV
           </Button>
         </Box>
       </Box>

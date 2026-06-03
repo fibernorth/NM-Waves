@@ -5,6 +5,16 @@ import * as nodemailer from 'nodemailer';
 const getDb = () => admin.firestore();
 
 const ORG_EMAIL = 'tcwavessoftball@gmail.com';
+const SITE_URL = functions.config().app?.site_url || 'https://nmwaves.com';
+
+/** Escape HTML special characters to prevent XSS in email templates */
+function esc(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 // Shared email header/footer for brand consistency
 const emailHeader = `
@@ -121,11 +131,11 @@ export async function sendPaymentReceipt(receiptData: ReceiptData): Promise<void
           <table style="width: 100%; border-collapse: collapse;">
             <tr><td style="padding: 8px 0; color: #666;">Date:</td><td style="padding: 8px 0; font-weight: bold;">${formattedDate}</td></tr>
             <tr><td style="padding: 8px 0; color: #666;">Amount:</td><td style="padding: 8px 0; font-weight: bold; color: #2e7d32;">${formattedAmount}</td></tr>
-            <tr><td style="padding: 8px 0; color: #666;">Player:</td><td style="padding: 8px 0; font-weight: bold;">${playerName}</td></tr>
-            <tr><td style="padding: 8px 0; color: #666;">Team:</td><td style="padding: 8px 0;">${teamName}</td></tr>
-            <tr><td style="padding: 8px 0; color: #666;">Season:</td><td style="padding: 8px 0;">${season}</td></tr>
-            ${sponsorBusinessName ? `<tr><td style="padding: 8px 0; color: #666;">Sponsor:</td><td style="padding: 8px 0;">${sponsorBusinessName}</td></tr>` : ''}
-            ${stripeSessionId ? `<tr><td style="padding: 8px 0; color: #666;">Reference:</td><td style="padding: 8px 0; font-size: 12px;">${stripeSessionId}</td></tr>` : ''}
+            <tr><td style="padding: 8px 0; color: #666;">Player:</td><td style="padding: 8px 0; font-weight: bold;">${esc(playerName)}</td></tr>
+            <tr><td style="padding: 8px 0; color: #666;">Team:</td><td style="padding: 8px 0;">${esc(teamName)}</td></tr>
+            <tr><td style="padding: 8px 0; color: #666;">Season:</td><td style="padding: 8px 0;">${esc(season)}</td></tr>
+            ${sponsorBusinessName ? `<tr><td style="padding: 8px 0; color: #666;">Sponsor:</td><td style="padding: 8px 0;">${esc(sponsorBusinessName)}</td></tr>` : ''}
+            ${stripeSessionId ? `<tr><td style="padding: 8px 0; color: #666;">Reference:</td><td style="padding: 8px 0; font-size: 12px;">${esc(stripeSessionId)}</td></tr>` : ''}
           </table>
         </div>
         <div style="background-color: white; padding: 15px; border-radius: 8px; text-align: center;">
@@ -189,8 +199,8 @@ export async function sendInvoiceNotification(data: InvoiceNotificationData): Pr
       <div style="padding: 30px; background-color: #f5f5f5;">
         <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
           <h2 style="color: #333; margin-top: 0;">Invoice Notice</h2>
-          <p>Hi ${parentName || 'Parent/Guardian'},</p>
-          <p>This is a billing notice for <strong>${playerName}</strong> on the <strong>${teamName}</strong> team for the <strong>${season}</strong> season.</p>
+          <p>Hi ${esc(parentName || 'Parent/Guardian')},</p>
+          <p>This is a billing notice for <strong>${esc(playerName)}</strong> on the <strong>${esc(teamName)}</strong> team for the <strong>${esc(season)}</strong> season.</p>
 
           <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
             ${feeRows}
@@ -222,10 +232,10 @@ export async function sendInvoiceNotification(data: InvoiceNotificationData): Pr
             </a>
           </div>
           <p style="text-align: center; color: #666; font-size: 13px;">
-            Or log in to your parent account at <a href="https://tcwavesballclub.com">tcwavesballclub.com</a> to view details and make a payment.
+            Or log in to your parent account at <a href="${SITE_URL}">${SITE_URL.replace('https://', '')}</a> to view details and make a payment.
           </p>` : `
           <p style="text-align: center; color: #666;">
-            Log in to your parent account at <a href="https://tcwavesballclub.com">tcwavesballclub.com</a> to view details and make a payment.
+            Log in to your parent account at <a href="${SITE_URL}">${SITE_URL.replace('https://', '')}</a> to view details and make a payment.
           </p>`}
         </div>
 
@@ -256,7 +266,7 @@ export async function sendParentInviteEmail(data: InviteData): Promise<void> {
   const { email, parentName, playerNames, resetLink } = data;
 
   const playerList = playerNames.length > 0
-    ? playerNames.map(n => `<li><strong>${n}</strong></li>`).join('')
+    ? playerNames.map(n => `<li><strong>${esc(n)}</strong></li>`).join('')
     : '<li>Your child</li>';
 
   const subject = `You're Invited - TC Waves Ball Club Parent Portal`;
@@ -266,7 +276,7 @@ export async function sendParentInviteEmail(data: InviteData): Promise<void> {
       <div style="padding: 30px; background-color: #f5f5f5;">
         <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
           <h2 style="color: #333; margin-top: 0;">Welcome to TC Waves!</h2>
-          <p>Hi ${parentName || 'Parent/Guardian'},</p>
+          <p>Hi ${esc(parentName || 'Parent/Guardian')},</p>
           <p>An account has been created for you on the TC Waves Ball Club parent portal. You can use it to:</p>
           <ul style="color: #555;">
             <li>View invoices and payment history</li>
@@ -287,7 +297,7 @@ export async function sendParentInviteEmail(data: InviteData): Promise<void> {
           <p style="color: #666; font-size: 13px;">
             This link does not expire. You can use it any time to set your password.
             If you have any issues, visit
-            <a href="https://nmwaves.com/login">nmwaves.com/login</a>
+            <a href="${SITE_URL}/login">${SITE_URL.replace('https://', '')}/login</a>
             and click "Forgot Password" to get a new link.
           </p>
         </div>

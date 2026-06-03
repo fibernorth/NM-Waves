@@ -207,6 +207,14 @@ export const expensesApi = {
   },
 
   delete: async (id: string): Promise<void> => {
+    // Clean up associated GL entries
+    const glEntries = await getDocs(query(
+      collection(db, 'generalLedger'),
+      where('sourceType', '==', 'expense'),
+      where('sourceId', '==', id)
+    ));
+    await Promise.all(glEntries.docs.map(d => deleteDoc(d.ref)));
+    // Delete the expense
     const docRef = doc(db, EXPENSES_COLLECTION, id);
     await deleteDoc(docRef);
   },
@@ -349,6 +357,14 @@ export const incomeApi = {
   },
 
   delete: async (id: string): Promise<void> => {
+    // Clean up associated GL entries
+    const glEntries = await getDocs(query(
+      collection(db, 'generalLedger'),
+      where('sourceType', '==', 'income'),
+      where('sourceId', '==', id)
+    ));
+    await Promise.all(glEntries.docs.map(d => deleteDoc(d.ref)));
+    // Delete the income record
     const docRef = doc(db, INCOME_COLLECTION, id);
     await deleteDoc(docRef);
   },
@@ -651,9 +667,18 @@ export const reportsApi = {
     const allIncomes = incomeSnapshot.docs.map(doc => convertIncome(doc.id, doc.data()));
     const allExpenses = expensesSnapshot.docs.map(doc => convertExpense(doc.id, doc.data()));
 
-    // Flexible season matching
-    const incomes = season ? allIncomes.filter(i => matchesSeason(i.season, season)) : allIncomes;
-    const expenses = season ? allExpenses.filter(e => matchesSeason(e.season, season)) : allExpenses;
+    // Flexible season matching + date range filtering
+    let incomes = season ? allIncomes.filter(i => matchesSeason(i.season, season)) : allIncomes;
+    let expenses = season ? allExpenses.filter(e => matchesSeason(e.season, season)) : allExpenses;
+
+    if (startDate) {
+      incomes = incomes.filter(i => i.date >= startDate);
+      expenses = expenses.filter(e => e.date >= startDate);
+    }
+    if (endDate) {
+      incomes = incomes.filter(i => i.date <= endDate);
+      expenses = expenses.filter(e => e.date <= endDate);
+    }
 
     // Calculate income by category
     const income = {

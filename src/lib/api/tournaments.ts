@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   addDoc,
   updateDoc,
@@ -68,6 +69,12 @@ const convertTournament = (id: string, data: any): Tournament => ({
 });
 
 export const tournamentsApi = {
+  getById: async (id: string): Promise<Tournament | null> => {
+    const docSnap = await getDoc(doc(db, COLLECTION, id));
+    if (!docSnap.exists()) return null;
+    return convertTournament(docSnap.id, docSnap.data());
+  },
+
   getAll: async (): Promise<Tournament[]> => {
     const q = query(collection(db, COLLECTION), orderBy('startDate', 'desc'));
     const snapshot = await getDocs(q);
@@ -90,6 +97,8 @@ export const tournamentsApi = {
       startDate: Timestamp.fromDate(data.startDate),
       endDate: Timestamp.fromDate(data.endDate),
       workflowStatus: data.workflowStatus || 'wanting',
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
     };
     if (data.insuranceSentDate) {
       saveData.insuranceSentDate = Timestamp.fromDate(data.insuranceSentDate);

@@ -1,6 +1,6 @@
 {
   "name": "tc-waves-functions",
-  "description": "Cloud Functions for TC Waves - GameChanger scraper",
+  "description": "Cloud Functions for TC Waves Ball Club",
   "scripts": {
     "build": "tsc",
     "serve": "npm run build && firebase emulators:start --only functions",
@@ -20,7 +20,6 @@
     "firebase-functions": "^5.0.0",
     "googleapis": "^130.0.0",
     "nodemailer": "^8.0.2",
-    "puppeteer-core": "^22.0.0",
     "stripe": "^14.0.0"
   },
   "devDependencies": {

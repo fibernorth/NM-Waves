@@ -28,6 +28,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import PrintIcon from '@mui/icons-material/Print';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import { downloadCSV } from '@/lib/utils/exportReports';
 import toast from 'react-hot-toast';
 
 const currentYear = new Date().getFullYear();
@@ -100,17 +101,9 @@ const FinancialReportsPage = () => {
       return;
     }
 
-    const teamName = selectedTeam
-      ? teams.find(t => t.id === selectedTeam)?.name || 'Team'
-      : 'Organization-wide';
-
-    const rows: string[][] = [
-      ['Financial Report'],
-      [`Season: ${selectedSeason}`, `Scope: ${teamName}`],
-      [],
-      ['Category', 'Amount'],
-      [],
-      ['INCOME'],
+    const headers = ['Category', 'Amount'];
+    const rows: (string | number)[][] = [
+      ['INCOME', ''],
       ['Player Payments', `$${report.income.playerPayments.toFixed(2)}`],
       ['Sponsorships', `$${report.income.sponsorships.toFixed(2)}`],
       ['Fundraisers', `$${report.income.fundraisers.toFixed(2)}`],
@@ -120,8 +113,8 @@ const FinancialReportsPage = () => {
       ['Concessions', `$${report.income.concessions.toFixed(2)}`],
       ['Other Income', `$${report.income.other.toFixed(2)}`],
       ['Total Income', `$${report.income.total.toFixed(2)}`],
-      [],
-      ['EXPENSES'],
+      ['', ''],
+      ['EXPENSES', ''],
       ['Facilities', `$${report.expenses.facilities.toFixed(2)}`],
       ['Equipment', `$${report.expenses.equipment.toFixed(2)}`],
       ['Uniforms', `$${report.expenses.uniforms.toFixed(2)}`],
@@ -137,25 +130,15 @@ const FinancialReportsPage = () => {
       ['Maintenance', `$${report.expenses.maintenance.toFixed(2)}`],
       ['Other Expenses', `$${report.expenses.other.toFixed(2)}`],
       ['Total Expenses', `$${report.expenses.total.toFixed(2)}`],
-      [],
+      ['', ''],
       ['NET INCOME', `$${report.netIncome.toFixed(2)}`],
-      [],
+      ['', ''],
       ['Outstanding Payables', `$${report.outstandingPayables.toFixed(2)}`],
       ['Outstanding Receivables', `$${outstandingReceivables.toFixed(2)}`],
     ];
 
-    const csvContent = rows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `financial-report-${selectedSeason.replace(/\s+/g, '-')}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success('CSV exported successfully');
-  }, [report, selectedSeason, selectedTeam, teams, outstandingReceivables]);
+    downloadCSV(`financial-report-${selectedSeason.replace(/\s+/g, '-')}.csv`, headers, rows);
+  }, [report, selectedSeason, outstandingReceivables]);
 
   if (!isAdmin) {
     return (

@@ -118,6 +118,7 @@ export const EXPENSE_CATEGORY_TO_ACCOUNT: Record<string, string> = {
   league_fees: '5600',
   coaching: '5700',
   maintenance: '5800',
+  processing_fees: '5850',
   administrative: '6000',
   marketing: '6100',
   fundraising: '7000',

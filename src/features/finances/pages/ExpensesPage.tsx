@@ -146,6 +146,8 @@ const ExpensesPage = () => {
       expensesApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['generalLedger'] });
+      queryClient.invalidateQueries({ queryKey: ['financialReport'] });
       toast.success('Expense created successfully');
       closeDialog();
     },
@@ -159,6 +161,7 @@ const ExpensesPage = () => {
       expensesApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['financialReport'] });
       toast.success('Expense updated successfully');
       closeDialog();
     },
@@ -171,6 +174,8 @@ const ExpensesPage = () => {
     mutationFn: (id: string) => expensesApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['generalLedger'] });
+      queryClient.invalidateQueries({ queryKey: ['financialReport'] });
       toast.success('Expense deleted successfully');
     },
     onError: (err: Error) => {
@@ -182,6 +187,7 @@ const ExpensesPage = () => {
     mutationFn: ({ id, date }: { id: string; date: Date }) => expensesApi.markAsPaid(id, date),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['financialReport'] });
       toast.success('Expense marked as paid');
     },
     onError: (err: Error) => {

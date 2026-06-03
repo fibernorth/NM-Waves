@@ -111,6 +111,8 @@ const IncomePage = () => {
       incomeApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['income'] });
+      queryClient.invalidateQueries({ queryKey: ['generalLedger'] });
+      queryClient.invalidateQueries({ queryKey: ['financialReport'] });
       toast.success('Income record created successfully');
       closeDialog();
     },
@@ -124,6 +126,7 @@ const IncomePage = () => {
       incomeApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['income'] });
+      queryClient.invalidateQueries({ queryKey: ['financialReport'] });
       toast.success('Income record updated successfully');
       closeDialog();
     },
@@ -136,6 +139,8 @@ const IncomePage = () => {
     mutationFn: (id: string) => incomeApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['income'] });
+      queryClient.invalidateQueries({ queryKey: ['generalLedger'] });
+      queryClient.invalidateQueries({ queryKey: ['financialReport'] });
       toast.success('Income record deleted successfully');
     },
     onError: (err: Error) => {

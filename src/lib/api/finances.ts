@@ -209,7 +209,7 @@ export const playerFinancesApi = {
     const docRef = doc(db, FINANCES_COLLECTION, financeId);
     const docSnap = await getDoc(docRef);
 
-    const paymentId = `payment_${Date.now()}`;
+    const paymentId = `payment_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
     if (!docSnap.exists()) {
       throw new Error('Player finance record not found');

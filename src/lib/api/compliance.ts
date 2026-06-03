@@ -90,7 +90,7 @@ export const volunteerHoursApi = {
     const updateData: any = { ...data };
     if (data.date) updateData.date = Timestamp.fromDate(data.date);
     if (data.verifiedAt) updateData.verifiedAt = Timestamp.fromDate(data.verifiedAt);
-    await updateDoc(doc(db, VOLUNTEER_HOURS_COLLECTION, id), updateData);
+    await updateDoc(doc(db, VOLUNTEER_HOURS_COLLECTION, id), cleanData(updateData));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -181,7 +181,7 @@ export const backgroundChecksApi = {
     if (data.submittedDate) updateData.submittedDate = Timestamp.fromDate(data.submittedDate);
     if (data.completedDate) updateData.completedDate = Timestamp.fromDate(data.completedDate);
     if (data.expirationDate) updateData.expirationDate = Timestamp.fromDate(data.expirationDate);
-    await updateDoc(doc(db, BACKGROUND_CHECKS_COLLECTION, id), updateData);
+    await updateDoc(doc(db, BACKGROUND_CHECKS_COLLECTION, id), cleanData(updateData));
   },
 
   delete: async (id: string): Promise<void> => {
@@ -259,7 +259,7 @@ export const form990Api = {
   update: async (id: string, data: Partial<Form990Data>): Promise<void> => {
     const updateData: any = { ...data, updatedAt: Timestamp.now() };
     if (data.filedDate) updateData.filedDate = Timestamp.fromDate(data.filedDate);
-    await updateDoc(doc(db, FORM990_COLLECTION, id), updateData);
+    await updateDoc(doc(db, FORM990_COLLECTION, id), cleanData(updateData));
   },
 
   delete: async (id: string): Promise<void> => {

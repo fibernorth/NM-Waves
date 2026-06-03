@@ -15,6 +15,15 @@ export const listDrivePhotos = functions.https.onCall(async (_data, context) => 
     throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated');
   }
 
+  // Require coach or higher role
+  const userDoc = await getDb().collection('users').doc(context.auth.uid).get();
+  const userData = userDoc.data();
+  const roles: string[] = userData?.roles || [];
+  const hasAccess = roles.some(r => ['coach', 'admin', 'master-admin'].includes(r));
+  if (!hasAccess) {
+    throw new functions.https.HttpsError('permission-denied', 'Coach or higher role required');
+  }
+
   // Get integration settings
   const settingsDoc = await getDb().doc('appSettings/integrations').get();
   const settings = settingsDoc.data();

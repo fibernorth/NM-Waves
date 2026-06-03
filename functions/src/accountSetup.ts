@@ -1,9 +1,11 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
 import cors from 'cors';
 import { sendPasswordResetCustomEmail } from './emails';
 
 const corsHandler = cors({ origin: true });
+const SITE_URL = functions.config().app?.site_url || 'https://nmwaves.com';
 
 /**
  * HTTP function to set a user's password using a custom invite or reset token.
@@ -35,6 +37,32 @@ export const setAccountPassword = functions.https.onRequest((req, res) => {
     const db = admin.firestore();
 
     try {
+      // Rate limiting: max 5 password set attempts per email per hour
+      const oneHourAgo = new Date();
+      oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+      const attemptsKey = `passwordAttempts_${email.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+      const attemptRef = db.collection('rateLimits').doc(attemptsKey);
+      const attemptDoc = await attemptRef.get();
+      if (attemptDoc.exists) {
+        const data = attemptDoc.data()!;
+        const lastAttempt = data.lastAttempt?.toDate();
+        if (lastAttempt && lastAttempt > oneHourAgo && (data.count || 0) >= 5) {
+          res.status(429).json({ error: 'Too many attempts. Please try again later.' });
+          return;
+        }
+        // Reset counter if outside the window
+        if (!lastAttempt || lastAttempt <= oneHourAgo) {
+          await attemptRef.set({ count: 1, lastAttempt: admin.firestore.Timestamp.now() });
+        } else {
+          await attemptRef.update({
+            count: admin.firestore.FieldValue.increment(1),
+            lastAttempt: admin.firestore.Timestamp.now(),
+          });
+        }
+      } else {
+        await attemptRef.set({ count: 1, lastAttempt: admin.firestore.Timestamp.now() });
+      }
+
       if (type === 'invite') {
         // Look up invite token from pendingUsers collection
         const pendingQuery = await db
@@ -156,6 +184,19 @@ export const sendCustomPasswordReset = functions.https.onRequest((req, res) => {
     const db = admin.firestore();
 
     try {
+      // Rate limiting: max 3 reset requests per email per hour
+      const oneHourAgo = new Date();
+      oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+      const recentResets = await db.collection('passwordResets')
+        .where('email', '==', email)
+        .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(oneHourAgo))
+        .get();
+      if (recentResets.size >= 3) {
+        // Return success message to avoid revealing rate limit as an enumeration signal
+        res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
+        return;
+      }
+
       // Verify the user exists in Firebase Auth
       try {
         await admin.auth().getUserByEmail(email);
@@ -166,7 +207,6 @@ export const sendCustomPasswordReset = functions.https.onRequest((req, res) => {
       }
 
       // Generate a random token
-      const crypto = require('crypto');
       const token = crypto.randomUUID();
 
       // Store with 48-hour expiration
@@ -182,7 +222,7 @@ export const sendCustomPasswordReset = functions.https.onRequest((req, res) => {
       });
 
       // Send email with custom reset link
-      const resetLink = `https://nmwaves.com/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+      const resetLink = `${SITE_URL}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
 
       await sendPasswordResetCustomEmail({
         email,

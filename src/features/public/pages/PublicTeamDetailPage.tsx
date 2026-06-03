@@ -18,15 +18,8 @@ import { Button } from '@mui/material';
 import GroupsIcon from '@mui/icons-material/Groups';
 import SportsIcon from '@mui/icons-material/Sports';
 import PersonIcon from '@mui/icons-material/Person';
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { teamsApi } from '@/lib/api/teams';
+import { playersApi } from '@/lib/api/players';
 import type { Team } from '@/types/models';
 import SponsorBanner from '@/components/common/SponsorBanner';
 
@@ -56,29 +49,12 @@ const PublicTeamDetailPage = () => {
       }
 
       try {
-        const teamDoc = await getDoc(doc(db, 'teams', id));
-        if (!teamDoc.exists()) {
+        const teamData = await teamsApi.getById(id);
+        if (!teamData) {
           setError('Team not found.');
           setLoading(false);
           return;
         }
-
-        const data = teamDoc.data();
-        const teamData: Team = {
-          id: teamDoc.id,
-          name: data.name,
-          ageGroup: data.ageGroup,
-          season: data.season,
-          coachIds: data.coachIds || [],
-          playerIds: data.playerIds || [],
-          coachId: data.coachId,
-          coachName: data.coachName,
-          gcTeamId: data.gcTeamId,
-          active: data.active ?? true,
-          status: data.status || 'active',
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
-        };
 
         setTeam(teamData);
       } catch (err) {
@@ -101,21 +77,14 @@ const PublicTeamDetailPage = () => {
       }
 
       try {
-        const q = query(
-          collection(db, 'players'),
-          where('teamId', '==', id)
-        );
-        const snapshot = await getDocs(q);
-        const playersData: PublicPlayer[] = snapshot.docs
-          .map((doc) => {
-            const data = doc.data();
-            return {
-              firstName: data.firstName || '',
-              lastInitial: data.lastName ? data.lastName.charAt(0) + '.' : '',
-              jerseyNumber: data.jerseyNumber,
-              positions: data.positions || [],
-            };
-          })
+        const fullPlayers = await playersApi.getByTeam(id);
+        const playersData: PublicPlayer[] = fullPlayers
+          .map((p) => ({
+            firstName: p.firstName || '',
+            lastInitial: p.lastName ? p.lastName.charAt(0) + '.' : '',
+            jerseyNumber: p.jerseyNumber,
+            positions: p.positions || [],
+          }))
           .sort((a, b) => {
             // Sort by jersey number first (if available), then by first name
             if (a.jerseyNumber != null && b.jerseyNumber != null) {

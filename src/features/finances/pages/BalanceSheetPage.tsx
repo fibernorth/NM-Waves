@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -21,9 +21,11 @@ import { useQuery } from '@tanstack/react-query';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import PrintIcon from '@mui/icons-material/Print';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { generalLedgerApi } from '@/lib/api/generalLedger';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
+import { downloadCSV, fmtCurrencyCSV } from '@/lib/utils/exportReports';
 
 const currentYear = new Date().getFullYear().toString();
 
@@ -98,6 +100,29 @@ const BalanceSheetPage = () => {
     queryFn: () => generalLedgerApi.computeBalanceSheet(season || undefined),
   });
 
+  const handleExportCSV = useCallback(() => {
+    if (!balanceSheet) return;
+    const headers = ['Section', 'Account #', 'Account Name', 'Amount'];
+    const rows: (string | number)[][] = [];
+    for (const item of balanceSheet.assets) {
+      rows.push(['Assets', item.accountNumber, item.name, fmtCurrencyCSV(item.balance)]);
+    }
+    rows.push(['', '', 'Total Assets', fmtCurrencyCSV(balanceSheet.totalAssets)]);
+    rows.push(['', '', '', '']);
+    for (const item of balanceSheet.liabilities) {
+      rows.push(['Liabilities', item.accountNumber, item.name, fmtCurrencyCSV(item.balance)]);
+    }
+    rows.push(['', '', 'Total Liabilities', fmtCurrencyCSV(balanceSheet.totalLiabilities)]);
+    rows.push(['', '', '', '']);
+    for (const item of balanceSheet.netAssets) {
+      rows.push(['Net Assets', item.accountNumber, item.name, fmtCurrencyCSV(item.balance)]);
+    }
+    rows.push(['', '', 'Total Net Assets', fmtCurrencyCSV(balanceSheet.totalNetAssets)]);
+    rows.push(['', '', '', '']);
+    rows.push(['', '', 'Total Liabilities + Net Assets', fmtCurrencyCSV(balanceSheet.totalLiabilities + balanceSheet.totalNetAssets)]);
+    downloadCSV(`balance-sheet-${season || 'all'}.csv`, headers, rows);
+  }, [balanceSheet, season]);
+
   if (!isAdmin) {
     return (
       <Box>
@@ -116,9 +141,14 @@ const BalanceSheetPage = () => {
           <Typography variant="h4">Statement of Financial Position</Typography>
           <Typography variant="body2" color="text.secondary">Balance Sheet</Typography>
         </Box>
-        <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => window.print()}>
-          Print
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => window.print()}>
+            Print
+          </Button>
+          <Button variant="outlined" startIcon={<FileDownloadIcon />} onClick={handleExportCSV} disabled={!balanceSheet}>
+            Download CSV
+          </Button>
+        </Box>
       </Box>
 
       {/* Season Filter */}

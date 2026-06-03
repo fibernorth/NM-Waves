@@ -77,7 +77,12 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuth();
       allow create: if (isAuth() && request.auth.uid == userId && !('roles' in request.resource.data && request.resource.data.roles.hasAny(['admin', 'master-admin']))) || isAdmin();
-      allow update: if isUser(userId) || isAdmin();
+      // Users can update their own profile, but ONLY admins can change roles
+      allow update: if isAdmin() || (
+        isUser(userId) &&
+        (!('roles' in request.resource.data) || request.resource.data.roles == resource.data.roles) &&
+        (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)
+      );
       allow delete: if isMasterAdmin();
     }
 
@@ -107,7 +112,8 @@ service cloud.firestore {
     // SPONSORS
     match /sponsors/{docId} {
       allow read: if true;
-      allow create: if isAuth();
+      // Only admins and sponsor-role users can create; webhook creates via Admin SDK
+      allow create: if isAdmin() || isSponsor();
       allow update: if isAdmin() || (isSponsor() && resource.data.userId == request.auth.uid);
       allow delete: if isAdmin();
     }
@@ -127,7 +133,8 @@ service cloud.firestore {
     // CONVERSATIONS & MESSAGES
     match /conversations/{convoId} {
       allow read: if isAuth() && request.auth.uid in resource.data.participantIds;
-      allow create: if isAuth();
+      // Creator must be a participant in the conversation
+      allow create: if isAuth() && request.auth.uid in request.resource.data.participantIds;
       allow update: if isAuth() && request.auth.uid in resource.data.participantIds;
 
       match /messages/{messageId} {
@@ -171,9 +178,9 @@ service cloud.firestore {
     }
 
     // PLAYER FINANCES
-    // Parents can read finance records for their linked children
+    // Parents can read finance records for their linked children; sponsors can read for sponsored players
     match /playerFinances/{docId} {
-      allow read: if isCoach() || (
+      allow read: if isCoach() || isSponsor() || (
         isAuth() && hasRole('parent') &&
         resource.data.playerId in getUserData(request.auth.uid).linkedPlayerIds
       );
@@ -187,8 +194,11 @@ service cloud.firestore {
     }
 
     // INCOME
+    // Sponsors can read their own sponsorship income records
     match /income/{docId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin() || (
+        isSponsor() && resource.data.category == 'sponsorships'
+      );
       allow write: if isAdmin();
     }
 
@@ -252,13 +262,13 @@ service cloud.firestore {
 
     // MAIL (receipt emails via Firebase Trigger Email extension)
     match /mail/{docId} {
-      allow create: if isAuth();
+      allow create: if isAdmin();
       allow read: if isAdmin();
     }
 
     // RECEIPTS (fallback receipt storage)
     match /receipts/{docId} {
-      allow create: if isAuth();
+      allow create: if isAdmin();
       allow read: if isAdmin();
     }
 
@@ -360,6 +370,40 @@ service cloud.firestore {
 
     // FORM 990 DATA
     match /form990Data/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // TEAM STATS (imported via scripts, read by coaches+)
+    match /teamStats/{docId} {
+      allow read: if isCoach();
+      allow write: if isAdmin();
+    }
+
+    // PASSWORD RESETS (server-only via Admin SDK — deny all client access)
+    match /passwordResets/{docId} {
+      allow read, write: if false;
+    }
+
+    // RATE LIMITS (server-only via Admin SDK — deny all client access)
+    match /rateLimits/{docId} {
+      allow read, write: if false;
+    }
+
+    // FISCAL YEAR CLOSES (admin only — year-end closing records)
+    match /fiscalYearCloses/{docId} {
+      allow read: if isAdmin();
+      allow write: if isMasterAdmin();
+    }
+
+    // FIXED ASSETS (admin only — depreciation tracking)
+    match /fixedAssets/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // BANK RECONCILIATIONS (admin only)
+    match /bankReconciliations/{docId} {
       allow read: if isAdmin();
       allow write: if isAdmin();
     }

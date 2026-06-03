@@ -87,19 +87,30 @@ import TrialBalancePage from './features/finances/pages/TrialBalancePage';
 import BalanceSheetPage from './features/finances/pages/BalanceSheetPage';
 import BudgetVsActualPage from './features/finances/pages/BudgetVsActualPage';
 import AgedReceivablesPage from './features/finances/pages/AgedReceivablesPage';
+import FunctionalExpensesPage from './features/finances/pages/FunctionalExpensesPage';
+import CashFlowPage from './features/finances/pages/CashFlowPage';
+import ComparativeReportsPage from './features/finances/pages/ComparativeReportsPage';
+import JournalEntryPage from './features/finances/pages/JournalEntryPage';
+import YearEndClosingPage from './features/finances/pages/YearEndClosingPage';
+import DepreciationPage from './features/finances/pages/DepreciationPage';
+import BankReconciliationPage from './features/finances/pages/BankReconciliationPage';
 
 // Non-Profit Compliance (Phase 3)
 import DonorManagementPage from './features/compliance/pages/DonorManagementPage';
 import GovernancePage from './features/compliance/pages/GovernancePage';
 import ComplianceDashboardPage from './features/compliance/pages/ComplianceDashboardPage';
+import Form1099Page from './features/compliance/pages/Form1099Page';
 
 // Public Website Polish (Phase 4)
-import StaffDirectoryPage from './features/public/pages/StaffDirectoryPage';
-import PricingPage from './features/public/pages/PricingPage';
 import PrivacyPolicyPage from './features/public/pages/PrivacyPolicyPage';
 import TermsPage from './features/public/pages/TermsPage';
-import ParentResourcesPage from './features/public/pages/ParentResourcesPage';
 import SponsorshipPackagesPage from './features/public/pages/SponsorshipPackagesPage';
+import PricingPage from './features/public/pages/PricingPage';
+import StaffDirectoryPage from './features/public/pages/StaffDirectoryPage';
+import ParentResourcesPage from './features/public/pages/ParentResourcesPage';
+
+// Stats
+import TeamStatsPage from './features/stats/pages/TeamStatsPage';
 
 // Homepage Manager
 import HomepageManagerPage from './features/homepage-manager/pages/HomepageManagerPage';
@@ -149,12 +160,12 @@ function App() {
               <Route path="/sponsors" element={<PublicSponsorsPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/tryouts" element={<TryoutRegistrationPage />} />
-              <Route path="/staff" element={<StaffDirectoryPage />} />
-              <Route path="/pricing" element={<PricingPage />} />
               <Route path="/privacy" element={<PrivacyPolicyPage />} />
               <Route path="/terms" element={<TermsPage />} />
-              <Route path="/resources" element={<ParentResourcesPage />} />
               <Route path="/sponsorship-packages" element={<SponsorshipPackagesPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/staff" element={<StaffDirectoryPage />} />
+              <Route path="/parent-resources" element={<ParentResourcesPage />} />
             </Route>
 
             {/* Public Payment Routes (no layout wrapper needed) */}
@@ -187,6 +198,7 @@ function App() {
               <Route path="/players/:id" element={<PlayerDetailsPage />} />
               <Route path="/my-invoices" element={<ParentInvoicesPage />} />
               <Route path="/tournaments" element={<TournamentsPage />} />
+              <Route path="/stats" element={<TeamStatsPage />} />
             </Route>
 
             {/* Protected Routes - Coach and above */}
@@ -215,9 +227,17 @@ function App() {
               <Route path="/finances/balance-sheet" element={<BalanceSheetPage />} />
               <Route path="/finances/budget-vs-actual" element={<BudgetVsActualPage />} />
               <Route path="/finances/aged-receivables" element={<AgedReceivablesPage />} />
+              <Route path="/finances/functional-expenses" element={<FunctionalExpensesPage />} />
+              <Route path="/finances/cash-flow" element={<CashFlowPage />} />
+              <Route path="/finances/comparative" element={<ComparativeReportsPage />} />
+              <Route path="/finances/journal-entries" element={<JournalEntryPage />} />
+              <Route path="/finances/year-end-closing" element={<YearEndClosingPage />} />
+              <Route path="/finances/depreciation" element={<DepreciationPage />} />
+              <Route path="/finances/bank-reconciliation" element={<BankReconciliationPage />} />
               <Route path="/compliance/donors" element={<DonorManagementPage />} />
               <Route path="/compliance/governance" element={<GovernancePage />} />
               <Route path="/compliance/dashboard" element={<ComplianceDashboardPage />} />
+              <Route path="/compliance/1099" element={<Form1099Page />} />
               <Route path="/sponsors/manage" element={<SponsorsPage />} />
               <Route path="/fundraisers" element={<FundraisersPage />} />
               <Route path="/scholarships" element={<ScholarshipsPage />} />

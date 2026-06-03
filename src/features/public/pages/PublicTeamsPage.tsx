@@ -18,13 +18,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import GroupsIcon from '@mui/icons-material/Groups';
 import { useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { teamsApi } from '@/lib/api/teams';
+import { playersApi } from '@/lib/api/players';
 import type { Team } from '@/types/models';
 
 interface PublicPlayer {
@@ -48,26 +43,7 @@ const PublicTeamsPage = () => {
   useEffect(() => {
     const fetchTeams = async () => {
       try {
-        const q = query(
-          collection(db, 'teams'),
-          where('active', '==', true)
-        );
-        const snapshot = await getDocs(q);
-        const teamsData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name,
-          ageGroup: doc.data().ageGroup,
-          season: doc.data().season,
-          coachIds: doc.data().coachIds || [],
-          playerIds: doc.data().playerIds || [],
-          coachId: doc.data().coachId,
-          coachName: doc.data().coachName,
-          active: doc.data().active ?? true,
-          status: doc.data().status || 'active',
-          createdAt: doc.data().createdAt?.toDate() || new Date(),
-          updatedAt: doc.data().updatedAt?.toDate() || new Date(),
-        })) as Team[];
-        teamsData.sort((a, b) => a.name.localeCompare(b.name));
+        const teamsData = await teamsApi.getActive();
         setTeams(teamsData);
       } catch (err) {
         console.error('Error fetching teams:', err);
@@ -85,20 +61,14 @@ const PublicTeamsPage = () => {
 
     setLoadingPlayers((prev) => ({ ...prev, [teamId]: true }));
     try {
-      const q = query(
-        collection(db, 'players'),
-        where('teamId', '==', teamId)
-      );
-      const snapshot = await getDocs(q);
-      const players: PublicPlayer[] = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          firstName: data.firstName || '',
-          lastInitial: data.lastName ? data.lastName.charAt(0) + '.' : '',
-          jerseyNumber: data.jerseyNumber,
-          positions: data.positions || [],
-        };
-      })
+      const fullPlayers = await playersApi.getByTeam(teamId);
+      const players: PublicPlayer[] = fullPlayers
+        .map((p) => ({
+          firstName: p.firstName || '',
+          lastInitial: p.lastName ? p.lastName.charAt(0) + '.' : '',
+          jerseyNumber: p.jerseyNumber,
+          positions: p.positions || [],
+        }))
         .sort((a, b) => a.firstName.localeCompare(b.firstName));
       setTeamPlayers((prev) => ({ ...prev, [teamId]: players }));
     } catch (err) {

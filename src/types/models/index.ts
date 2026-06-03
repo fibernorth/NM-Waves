@@ -672,6 +672,8 @@ export interface Vendor {
   website?: string;
   notes?: string;
   active: boolean;
+  is1099Eligible?: boolean;
+  taxId?: string;           // EIN or SSN for 1099 reporting
   createdAt: Date;
   updatedAt: Date;
 }
@@ -747,7 +749,8 @@ export interface ChartOfAccount {
   updatedAt: Date;
 }
 
-export type GLSourceType = 'income' | 'expense' | 'payment' | 'journal' | 'opening_balance';
+export type GLSourceType = 'income' | 'expense' | 'payment' | 'journal' | 'opening_balance' | 'closing' | 'depreciation';
+export type FundType = 'unrestricted' | 'temporarily_restricted' | 'permanently_restricted';
 
 export interface GeneralLedgerEntry {
   id: string;
@@ -761,6 +764,7 @@ export interface GeneralLedgerEntry {
   sourceType: GLSourceType;
   sourceId?: string;           // FK to the originating income/expense/payment doc
   season: string;
+  fundType?: FundType;         // For restricted fund tracking
   createdBy: string;
   createdAt: Date;
 }
@@ -1036,5 +1040,77 @@ export interface SwagStoreSettings {
   closesAt: Date | null;
   active: boolean;
   updatedBy: string;
+  updatedAt: Date;
+}
+
+// ============================================
+// FISCAL YEAR MANAGEMENT
+// ============================================
+
+export interface FiscalYearClose {
+  id: string;
+  fiscalYear: string;           // e.g., "2025-2026"
+  startDate: Date;
+  endDate: Date;
+  closedAt: Date;
+  closedBy: string;
+  closingEntryIds: string[];    // GL entry IDs for closing journal entries
+  openingBalances: Record<string, number>; // account number -> balance
+  totalRevenue: number;
+  totalExpenses: number;
+  netIncome: number;
+  notes?: string;
+}
+
+// ============================================
+// FIXED ASSETS & DEPRECIATION
+// ============================================
+
+export interface FixedAsset {
+  id: string;
+  name: string;
+  description?: string;
+  category: string;
+  purchaseDate: Date;
+  purchaseCost: number;
+  salvageValue: number;
+  usefulLifeYears: number;
+  depreciationMethod: 'straight_line';
+  assetAccountNumber: string;           // e.g., '1500' Equipment
+  depreciationExpenseAccount: string;   // e.g., '5100' Equipment Expense
+  accumulatedDepreciation: number;
+  status: 'active' | 'disposed' | 'fully_depreciated';
+  disposedDate?: Date;
+  disposedAmount?: number;
+  notes?: string;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ============================================
+// BANK RECONCILIATION
+// ============================================
+
+export interface BankReconciliation {
+  id: string;
+  accountName: string;
+  accountNumber: string;              // COA account number
+  statementDate: Date;
+  statementEndingBalance: number;
+  clearedDeposits: number;
+  clearedPayments: number;
+  clearedBalance: number;
+  outstandingDeposits: number;
+  outstandingPayments: number;
+  adjustedBankBalance: number;
+  difference: number;
+  status: 'in_progress' | 'completed';
+  clearedTransactionIds: string[];     // GL entry IDs marked as cleared
+  completedAt?: Date;
+  completedBy?: string;
+  notes?: string;
+  createdBy: string;
+  createdAt: Date;
   updatedAt: Date;
 }

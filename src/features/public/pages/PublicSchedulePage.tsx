@@ -13,22 +13,17 @@ import {
   ListItemIcon,
   ListItemText,
   Button,
+  Tabs,
+  Tab,
 } from '@mui/material';
+import SportsIcon from '@mui/icons-material/Sports';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  Timestamp,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
 import { format, isToday, isTomorrow } from 'date-fns';
 import type { ScheduleEvent } from '@/types/models';
+import { schedulesApi } from '@/lib/api/schedules';
 import SponsorBanner from '@/components/common/SponsorBanner';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
@@ -48,37 +43,46 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   other: 'Event',
 };
 
+const GC_TEAMS = [
+  { label: '12U', target: '#gc-schedule-widget-o35l', widgetId: '287ff589-cb51-4351-8d24-266df34087e6' },
+  { label: '13U', target: '#gc-schedule-widget-8626', widgetId: 'd2dfb59d-745d-4c90-b013-10e3a79bdaed' },
+];
+
 const PublicSchedulePage = () => {
   useDocumentTitle('Schedule');
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [gcTab, setGcTab] = useState(0);
+
+  // Load GameChanger SDK and initialize all team widgets
+  useEffect(() => {
+    const scriptId = 'gc-sdk-script';
+    const initWidgets = () => {
+      for (const team of GC_TEAMS) {
+        (window as any).GC?.team?.schedule?.init({
+          target: team.target,
+          widgetId: team.widgetId,
+          maxVerticalGamesVisible: 4,
+        });
+      }
+    };
+
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = 'https://widgets.gc.com/static/js/sdk.v1.js';
+      script.onload = initWidgets;
+      document.body.appendChild(script);
+    } else if ((window as any).GC) {
+      initWidgets();
+    }
+  }, []);
 
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const now = Timestamp.now();
-        const q = query(
-          collection(db, 'schedules'),
-          where('startTime', '>=', now),
-          orderBy('startTime', 'asc')
-        );
-        const snapshot = await getDocs(q);
-        const eventsData = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            eventType: data.eventType,
-            teamId: data.teamId,
-            teamName: data.teamName,
-            title: data.title,
-            location: data.location,
-            startTime: data.startTime?.toDate() || new Date(),
-            endTime: data.endTime?.toDate() || new Date(),
-            notes: data.notes,
-            createdBy: data.createdBy,
-          } as ScheduleEvent;
-        });
+        const eventsData = await schedulesApi.getUpcoming();
         setEvents(eventsData);
       } catch (err) {
         console.error('Error fetching schedule:', err);
@@ -169,6 +173,34 @@ const PublicSchedulePage = () => {
           </Typography>
         </Container>
       </Box>
+
+      {/* GameChanger Live Scores */}
+      <Container maxWidth="md" sx={{ py: { xs: 3, md: 4 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <SportsIcon color="primary" />
+          <Typography variant="h5" fontWeight={600}>
+            Live Scores &amp; Results
+          </Typography>
+        </Box>
+        <Paper sx={{ mb: 2 }}>
+          <Tabs
+            value={gcTab}
+            onChange={(_, v) => setGcTab(v)}
+            sx={{ borderBottom: 1, borderColor: 'divider' }}
+          >
+            {GC_TEAMS.map((team) => (
+              <Tab key={team.label} label={team.label} />
+            ))}
+          </Tabs>
+          {GC_TEAMS.map((team, idx) => (
+            <Box key={team.label} sx={{ p: 2, display: gcTab === idx ? 'block' : 'none' }}>
+              <div id={team.target.replace('#', '')} />
+            </Box>
+          ))}
+        </Paper>
+      </Container>
+
+      <Divider />
 
       <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
         {events.length > 0 && (

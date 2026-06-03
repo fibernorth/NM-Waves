@@ -1,9 +1,11 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import * as crypto from 'crypto';
 import cors from 'cors';
 import { sendParentInviteEmail, sendBatchInvoiceNotifications } from './emails';
 
 const corsHandler = cors({ origin: true });
+const SITE_URL = functions.config().app?.site_url || 'https://nmwaves.com';
 
 /**
  * Compute fee total from a player finance document.
@@ -100,7 +102,7 @@ export const sendParentInvites = functions.https.onRequest((req, res) => {
             });
           }
 
-          // Create/update user doc in users collection
+          // Create/update user doc in users collection (merge to preserve existing data)
           await db.collection('users').doc(authUser.uid).set({
             uid: authUser.uid,
             email,
@@ -115,12 +117,10 @@ export const sendParentInvites = functions.https.onRequest((req, res) => {
               canManageSchedules: false,
               canUploadMedia: false,
             },
-            createdAt: admin.firestore.Timestamp.now(),
             updatedAt: admin.firestore.Timestamp.now(),
-          });
+          }, { merge: true });
 
           // Generate a custom invite token (never expires)
-          const crypto = require('crypto');
           const inviteToken = crypto.randomUUID();
 
           // Store the invite token on the pending user doc
@@ -130,7 +130,7 @@ export const sendParentInvites = functions.https.onRequest((req, res) => {
           });
 
           // Build the setup link (never expires)
-          const resetLink = `https://nmwaves.com/setup-account?token=${inviteToken}&email=${encodeURIComponent(email)}`;
+          const resetLink = `${SITE_URL}/setup-account?token=${inviteToken}&email=${encodeURIComponent(email)}`;
 
           // Resolve player names for the invite email
           const playerNames: string[] = [];

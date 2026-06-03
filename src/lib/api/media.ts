@@ -19,6 +19,18 @@ import { isResizableImage, resizeImage, generateThumbnail } from '@/lib/utils/im
 
 const COLLECTION = 'media';
 
+/**
+ * Extract the storage path from a Firebase download URL.
+ * Download URLs contain the path encoded between /o/ and ?
+ */
+function storagePathFromUrl(url: string): string | null {
+  try {
+    const match = url.match(/\/o\/(.+?)(\?|$)/);
+    if (match) return decodeURIComponent(match[1]);
+  } catch { /* not a Firebase URL */ }
+  return null;
+}
+
 /** Strip undefined values from an object before writing to Firestore */
 const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
   const result: Record<string, unknown> = {};
@@ -66,6 +78,18 @@ const convertMediaItem = (id: string, data: any): MediaItem => ({
 });
 
 export const mediaApi = {
+  // Get approved gallery media (showInGallery + approved moderation)
+  getApprovedForGallery: async (): Promise<MediaItem[]> => {
+    const q = query(
+      collection(db, COLLECTION),
+      where('showInGallery', '==', true),
+      where('moderationStatus', '==', 'approved'),
+      orderBy('createdAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => convertMediaItem(d.id, d.data()));
+  },
+
   // Get all media ordered by createdAt desc
   getAll: async (): Promise<MediaItem[]> => {
     const q = query(collection(db, COLLECTION), orderBy('createdAt', 'desc'));
@@ -100,8 +124,11 @@ export const mediaApi = {
     // Attempt to delete the file from storage if URL is provided
     if (fileUrl) {
       try {
-        const fileRef = ref(storage, fileUrl);
-        await deleteObject(fileRef);
+        const storagePath = storagePathFromUrl(fileUrl);
+        if (storagePath) {
+          const fileRef = ref(storage, storagePath);
+          await deleteObject(fileRef);
+        }
       } catch {
         // File may not exist in storage or URL may be external; continue with doc deletion
       }

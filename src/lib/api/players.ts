@@ -5,7 +5,6 @@ import {
   getDocs,
   addDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   orderBy,
@@ -164,10 +163,35 @@ export const playersApi = {
     await updateDoc(docRef, cleanData(updateData));
   },
 
-  // Delete player
+  // Soft-delete player (archive instead of hard delete to preserve financial records)
   delete: async (id: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, id);
-    await deleteDoc(docRef);
+    await updateDoc(docRef, {
+      active: false,
+      status: 'inactive',
+      teamId: null,
+      teamName: null,
+      updatedAt: Timestamp.now(),
+      deletedAt: Timestamp.now(),
+    });
+
+    // Clean up team roster references
+    const teamsQuery = query(collection(db, 'teams'), where('playerIds', 'array-contains', id));
+    const teamsSnap = await getDocs(teamsQuery);
+    for (const teamDoc of teamsSnap.docs) {
+      const teamData = teamDoc.data();
+      const updatedIds = (teamData.playerIds || []).filter((pid: string) => pid !== id);
+      await updateDoc(teamDoc.ref, { playerIds: updatedIds, updatedAt: Timestamp.now() });
+    }
+
+    // Clean up parent user linkedPlayerIds
+    const usersQuery = query(collection(db, 'users'), where('linkedPlayerIds', 'array-contains', id));
+    const usersSnap = await getDocs(usersQuery);
+    for (const userDoc of usersSnap.docs) {
+      const userData = userDoc.data();
+      const updatedIds = (userData.linkedPlayerIds || []).filter((pid: string) => pid !== id);
+      await updateDoc(userDoc.ref, { linkedPlayerIds: updatedIds, updatedAt: Timestamp.now() });
+    }
   },
 
   // Assign to team
@@ -198,8 +222,8 @@ export const playersApi = {
       active: false,
       status: 'quit',
       quitDate: Timestamp.now(),
-      teamId: '',
-      teamName: '',
+      teamId: null,
+      teamName: null,
       updatedAt: Timestamp.now(),
     };
     if (reason) updateData.quitReason = reason;
@@ -213,8 +237,8 @@ export const playersApi = {
     await updateDoc(docRef, {
       active: true,
       status: 'active',
-      quitDate: '',
-      quitReason: '',
+      quitDate: null,
+      quitReason: null,
       updatedAt: Timestamp.now(),
     });
   },

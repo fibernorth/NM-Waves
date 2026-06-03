@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   addDoc,
   updateDoc,
@@ -37,6 +38,12 @@ const convertAnnouncement = (id: string, data: any): Announcement => ({
 });
 
 export const announcementsApi = {
+  getById: async (id: string): Promise<Announcement | null> => {
+    const docSnap = await getDoc(doc(db, COLLECTION, id));
+    if (!docSnap.exists()) return null;
+    return convertAnnouncement(docSnap.id, docSnap.data());
+  },
+
   getAll: async (): Promise<Announcement[]> => {
     const q = query(
       collection(db, COLLECTION),

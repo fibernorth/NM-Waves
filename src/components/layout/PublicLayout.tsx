@@ -25,14 +25,10 @@ const NAV_LINKS = [
   { label: 'Home', path: '/' },
   { label: 'About', path: '/about' },
   { label: 'Teams', path: '/teams-roster' },
-  { label: 'Staff', path: '/staff' },
   { label: 'Schedule', path: '/schedule' },
   { label: 'Gallery', path: '/gallery' },
-  { label: 'Pricing', path: '/pricing' },
   { label: 'Sponsors', path: '/sponsors' },
-  { label: 'Resources', path: '/resources' },
   { label: 'Contact', path: '/contact' },
-  { label: 'Tryouts', path: '/tryouts' },
 ];
 
 const PublicLayout = () => {
@@ -218,7 +214,6 @@ const PublicLayout = () => {
               { label: 'Privacy Policy', path: '/privacy' },
               { label: 'Terms of Service', path: '/terms' },
               { label: 'Sponsorship Packages', path: '/sponsorship-packages' },
-              { label: 'Parent Resources', path: '/resources' },
             ].map((link) => (
               <Typography
                 key={link.path}

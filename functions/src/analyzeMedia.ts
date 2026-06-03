@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { ImageAnnotatorClient } from '@google-cloud/vision';
+import { runModeration } from './moderation';
 
 const getDb = () => admin.firestore();
 
@@ -143,14 +144,12 @@ async function analyzeImage(
     update.suggestedTeamId = suggestedTeamId;
   }
 
+  // Collect all tags to add in a single arrayUnion call
+  const tagsToAdd: string[] = [];
+
   if (photoDate) {
     update.photoDate = admin.firestore.Timestamp.fromDate(photoDate);
-    // Auto-add year tag
-    const yearTag = photoDate.getUTCFullYear().toString();
-    const existingTags: string[] = (await docRef.get()).data()?.tags || [];
-    if (!existingTags.includes(yearTag)) {
-      update.tags = admin.firestore.FieldValue.arrayUnion(yearTag);
-    }
+    tagsToAdd.push(photoDate.getUTCFullYear().toString());
   }
 
   // Auto-add scene label tags for sports-related labels
@@ -158,8 +157,10 @@ async function analyzeImage(
     'team photo', 'team sport', 'ball game', 'sports equipment'];
   const matchedLabels = detectedLabels
     .filter((l) => sportsLabels.some((s) => l.toLowerCase().includes(s)));
-  if (matchedLabels.length > 0) {
-    update.tags = admin.firestore.FieldValue.arrayUnion(...matchedLabels.map((l) => l.toLowerCase()));
+  tagsToAdd.push(...matchedLabels.map((l) => l.toLowerCase()));
+
+  if (tagsToAdd.length > 0) {
+    update.tags = admin.firestore.FieldValue.arrayUnion(...tagsToAdd);
   }
 
   await docRef.update(update);
@@ -169,8 +170,8 @@ async function analyzeImage(
 // ---- Firestore trigger: auto-analyze new uploads ----
 
 /**
- * Fires on new media uploads alongside existing moderation.
- * Runs Vision text + label detection, jersey matching, and date parsing.
+ * Single onCreate trigger for media — handles both moderation and analysis
+ * sequentially to avoid race conditions from two triggers on the same doc.
  */
 export const analyzeMedia = functions.firestore
   .document('media/{mediaId}')
@@ -178,10 +179,19 @@ export const analyzeMedia = functions.firestore
     const data = snap.data();
     const mediaId = context.params.mediaId;
 
-    // Only analyze images
+    // Only process images
     if (data.mediaType === 'video') return;
     if (!data.fileUrl) return;
 
+    // Step 1: Run content moderation first
+    try {
+      await runModeration(snap, mediaId);
+    } catch (moderationError) {
+      console.error(`Moderation failed for ${mediaId}:`, moderationError);
+      // Continue to analysis even if moderation fails
+    }
+
+    // Step 2: Run image analysis
     try {
       await snap.ref.update({ analysisStatus: 'pending' });
       await analyzeImage(data.fileUrl, data.fileName || '', mediaId, snap.ref);

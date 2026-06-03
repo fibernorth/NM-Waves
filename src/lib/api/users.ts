@@ -5,7 +5,6 @@ import {
   getDocs,
   setDoc,
   updateDoc,
-  deleteDoc,
   query,
   where,
   orderBy,
@@ -153,9 +152,13 @@ export const usersApi = {
     }));
   },
 
-  // Delete user document
+  // Soft-delete user — marks as disabled. Auth account cleanup requires server-side.
   delete: async (uid: string): Promise<void> => {
     const docRef = doc(db, COLLECTION, uid);
-    await deleteDoc(docRef);
+    await updateDoc(docRef, cleanData({
+      disabled: true,
+      disabledAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    }));
   },
 };

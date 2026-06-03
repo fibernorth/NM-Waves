@@ -15,9 +15,8 @@ import {
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { db } from '@/lib/firebase/config';
+import { tryoutApplicantsApi } from '@/lib/api/tryoutApplicants';
 
 const AGE_GROUPS = ['8U', '10U', '12U', '14U', '16U', '18U'];
 
@@ -79,7 +78,7 @@ const TryoutRegistrationPage = () => {
     setSubmitting(true);
 
     try {
-      await addDoc(collection(db, 'tryout-applicants'), {
+      await tryoutApplicantsApi.create({
         playerFirstName: data.playerFirstName.trim(),
         playerLastName: data.playerLastName.trim(),
         dateOfBirth: data.dateOfBirth,
@@ -89,8 +88,6 @@ const TryoutRegistrationPage = () => {
         phone: data.phone.trim(),
         positionsInterested: data.positionsInterested,
         priorExperience: data.priorExperience?.trim() || '',
-        submittedAt: Timestamp.now(),
-        status: 'new',
       });
       setSubmitted(true);
       reset();

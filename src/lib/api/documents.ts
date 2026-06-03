@@ -17,6 +17,18 @@ import { isResizableImage, resizeImage } from '@/lib/utils/imageResize';
 
 const COLLECTION = 'documents';
 
+/**
+ * Extract the storage path from a Firebase download URL.
+ * Download URLs contain the path encoded between /o/ and ?
+ */
+function storagePathFromUrl(url: string): string | null {
+  try {
+    const match = url.match(/\/o\/(.+?)(\?|$)/);
+    if (match) return decodeURIComponent(match[1]);
+  } catch { /* not a Firebase URL */ }
+  return null;
+}
+
 /** Strip undefined values from an object before writing to Firestore */
 const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
   const result: Record<string, unknown> = {};
@@ -109,8 +121,11 @@ export const documentsApi = {
     // Attempt to delete the file from storage if URL is provided
     if (fileURL) {
       try {
-        const fileRef = ref(storage, fileURL);
-        await deleteObject(fileRef);
+        const storagePath = storagePathFromUrl(fileURL);
+        if (storagePath) {
+          const fileRef = ref(storage, storagePath);
+          await deleteObject(fileRef);
+        }
       } catch {
         // File may not exist in storage or URL may be external; continue with doc deletion
       }

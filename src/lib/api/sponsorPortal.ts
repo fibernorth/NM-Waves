@@ -49,12 +49,23 @@ export async function getSponsorByUserId(uid: string): Promise<Sponsor | null> {
 }
 
 /**
- * Get payment history for a sponsor (income records where source matches).
+ * Get payment history for a specific sponsor (income records matching their business name).
  */
-export async function getSponsorPaymentHistory(_sponsorId: string): Promise<Income[]> {
+export async function getSponsorPaymentHistory(sponsorId: string): Promise<Income[]> {
+  // First get the sponsor to find their business name
+  const sponsorDoc = await getDocs(query(
+    collection(db, 'sponsors'),
+    where('__name__', '==', sponsorId)
+  ));
+  if (sponsorDoc.empty) return [];
+  const sponsorData = sponsorDoc.docs[0].data();
+  const businessName = sponsorData.businessName;
+
+  // Query income records matching this sponsor's business name
   const q = query(
     collection(db, 'income'),
     where('category', '==', 'sponsorships'),
+    where('source', '==', businessName),
     orderBy('date', 'desc')
   );
   const snapshot = await getDocs(q);
