@@ -74,9 +74,17 @@ service cloud.firestore {
     }
 
     // USER DATA
+    // Self-signup may ONLY create a parent (or role-less) account. Any privileged
+    // role — coach, admin, master-admin, sponsor — must be granted by an admin
+    // via provisioning; it can never be self-assigned at signup. This closes the
+    // escalation where anyone could register as 'coach' and gain roster/PII access.
     match /users/{userId} {
       allow read: if isAuth();
-      allow create: if (isAuth() && request.auth.uid == userId && !('roles' in request.resource.data && request.resource.data.roles.hasAny(['admin', 'master-admin']))) || isAdmin();
+      allow create: if isAdmin() || (
+        isAuth() && request.auth.uid == userId &&
+        (!('roles' in request.resource.data) || request.resource.data.roles == ['parent']) &&
+        (!('role' in request.resource.data) || request.resource.data.role == 'parent')
+      );
       // Users can update their own profile, but ONLY admins can change roles
       allow update: if isAdmin() || (
         isUser(userId) &&
