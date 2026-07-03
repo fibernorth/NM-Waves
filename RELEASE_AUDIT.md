@@ -37,13 +37,17 @@ functions changes require `firebase deploy --only functions` to take effect.
 - P0-8 / P0-9 Both hooks-order crashes fixed. P0-10 ErrorBoundary added. ESLint config added (was missing).
 - P0-11 Parent onboarding save routed through `updateLinkedPlayerContact` callable.
 - P0-12 Parent dashboard/nav dead buttons removed; `Stats` restricted to coach+.
+- **Sensitive player data fully scoped**: `/players` read is coach/admin OR a parent's own linked children only — no longer any authenticated user. `linkedPlayerIds` is frozen against client writes; linking is verified server-side (`linkChild` requires parent email ↔ player contact match). Link search + sponsor player picker use `searchLinkablePlayers` (no PII).
+- P1 invite tokens: 30-day expiry + single-use + token invalidated on activation (was: never expired, valid after activation).
+- P1 refund webhook: `cs_` session id recovered from the `pi_` PaymentIntent so refunds actually post to the books; dead code removed.
+- P1 webhook failures now dead-lettered (`failedStripeWebhookEvents` + admin alert) instead of silently swallowed.
 - Build predeploy hooks added; committed `functions/lib` re-synced with source.
 
-**Still open (must decide before launch):**
-- **P0-6 Storage `documents/**` role-gating** — needs Firebase Auth **custom claims** (storage rules can't read Firestore roles). This is a deploy-side change (a user→claims sync trigger + a one-time backfill) that must be integration-tested; not safe to land blind. Interim mitigation: closing coach self-signup means only admin-provisioned accounts hold privileged roles, and only authenticated users can reach the bucket at all.
-- **Deploy the rules and functions** — the fixes above are inert until deployed.
-- **Finer-grained `/players` read scoping** (authed users can still read all player docs) and **link-any-player** hardening were intentionally deferred: they require reworking the child-link flow and integration testing, which isn't safe to rush pre-launch. Tracked as the top fast-follow.
-- P1 money-path items (refund `pi_`/`cs_` linkage, webhook 500-on-error, transactional idempotency, invite-token expiry) — not yet started.
+**Still open:**
+- **P0-6 Storage `documents/**` role-gating** — needs Firebase Auth **custom claims** (storage rules can't read Firestore roles). Deploy-side change (user→claims sync trigger + one-time backfill) that must be integration-tested; not safe to land blind. Interim mitigation: closing coach self-signup means only admin-provisioned accounts hold privileged roles, and only authenticated users can reach the bucket at all.
+- **Deploy** — all the above is inert until `firebase deploy --only firestore:rules,storage,functions,hosting` (set `functions/.env` first).
+- **Verify in Stripe test mode before launch**: the refund-linkage fix and webhook dead-lettering should be exercised end-to-end. **Transactional webhook idempotency** (duplicate income/GL on concurrent/partial-failure retries) and **switching processing errors to 5xx retries** were deliberately NOT changed blind — they need the money path exercised against Stripe first.
+- Remaining P1 (not started): non-atomic payment add/remove writes; `syncToBilling` re-charging quit players; sign-in global-loading UX.
 
 ## 2. Verdict
 
