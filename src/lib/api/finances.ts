@@ -10,6 +10,8 @@ import {
   query,
   where,
   orderBy,
+  arrayUnion,
+  arrayRemove,
   Timestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
@@ -216,7 +218,6 @@ export const playerFinancesApi = {
     }
 
     const data = docSnap.data();
-    const payments = data.payments || [];
 
     const newPayment: any = {
       id: paymentId,
@@ -283,14 +284,15 @@ export const playerFinancesApi = {
       console.error('[finances] Failed to create income record for payment:', err);
     }
 
-    // Store the income record ID on the payment so we can cascade-delete later
+    // Store the income record ID on the payment so we can cascade-delete later.
+    // Append with arrayUnion so two admins recording payments concurrently can't
+    // clobber each other via a read-modify-write of the whole payments array.
     newPayment.incomeRecordId = incomeRecordId;
-    payments.push(newPayment);
 
-    await updateDoc(docRef, cleanData({
-      payments,
+    await updateDoc(docRef, {
+      payments: arrayUnion(newPayment),
       updatedAt: Timestamp.now(),
-    }));
+    });
 
     return paymentId;
   },
@@ -307,36 +309,31 @@ export const playerFinancesApi = {
     const data = docSnap.data();
     const allPayments = data.payments || [];
     const deletedPayment = allPayments.find((p: any) => p.id === paymentId);
-    const payments = allPayments.filter((p: any) => p.id !== paymentId);
 
-    await updateDoc(docRef, cleanData({
-      payments,
+    if (!deletedPayment) {
+      // Nothing to remove — the payment is already gone.
+      return;
+    }
+
+    // Remove the exact stored object atomically so a concurrent add/remove can't
+    // clobber the payments array via read-modify-write.
+    await updateDoc(docRef, {
+      payments: arrayRemove(deletedPayment),
       updatedAt: Timestamp.now(),
-    }));
+    });
 
     // Cascade-delete the linked income record (and its GL entries)
     try {
       let incomeRecordId = deletedPayment?.incomeRecordId;
 
-      // Fallback: find the income record by sourcePaymentId if not stored on payment
+      // Fallback: find the income record by sourcePaymentId (an exact 1:1 link).
+      // We deliberately do NOT fall back to matching by amount/player/category —
+      // that could delete the wrong income record when a player has two payments
+      // of the same amount.
       if (!incomeRecordId) {
         const incomeQ = query(
           collection(db, 'income'),
           where('sourcePaymentId', '==', paymentId),
-        );
-        const incomeSnap = await getDocs(incomeQ);
-        if (!incomeSnap.empty) {
-          incomeRecordId = incomeSnap.docs[0].id;
-        }
-      }
-
-      // Second fallback: match by amount, player, and approximate date
-      if (!incomeRecordId && deletedPayment) {
-        const incomeQ = query(
-          collection(db, 'income'),
-          where('playerId', '==', data.playerId || ''),
-          where('amount', '==', deletedPayment.amount),
-          where('category', '==', deletedPayment.sponsorId ? 'sponsorships' : 'player_payments'),
         );
         const incomeSnap = await getDocs(incomeQ);
         if (!incomeSnap.empty) {

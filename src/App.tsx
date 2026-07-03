@@ -133,13 +133,16 @@ const queryClient = new QueryClient({
 });
 
 function App() {
-  const { initialize, initialized, loading } = useAuthStore();
+  const { initialize, initialized } = useAuthStore();
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
-  if (!initialized || loading) {
+  // Gate only on the initial auth resolution. Do NOT also gate on `loading`:
+  // signIn/signUp toggle it, and unmounting the whole router mid-submit tore
+  // down the login form (clearing it, dropping inline errors, breaking navigate).
+  if (!initialized) {
     return <LoadingScreen />;
   }
 

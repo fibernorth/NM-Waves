@@ -45,10 +45,18 @@ export const costCalculationApi = {
   calculatePlayerBreakdowns: async (
     season: string
   ): Promise<PlayerCostBreakdown[]> => {
-    const [allCostItems, allFinances] = await Promise.all([
+    const [allCostItems, allFinancesRaw, allActivePlayers] = await Promise.all([
       costItemsApi.getBySeason(season),
       playerFinancesApi.getBySeason(season),
+      playersApi.getActive(),
     ]);
+
+    // Exclude quit players from the division so we don't re-charge them or
+    // dilute the remaining players' shares — mirrors redistributeAfterQuit.
+    const activePlayerIds = new Set(
+      allActivePlayers.filter((p) => p.status !== 'quit').map((p) => p.id)
+    );
+    const allFinances = allFinancesRaw.filter((f) => activePlayerIds.has(f.playerId));
 
     const activeCostItems = allCostItems.filter((c) => c.active);
 
