@@ -21,6 +21,30 @@ A **full club-operations platform** for the Waves travel softball club — far m
 
 ---
 
+## Remediation status (updated this session)
+
+Fixes landed on `claude/nm-waves-live-repo-ojckav` (all build/type-check clean).
+Rules changes require `firebase deploy --only firestore:rules,storage` and the
+functions changes require `firebase deploy --only functions` to take effect.
+
+**Done:**
+- P0-1 `functions.config()` → env vars (`functions/.env`), template added. Deploy blocker cleared.
+- P0-2 Checkout amount bound to the invoice token's finance record; token marked "used" only when the payment actually satisfies the invoice.
+- P0-3 `/players` no longer anonymously readable; public rosters served via `getPublicRoster` callable (safe fields only).
+- P0-4 Coach self-signup removed (UI + Firestore users-create rule forces `parent`).
+- P0-5 `invoiceTokens` no longer publicly listable; public pay page uses `getInvoiceByToken` callable; parents read only their children's.
+- P0-7 Sponsor blanket finance read removed; sponsor pay flow uses `getPlayerFinanceSummary` callable (minimal summary).
+- P0-8 / P0-9 Both hooks-order crashes fixed. P0-10 ErrorBoundary added. ESLint config added (was missing).
+- P0-11 Parent onboarding save routed through `updateLinkedPlayerContact` callable.
+- P0-12 Parent dashboard/nav dead buttons removed; `Stats` restricted to coach+.
+- Build predeploy hooks added; committed `functions/lib` re-synced with source.
+
+**Still open (must decide before launch):**
+- **P0-6 Storage `documents/**` role-gating** — needs Firebase Auth **custom claims** (storage rules can't read Firestore roles). This is a deploy-side change (a user→claims sync trigger + a one-time backfill) that must be integration-tested; not safe to land blind. Interim mitigation: closing coach self-signup means only admin-provisioned accounts hold privileged roles, and only authenticated users can reach the bucket at all.
+- **Deploy the rules and functions** — the fixes above are inert until deployed.
+- **Finer-grained `/players` read scoping** (authed users can still read all player docs) and **link-any-player** hardening were intentionally deferred: they require reworking the child-link flow and integration testing, which isn't safe to rush pre-launch. Tracked as the top fast-follow.
+- P1 money-path items (refund `pi_`/`cs_` linkage, webhook 500-on-error, transactional idempotency, invite-token expiry) — not yet started.
+
 ## 2. Verdict
 
 **Not safe to launch to parents on Monday as-is — but reachable.** Two things stand between here and a safe Monday:
