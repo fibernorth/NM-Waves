@@ -83,6 +83,99 @@ export const updateLinkedPlayerContact = functions.https.onCall(
 );
 
 /**
+ * Search for players a parent can link, returning ONLY non-sensitive fields
+ * (id, name, team) plus a server-computed emailMatch flag. Parents can no
+ * longer read the players collection directly, so this replaces the old client
+ * roster dump — no DOB, medical notes, contacts, or emails cross the wire.
+ * Email matching is done server-side against the caller's own auth email.
+ */
+export const searchLinkablePlayers = functions.https.onCall(
+  async (data: { search?: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+    }
+    const callerEmail = (context.auth.token.email || '').toLowerCase();
+    const search = (data?.search || '').toLowerCase().trim();
+
+    const snapshot = await getDb()
+      .collection('players')
+      .where('active', '==', true)
+      .get();
+
+    const results = snapshot.docs
+      .map((doc) => {
+        const p = doc.data();
+        const emailMatch =
+          !!callerEmail &&
+          ((p.parentEmail || '').toLowerCase() === callerEmail ||
+            (p.contacts || []).some((c: any) => (c.email || '').toLowerCase() === callerEmail));
+        return {
+          id: doc.id,
+          firstName: p.firstName || '',
+          lastName: p.lastName || '',
+          teamName: p.teamName || '',
+          emailMatch,
+          _name: `${p.firstName || ''} ${p.lastName || ''}`.toLowerCase(),
+        };
+      })
+      // Return email-matched players always; otherwise only when a search term
+      // is given, to avoid dumping the full roster to any authenticated user.
+      .filter((p) => p.emailMatch || (search.length >= 2 && p._name.includes(search)))
+      .map(({ _name, ...rest }) => rest);
+
+    return { players: results };
+  }
+);
+
+/**
+ * Link a child to the calling parent account. Access to a player's sensitive
+ * data flows entirely from this link, so linking is verified server-side: the
+ * caller's auth email must match the player's parentEmail or a contact email.
+ * If it does not, the parent must be linked by an administrator. Because the
+ * Firestore rules now freeze linkedPlayerIds against client writes, this
+ * callable (Admin SDK) is the only self-service path to a link.
+ */
+export const linkChild = functions.https.onCall(
+  async (data: { playerId: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+    }
+    const { playerId } = data;
+    if (!playerId) {
+      throw new functions.https.HttpsError('invalid-argument', 'playerId is required');
+    }
+    const callerEmail = (context.auth.token.email || '').toLowerCase();
+
+    const playerDoc = await getDb().collection('players').doc(playerId).get();
+    if (!playerDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Player not found');
+    }
+    const p = playerDoc.data()!;
+    const emailMatch =
+      !!callerEmail &&
+      ((p.parentEmail || '').toLowerCase() === callerEmail ||
+        (p.contacts || []).some((c: any) => (c.email || '').toLowerCase() === callerEmail));
+
+    if (!emailMatch) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        "We couldn't verify this player belongs to you. Please ask your club administrator to link your account."
+      );
+    }
+
+    await getDb()
+      .collection('users')
+      .doc(context.auth.uid)
+      .update({
+        linkedPlayerIds: admin.firestore.FieldValue.arrayUnion(playerId),
+        updatedAt: admin.firestore.Timestamp.now(),
+      });
+
+    return { success: true };
+  }
+);
+
+/**
  * Returns a MINIMAL finance summary (name, team, season, balance due) for a
  * player, to any authenticated user. Used by the sponsor "pay a player" flow so
  * a sponsor can see the outstanding balance of the player they want to fund —

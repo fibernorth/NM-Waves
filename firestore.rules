@@ -50,13 +50,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // PLAYERS — NOT publicly readable. Full player docs contain minors' DOB,
-    // medical notes, and emergency contacts, so anonymous read is denied.
-    // Public roster pages read sanitized safe fields via the getPublicRoster
-    // Cloud Function instead. (Finer-grained per-parent scoping of authenticated
-    // reads is a tracked follow-up; requires reworking the child-link flow.)
+    // PLAYERS — sensitive minor PII (DOB, medical notes, emergency contacts).
+    // Readable ONLY by coaches/admins and by a parent for their own linked
+    // children — not by arbitrary logged-in users. Public roster pages use the
+    // getPublicRoster Cloud Function (safe fields only); the child-link search
+    // uses searchLinkablePlayers (no PII). linkedPlayerIds is verified and
+    // frozen against client writes (see users rule below), so it is trustworthy.
     match /players/{playerId} {
-      allow read: if isAuth();
+      allow read: if isCoach() || (
+        isAuth() && hasRole('parent') &&
+        playerId in getUserData(request.auth.uid).linkedPlayerIds
+      );
       allow write: if isCoach();
     }
 
@@ -87,11 +91,16 @@ service cloud.firestore {
         (!('roles' in request.resource.data) || request.resource.data.roles == ['parent']) &&
         (!('role' in request.resource.data) || request.resource.data.role == 'parent')
       );
-      // Users can update their own profile, but ONLY admins can change roles
+      // Users can update their own profile, but ONLY admins can change roles,
+      // and linkedPlayerIds is frozen for non-admins — parents link children
+      // through the verified linkChild Cloud Function (Admin SDK), never by
+      // writing their own doc. This keeps linkedPlayerIds trustworthy as the
+      // gate for reading a child's sensitive data and finances.
       allow update: if isAdmin() || (
         isUser(userId) &&
         (!('roles' in request.resource.data) || request.resource.data.roles == resource.data.roles) &&
-        (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)
+        (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
+        (!('linkedPlayerIds' in request.resource.data) || request.resource.data.linkedPlayerIds == resource.data.linkedPlayerIds)
       );
       allow delete: if isMasterAdmin();
     }

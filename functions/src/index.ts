@@ -79,4 +79,9 @@ export { createCheckoutSession, stripeWebhook, generateInvoiceToken, batchGenera
 export { moderateMedia, analyzeMedia, batchAnalyzeMedia, listDrivePhotos };
 export { setAccountPassword, sendCustomPasswordReset };
 export { getPublicRoster, getInvoiceByToken } from './publicData';
-export { updateLinkedPlayerContact, getPlayerFinanceSummary } from './parentActions';
+export {
+  updateLinkedPlayerContact,
+  getPlayerFinanceSummary,
+  searchLinkablePlayers,
+  linkChild,
+} from './parentActions';

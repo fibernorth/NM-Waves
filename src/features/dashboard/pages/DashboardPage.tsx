@@ -108,9 +108,12 @@ const DashboardPage = () => {
     ? activeTeams.filter(t => coachTeamIds.includes(t.id))
     : activeTeams;
 
+  // Only coaches/admins may read the full roster; parents would be denied by
+  // the players read rule, so skip the query for parent-only users.
   const { data: allPlayers = [], isLoading: playersLoading, isError: playersError } = useQuery({
     queryKey: ['players'],
     queryFn: () => playersApi.getAll(),
+    enabled: isCoachOrAbove,
   });
   const activePlayers = allPlayers.filter(p => p.active);
   // For coaches (non-admin), only show players on their teams

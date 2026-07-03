@@ -20,11 +20,9 @@ import {
 import LinkIcon from '@mui/icons-material/Link';
 import SearchIcon from '@mui/icons-material/Search';
 import { useQuery } from '@tanstack/react-query';
-import { playersApi } from '@/lib/api/players';
-import { usersApi } from '@/lib/api/users';
+import { searchLinkablePlayers, linkChild, type LinkablePlayer } from '@/lib/api/parentActions';
 import { useAuthStore } from '@/stores/authStore';
 import toast from 'react-hot-toast';
-import type { Player } from '@/types/models';
 
 interface LinkChildDialogProps {
   open: boolean;
@@ -36,41 +34,26 @@ const LinkChildDialog = ({ open, onClose }: LinkChildDialogProps) => {
   const [search, setSearch] = useState('');
   const [linking, setLinking] = useState(false);
 
-  const { data: allPlayers = [], isLoading } = useQuery({
-    queryKey: ['players'],
-    queryFn: () => playersApi.getAll(),
+  // Search via Cloud Function — returns only non-sensitive fields (no DOB,
+  // medical notes, contacts, or emails). Email-matched children are always
+  // returned; other players appear only when a 2+ char search is entered.
+  const { data: linkable = [], isLoading } = useQuery({
+    queryKey: ['linkablePlayers', search],
+    queryFn: () => searchLinkablePlayers(search),
     enabled: open,
   });
 
-  const activePlayers = allPlayers.filter(p => p.active);
   const alreadyLinked = user?.linkedPlayerIds || [];
-
-  // Auto-suggest players whose contact email matches the parent's email
-  const emailMatches = activePlayers.filter(p => {
-    if (alreadyLinked.includes(p.id)) return false;
-    const parentEmail = user?.email?.toLowerCase();
-    if (!parentEmail) return false;
-    // Check parentEmail field
-    if (p.parentEmail?.toLowerCase() === parentEmail) return true;
-    // Check contacts array
-    return p.contacts.some(c => c.email?.toLowerCase() === parentEmail);
-  });
-
-  // Filter by search term
+  const available = linkable.filter(p => !alreadyLinked.includes(p.id));
+  const emailMatches = available.filter(p => p.emailMatch);
   const searchLower = search.toLowerCase().trim();
-  const searchResults = searchLower
-    ? activePlayers.filter(p => {
-        if (alreadyLinked.includes(p.id)) return false;
-        const fullName = `${p.firstName} ${p.lastName}`.toLowerCase();
-        return fullName.includes(searchLower);
-      })
-    : [];
+  const searchResults = available.filter(p => !p.emailMatch);
 
-  const handleLink = async (player: Player) => {
+  const handleLink = async (player: LinkablePlayer) => {
     if (!user) return;
     setLinking(true);
     try {
-      await usersApi.addLinkedPlayer(user.uid, player.id);
+      await linkChild(player.id);
       await refreshUser();
       toast.success(`Linked ${player.firstName} ${player.lastName} to your account`);
       onClose();
@@ -83,7 +66,7 @@ const LinkChildDialog = ({ open, onClose }: LinkChildDialogProps) => {
     }
   };
 
-  const renderPlayerItem = (player: Player, showBadge?: boolean) => (
+  const renderPlayerItem = (player: LinkablePlayer, showBadge?: boolean) => (
     <ListItem key={player.id} disablePadding>
       <ListItemButton
         onClick={() => handleLink(player)}
