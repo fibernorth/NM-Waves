@@ -194,20 +194,26 @@ const DashboardPage = () => {
   const statsLoading = teamsLoading || playersLoading || (isAdmin && financesLoading);
 
   const stats = [
-    {
-      title: isCoachOnly ? 'My Teams' : 'Active Teams',
-      value: teams.length,
-      icon: <GroupsIcon sx={{ fontSize: 40 }} />,
-      color: 'primary.main',
-      action: () => navigate('/teams'),
-    },
-    {
-      title: isCoachOnly ? 'My Players' : 'Active Players',
-      value: players.length,
-      icon: <PersonIcon sx={{ fontSize: 40 }} />,
-      color: 'success.main',
-      action: () => navigate('/players'),
-    },
+    // Club-wide team/player counts link to coach/admin-only pages, so only show
+    // them to coaches and admins. Parents get their children summary section below.
+    ...(isCoachOrAbove
+      ? [
+          {
+            title: isCoachOnly ? 'My Teams' : 'Active Teams',
+            value: teams.length,
+            icon: <GroupsIcon sx={{ fontSize: 40 }} />,
+            color: 'primary.main',
+            action: () => navigate('/teams'),
+          },
+          {
+            title: isCoachOnly ? 'My Players' : 'Active Players',
+            value: players.length,
+            icon: <PersonIcon sx={{ fontSize: 40 }} />,
+            color: 'success.main',
+            action: () => navigate('/players'),
+          },
+        ]
+      : []),
     ...(isAdmin
       ? [
           {
@@ -473,7 +479,7 @@ const DashboardPage = () => {
                   <CalendarMonthIcon color="primary" />
                   <Typography variant="h6">Upcoming Events</Typography>
                 </Box>
-                <Button size="small" onClick={() => navigate('/schedules')}>View All</Button>
+                <Button size="small" onClick={() => navigate(isCoachOrAbove ? '/schedules' : '/schedule')}>View All</Button>
               </Box>
               {eventsLoading ? (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -517,13 +523,23 @@ const DashboardPage = () => {
                     My Invoices & Payments
                   </Button>
                 )}
-                <Button variant="outlined" fullWidth onClick={() => navigate('/teams')}>
-                  {isAdmin ? 'Manage Teams' : 'View Teams'}
-                </Button>
-                <Button variant="outlined" fullWidth onClick={() => navigate('/players')}>
-                  {isAdmin ? 'Manage Players' : 'View Players'}
-                </Button>
-                <Button variant="outlined" fullWidth onClick={() => navigate('/schedules')}>
+                {/* Teams/Players pages are coach/admin-only; showing them to
+                    parents produced dead buttons that silently bounced back. */}
+                {isCoachOrAbove && (
+                  <>
+                    <Button variant="outlined" fullWidth onClick={() => navigate('/teams')}>
+                      {isAdmin ? 'Manage Teams' : 'View Teams'}
+                    </Button>
+                    <Button variant="outlined" fullWidth onClick={() => navigate('/players')}>
+                      {isAdmin ? 'Manage Players' : 'View Players'}
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  onClick={() => navigate(isCoachOrAbove ? '/schedules' : '/schedule')}
+                >
                   View Schedule
                 </Button>
                 {isAdmin && (

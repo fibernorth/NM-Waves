@@ -98,7 +98,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Schedule', icon: <CalendarMonthIcon />, path: '/schedules', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Announcements', icon: <CampaignIcon />, path: '/announcements', roles: ['all'] },
     { text: 'Messaging', icon: <ChatIcon />, path: '/messaging', roles: ['all'] },
-    { text: 'Stats', icon: <ScoreboardIcon />, path: '/stats', roles: ['all'] },
+    { text: 'Stats', icon: <ScoreboardIcon />, path: '/stats', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Homepage Manager', icon: <WebIcon />, path: '/homepage-manager', roles: ['admin', 'master-admin'] },
   ];
 
