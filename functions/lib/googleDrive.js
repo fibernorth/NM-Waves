@@ -44,10 +44,18 @@ const getDb = () => admin.firestore();
  * Uses service account credentials from Firebase Functions config.
  */
 exports.listDrivePhotos = functions.https.onCall(async (_data, context) => {
-    var _a, _b, _c;
+    var _a, _b;
     // Require authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated');
+    }
+    // Require coach or higher role
+    const userDoc = await getDb().collection('users').doc(context.auth.uid).get();
+    const userData = userDoc.data();
+    const roles = (userData === null || userData === void 0 ? void 0 : userData.roles) || [];
+    const hasAccess = roles.some(r => ['coach', 'admin', 'master-admin'].includes(r));
+    if (!hasAccess) {
+        throw new functions.https.HttpsError('permission-denied', 'Coach or higher role required');
     }
     // Get integration settings
     const settingsDoc = await getDb().doc('appSettings/integrations').get();
@@ -57,11 +65,10 @@ exports.listDrivePhotos = functions.https.onCall(async (_data, context) => {
     }
     const folderId = settings.googleDrive.folderId;
     try {
-        // Get service account credentials from Firebase Functions config
-        const config = functions.config();
-        const serviceAccountStr = (_c = config.google_drive) === null || _c === void 0 ? void 0 : _c.service_account;
+        // Service account credentials from environment (functions/.env).
+        const serviceAccountStr = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT;
         if (!serviceAccountStr) {
-            console.error('Google Drive service account not configured');
+            console.error('Google Drive service account not configured (set GOOGLE_DRIVE_SERVICE_ACCOUNT)');
             return { photos: [] };
         }
         const serviceAccount = JSON.parse(serviceAccountStr);

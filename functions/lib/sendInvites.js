@@ -39,9 +39,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendInvoiceEmails = exports.sendParentInvites = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
+const crypto = __importStar(require("crypto"));
 const cors_1 = __importDefault(require("cors"));
 const emails_1 = require("./emails");
 const corsHandler = (0, cors_1.default)({ origin: true });
+const SITE_URL = process.env.SITE_URL || 'https://nmwaves.com';
 /**
  * Compute fee total from a player finance document.
  * Must match the formula in src/lib/api/finances.ts → computeFeeTotal.
@@ -120,7 +122,7 @@ exports.sendParentInvites = functions.https.onRequest((req, res) => {
                             displayName: pendingData.displayName,
                         });
                     }
-                    // Create/update user doc in users collection
+                    // Create/update user doc in users collection (merge to preserve existing data)
                     await db.collection('users').doc(authUser.uid).set({
                         uid: authUser.uid,
                         email,
@@ -135,11 +137,9 @@ exports.sendParentInvites = functions.https.onRequest((req, res) => {
                             canManageSchedules: false,
                             canUploadMedia: false,
                         },
-                        createdAt: admin.firestore.Timestamp.now(),
                         updatedAt: admin.firestore.Timestamp.now(),
-                    });
+                    }, { merge: true });
                     // Generate a custom invite token (never expires)
-                    const crypto = require('crypto');
                     const inviteToken = crypto.randomUUID();
                     // Store the invite token on the pending user doc
                     await pendingQuery.docs[0].ref.update({
@@ -147,7 +147,7 @@ exports.sendParentInvites = functions.https.onRequest((req, res) => {
                         updatedAt: admin.firestore.Timestamp.now(),
                     });
                     // Build the setup link (never expires)
-                    const resetLink = `https://nmwaves.com/setup-account?token=${inviteToken}&email=${encodeURIComponent(email)}`;
+                    const resetLink = `${SITE_URL}/setup-account?token=${inviteToken}&email=${encodeURIComponent(email)}`;
                     // Resolve player names for the invite email
                     const playerNames = [];
                     const linkedPlayerIds = pendingData.linkedPlayerIds || [];

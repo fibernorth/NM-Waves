@@ -5,10 +5,29 @@ import { sendPaymentReceipt } from './emails';
 
 const getDb = () => admin.firestore();
 
+/**
+ * Compute fee total from a player finance document.
+ * Must match the formula in src/lib/api/finances.ts → computeFeeTotal.
+ */
+const computeFeeTotal = (data: {
+  registrationFee?: number;
+  uniformCost?: number;
+  tournamentFees?: number;
+  facilityFees?: number;
+  equipmentFees?: number;
+  otherFees?: number;
+}): number =>
+  (data.registrationFee || 0) +
+  (data.uniformCost || 0) +
+  (data.tournamentFees || 0) +
+  (data.facilityFees || 0) +
+  (data.equipmentFees || 0) +
+  (data.otherFees || 0);
+
 function getStripe(): Stripe {
-  const secretKey = functions.config().stripe?.secret_key || process.env.STRIPE_SECRET_KEY;
+  const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) {
-    throw new Error('Stripe secret key not configured');
+    throw new Error('Stripe secret key not configured (set STRIPE_SECRET_KEY)');
   }
   return new Stripe(secretKey, { apiVersion: '2023-10-16' as any });
 }
@@ -80,6 +99,11 @@ export const createCheckoutSession = functions.https.onCall(
       }
       if (tokenData.expiresAt?.toDate() < new Date()) {
         throw new functions.https.HttpsError('failed-precondition', 'This invoice has expired');
+      }
+      // The token must belong to the finance record being paid, otherwise a
+      // token for player A could be consumed while crediting player B.
+      if (tokenData.financeId && financeId && tokenData.financeId !== financeId) {
+        throw new functions.https.HttpsError('failed-precondition', 'Invoice token does not match this account');
       }
     }
 
@@ -174,7 +198,7 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
   }
 
   const stripe = getStripe();
-  const webhookSecret = functions.config().stripe?.webhook_secret || process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   let event: Stripe.Event = undefined as any;
 
@@ -568,7 +592,11 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
         }
       }
 
-      // 4. Mark invoice token as used (if applicable)
+      // 4. Mark invoice token as used — but ONLY when the payment actually
+      //    satisfies the invoice. Previously the token was marked used on any
+      //    payment, so a $0.50 payment permanently locked a $1,500 invoice as
+      //    "paid". For a per-charge token the payment must cover the charge
+      //    amount; for a full-balance token the account balance must reach ~0.
       if (invoiceToken) {
         const tokenQuery = await getDb()
           .collection('invoiceTokens')
@@ -577,15 +605,44 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
           .get();
 
         if (!tokenQuery.empty) {
-          const tokenUpdate: Record<string, any> = {
-            used: true,
-            usedAt: paymentDate,
-            usedBy: session.customer_details?.email || 'stripe',
-          };
-          if (userId) {
-            tokenUpdate.paidByUserId = userId;
+          const tokenData = tokenQuery.docs[0].data();
+          const EPSILON = 0.005; // half a cent, to absorb rounding
+
+          let invoiceSatisfied: boolean;
+          if (tokenData.chargeType && tokenData.chargeType !== 'full_balance') {
+            const chargeAmount = tokenData.chargeAmount || tokenData.amountDue || 0;
+            invoiceSatisfied = amount >= chargeAmount - EPSILON;
+          } else {
+            // Recompute the live balance from the just-updated finance record.
+            const freshFinance = await financeRef.get();
+            if (freshFinance.exists) {
+              const fData = freshFinance.data()!;
+              const owed = computeFeeTotal(fData) - (fData.scholarshipAmount || 0);
+              const paid = (fData.payments || []).reduce(
+                (s: number, p: any) => s + (p.amount || 0),
+                0
+              );
+              invoiceSatisfied = paid >= owed - EPSILON;
+            } else {
+              invoiceSatisfied = false;
+            }
           }
-          await tokenQuery.docs[0].ref.update(tokenUpdate);
+
+          if (invoiceSatisfied) {
+            const tokenUpdate: Record<string, any> = {
+              used: true,
+              usedAt: paymentDate,
+              usedBy: session.customer_details?.email || 'stripe',
+            };
+            if (userId) {
+              tokenUpdate.paidByUserId = userId;
+            }
+            await tokenQuery.docs[0].ref.update(tokenUpdate);
+          } else {
+            console.log(
+              `Invoice token ${invoiceToken} left open — payment of $${amount} did not fully satisfy the invoice`
+            );
+          }
         }
       }
 

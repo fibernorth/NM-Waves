@@ -1,11 +1,12 @@
 import * as admin from 'firebase-admin';
-import * as functions from 'firebase-functions';
 import * as nodemailer from 'nodemailer';
 
 const getDb = () => admin.firestore();
 
 const ORG_EMAIL = 'tcwavessoftball@gmail.com';
-const SITE_URL = functions.config().app?.site_url || 'https://nmwaves.com';
+// Runtime config now comes from environment variables (functions/.env), since
+// functions.config() (Cloud Runtime Config) was shut down at the end of 2025.
+const SITE_URL = process.env.SITE_URL || 'https://nmwaves.com';
 
 /** Escape HTML special characters to prevent XSS in email templates */
 function esc(str: string): string {
@@ -30,16 +31,14 @@ const emailFooter = `
 
 /**
  * Creates a Nodemailer transporter using Gmail SMTP.
- * Requires firebase functions config: smtp.user and smtp.pass
- * Set via: firebase functions:config:set smtp.user="tcwavessoftball@gmail.com" smtp.pass="YOUR_APP_PASSWORD"
+ * Requires environment variables SMTP_USER and SMTP_PASS (set in functions/.env).
  */
 function getTransporter() {
-  const config = functions.config();
-  const user = config.smtp?.user || ORG_EMAIL;
-  const pass = config.smtp?.pass;
+  const user = process.env.SMTP_USER || ORG_EMAIL;
+  const pass = process.env.SMTP_PASS;
 
   if (!pass) {
-    console.warn('[email] SMTP password not configured. Set via: firebase functions:config:set smtp.pass="YOUR_APP_PASSWORD"');
+    console.warn('[email] SMTP password not configured. Set SMTP_PASS in functions/.env');
     return null;
   }
 

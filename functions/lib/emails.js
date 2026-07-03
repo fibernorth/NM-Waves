@@ -39,10 +39,20 @@ exports.sendParentInviteEmail = sendParentInviteEmail;
 exports.sendPasswordResetCustomEmail = sendPasswordResetCustomEmail;
 exports.sendBatchInvoiceNotifications = sendBatchInvoiceNotifications;
 const admin = __importStar(require("firebase-admin"));
-const functions = __importStar(require("firebase-functions"));
 const nodemailer = __importStar(require("nodemailer"));
 const getDb = () => admin.firestore();
 const ORG_EMAIL = 'tcwavessoftball@gmail.com';
+// Runtime config now comes from environment variables (functions/.env), since
+// functions.config() (Cloud Runtime Config) was shut down at the end of 2025.
+const SITE_URL = process.env.SITE_URL || 'https://nmwaves.com';
+/** Escape HTML special characters to prevent XSS in email templates */
+function esc(str) {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
 // Shared email header/footer for brand consistency
 const emailHeader = `
   <div style="background-color: #1565c0; color: white; padding: 20px; text-align: center;">
@@ -55,16 +65,13 @@ const emailFooter = `
   </div>`;
 /**
  * Creates a Nodemailer transporter using Gmail SMTP.
- * Requires firebase functions config: smtp.user and smtp.pass
- * Set via: firebase functions:config:set smtp.user="tcwavessoftball@gmail.com" smtp.pass="YOUR_APP_PASSWORD"
+ * Requires environment variables SMTP_USER and SMTP_PASS (set in functions/.env).
  */
 function getTransporter() {
-    var _a, _b;
-    const config = functions.config();
-    const user = ((_a = config.smtp) === null || _a === void 0 ? void 0 : _a.user) || ORG_EMAIL;
-    const pass = (_b = config.smtp) === null || _b === void 0 ? void 0 : _b.pass;
+    const user = process.env.SMTP_USER || ORG_EMAIL;
+    const pass = process.env.SMTP_PASS;
     if (!pass) {
-        console.warn('[email] SMTP password not configured. Set via: firebase functions:config:set smtp.pass="YOUR_APP_PASSWORD"');
+        console.warn('[email] SMTP password not configured. Set SMTP_PASS in functions/.env');
         return null;
     }
     return nodemailer.createTransport({
@@ -131,11 +138,11 @@ async function sendPaymentReceipt(receiptData) {
           <table style="width: 100%; border-collapse: collapse;">
             <tr><td style="padding: 8px 0; color: #666;">Date:</td><td style="padding: 8px 0; font-weight: bold;">${formattedDate}</td></tr>
             <tr><td style="padding: 8px 0; color: #666;">Amount:</td><td style="padding: 8px 0; font-weight: bold; color: #2e7d32;">${formattedAmount}</td></tr>
-            <tr><td style="padding: 8px 0; color: #666;">Player:</td><td style="padding: 8px 0; font-weight: bold;">${playerName}</td></tr>
-            <tr><td style="padding: 8px 0; color: #666;">Team:</td><td style="padding: 8px 0;">${teamName}</td></tr>
-            <tr><td style="padding: 8px 0; color: #666;">Season:</td><td style="padding: 8px 0;">${season}</td></tr>
-            ${sponsorBusinessName ? `<tr><td style="padding: 8px 0; color: #666;">Sponsor:</td><td style="padding: 8px 0;">${sponsorBusinessName}</td></tr>` : ''}
-            ${stripeSessionId ? `<tr><td style="padding: 8px 0; color: #666;">Reference:</td><td style="padding: 8px 0; font-size: 12px;">${stripeSessionId}</td></tr>` : ''}
+            <tr><td style="padding: 8px 0; color: #666;">Player:</td><td style="padding: 8px 0; font-weight: bold;">${esc(playerName)}</td></tr>
+            <tr><td style="padding: 8px 0; color: #666;">Team:</td><td style="padding: 8px 0;">${esc(teamName)}</td></tr>
+            <tr><td style="padding: 8px 0; color: #666;">Season:</td><td style="padding: 8px 0;">${esc(season)}</td></tr>
+            ${sponsorBusinessName ? `<tr><td style="padding: 8px 0; color: #666;">Sponsor:</td><td style="padding: 8px 0;">${esc(sponsorBusinessName)}</td></tr>` : ''}
+            ${stripeSessionId ? `<tr><td style="padding: 8px 0; color: #666;">Reference:</td><td style="padding: 8px 0; font-size: 12px;">${esc(stripeSessionId)}</td></tr>` : ''}
           </table>
         </div>
         <div style="background-color: white; padding: 15px; border-radius: 8px; text-align: center;">
@@ -165,8 +172,8 @@ async function sendInvoiceNotification(data) {
       <div style="padding: 30px; background-color: #f5f5f5;">
         <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
           <h2 style="color: #333; margin-top: 0;">Invoice Notice</h2>
-          <p>Hi ${parentName || 'Parent/Guardian'},</p>
-          <p>This is a billing notice for <strong>${playerName}</strong> on the <strong>${teamName}</strong> team for the <strong>${season}</strong> season.</p>
+          <p>Hi ${esc(parentName || 'Parent/Guardian')},</p>
+          <p>This is a billing notice for <strong>${esc(playerName)}</strong> on the <strong>${esc(teamName)}</strong> team for the <strong>${esc(season)}</strong> season.</p>
 
           <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
             ${feeRows}
@@ -198,10 +205,10 @@ async function sendInvoiceNotification(data) {
             </a>
           </div>
           <p style="text-align: center; color: #666; font-size: 13px;">
-            Or log in to your parent account at <a href="https://tcwavesballclub.com">tcwavesballclub.com</a> to view details and make a payment.
+            Or log in to your parent account at <a href="${SITE_URL}">${SITE_URL.replace('https://', '')}</a> to view details and make a payment.
           </p>` : `
           <p style="text-align: center; color: #666;">
-            Log in to your parent account at <a href="https://tcwavesballclub.com">tcwavesballclub.com</a> to view details and make a payment.
+            Log in to your parent account at <a href="${SITE_URL}">${SITE_URL.replace('https://', '')}</a> to view details and make a payment.
           </p>`}
         </div>
 
@@ -218,7 +225,7 @@ async function sendInvoiceNotification(data) {
 async function sendParentInviteEmail(data) {
     const { email, parentName, playerNames, resetLink } = data;
     const playerList = playerNames.length > 0
-        ? playerNames.map(n => `<li><strong>${n}</strong></li>`).join('')
+        ? playerNames.map(n => `<li><strong>${esc(n)}</strong></li>`).join('')
         : '<li>Your child</li>';
     const subject = `You're Invited - TC Waves Ball Club Parent Portal`;
     const html = `
@@ -227,7 +234,7 @@ async function sendParentInviteEmail(data) {
       <div style="padding: 30px; background-color: #f5f5f5;">
         <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
           <h2 style="color: #333; margin-top: 0;">Welcome to TC Waves!</h2>
-          <p>Hi ${parentName || 'Parent/Guardian'},</p>
+          <p>Hi ${esc(parentName || 'Parent/Guardian')},</p>
           <p>An account has been created for you on the TC Waves Ball Club parent portal. You can use it to:</p>
           <ul style="color: #555;">
             <li>View invoices and payment history</li>
@@ -248,7 +255,7 @@ async function sendParentInviteEmail(data) {
           <p style="color: #666; font-size: 13px;">
             This link does not expire. You can use it any time to set your password.
             If you have any issues, visit
-            <a href="https://nmwaves.com/login">nmwaves.com/login</a>
+            <a href="${SITE_URL}/login">${SITE_URL.replace('https://', '')}/login</a>
             and click "Forgot Password" to get a new link.
           </p>
         </div>

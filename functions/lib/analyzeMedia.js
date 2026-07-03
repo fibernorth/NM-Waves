@@ -37,6 +37,7 @@ exports.batchAnalyzeMedia = exports.analyzeMedia = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const vision_1 = require("@google-cloud/vision");
+const moderation_1 = require("./moderation");
 const getDb = () => admin.firestore();
 // ---- Date extraction from filename ----
 /**
@@ -87,7 +88,7 @@ function extractJerseyNumbers(textBlocks) {
 }
 // ---- Main analysis logic ----
 async function analyzeImage(fileUrl, fileName, mediaId, docRef) {
-    var _a, _b, _c;
+    var _a, _b;
     const client = new vision_1.ImageAnnotatorClient();
     // Run text detection and label detection in parallel
     const [textResult, labelResult] = await Promise.all([
@@ -152,41 +153,48 @@ async function analyzeImage(fileUrl, fileName, mediaId, docRef) {
     if (suggestedTeamId) {
         update.suggestedTeamId = suggestedTeamId;
     }
+    // Collect all tags to add in a single arrayUnion call
+    const tagsToAdd = [];
     if (photoDate) {
         update.photoDate = admin.firestore.Timestamp.fromDate(photoDate);
-        // Auto-add year tag
-        const yearTag = photoDate.getUTCFullYear().toString();
-        const existingTags = ((_c = (await docRef.get()).data()) === null || _c === void 0 ? void 0 : _c.tags) || [];
-        if (!existingTags.includes(yearTag)) {
-            update.tags = admin.firestore.FieldValue.arrayUnion(yearTag);
-        }
+        tagsToAdd.push(photoDate.getUTCFullYear().toString());
     }
     // Auto-add scene label tags for sports-related labels
     const sportsLabels = ['softball', 'baseball', 'batting', 'pitching', 'trophy',
         'team photo', 'team sport', 'ball game', 'sports equipment'];
     const matchedLabels = detectedLabels
         .filter((l) => sportsLabels.some((s) => l.toLowerCase().includes(s)));
-    if (matchedLabels.length > 0) {
-        update.tags = admin.firestore.FieldValue.arrayUnion(...matchedLabels.map((l) => l.toLowerCase()));
+    tagsToAdd.push(...matchedLabels.map((l) => l.toLowerCase()));
+    if (tagsToAdd.length > 0) {
+        update.tags = admin.firestore.FieldValue.arrayUnion(...tagsToAdd);
     }
     await docRef.update(update);
     console.log(`Analysis for ${mediaId}: ${detectedLabels.length} labels, ${detectedText.length} text blocks, ${detectedJerseyNumbers.length} jersey numbers`);
 }
 // ---- Firestore trigger: auto-analyze new uploads ----
 /**
- * Fires on new media uploads alongside existing moderation.
- * Runs Vision text + label detection, jersey matching, and date parsing.
+ * Single onCreate trigger for media — handles both moderation and analysis
+ * sequentially to avoid race conditions from two triggers on the same doc.
  */
 exports.analyzeMedia = functions.firestore
     .document('media/{mediaId}')
     .onCreate(async (snap, context) => {
     const data = snap.data();
     const mediaId = context.params.mediaId;
-    // Only analyze images
+    // Only process images
     if (data.mediaType === 'video')
         return;
     if (!data.fileUrl)
         return;
+    // Step 1: Run content moderation first
+    try {
+        await (0, moderation_1.runModeration)(snap, mediaId);
+    }
+    catch (moderationError) {
+        console.error(`Moderation failed for ${mediaId}:`, moderationError);
+        // Continue to analysis even if moderation fails
+    }
+    // Step 2: Run image analysis
     try {
         await snap.ref.update({ analysisStatus: 'pending' });
         await analyzeImage(data.fileUrl, data.fileName || '', mediaId, snap.ref);
