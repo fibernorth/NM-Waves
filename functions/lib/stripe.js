@@ -52,6 +52,35 @@ const computeFeeTotal = (data) => (data.registrationFee || 0) +
     (data.facilityFees || 0) +
     (data.equipmentFees || 0) +
     (data.otherFees || 0);
+/**
+ * Records a webhook event whose processing failed, so a charged payment is
+ * never silently lost. Writes a dead-letter document plus a high-severity admin
+ * notification for manual reconciliation/replay.
+ */
+async function recordFailedWebhook(event, error) {
+    const now = admin.firestore.Timestamp.now();
+    try {
+        await getDb().collection('failedStripeWebhookEvents').doc(event.id).set({
+            eventId: event.id,
+            eventType: event.type,
+            error: String(error),
+            payload: JSON.stringify(event.data.object).slice(0, 8000),
+            resolved: false,
+            createdAt: now,
+        });
+        await getDb().collection('adminNotifications').add({
+            type: 'webhook_processing_failure',
+            severity: 'high',
+            message: `Stripe webhook ${event.type} (${event.id}) failed to process. A payment may need manual reconciliation.`,
+            eventId: event.id,
+            createdAt: now,
+            read: false,
+        });
+    }
+    catch (writeErr) {
+        console.error('Failed to record dead-letter webhook event:', writeErr);
+    }
+}
 function getStripe() {
     const secretKey = process.env.STRIPE_SECRET_KEY;
     if (!secretKey) {
@@ -198,7 +227,7 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
  * Stripe webhook handler for processing completed payments.
  */
 exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
     if (req.method !== 'POST') {
         res.status(405).send('Method Not Allowed');
         return;
@@ -630,9 +659,11 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
         }
         catch (error) {
             console.error('Error processing webhook:', error);
-            // Return 200 to prevent Stripe retry storms on permanent failures.
-            // The error is logged for admin review.
-            res.status(200).json({ received: true, error: 'Processing failed — logged for review' });
+            // A card was charged but processing failed. Return 200 (so Stripe does not
+            // retry against non-idempotent writes) but record a dead-letter + admin
+            // alert so the payment is never silently lost and can be reconciled.
+            await recordFailedWebhook(event, error);
+            res.status(200).json({ received: true, error: 'Processing failed — recorded for review' });
             return;
         }
     }
@@ -641,35 +672,35 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
         try {
             const charge = event.data.object;
             const refundAmount = (charge.amount_refunded || 0) / 100;
-            const sessionId = charge.payment_intent;
             const refundDate = admin.firestore.Timestamp.now();
-            // Find the income record linked to this payment
-            const incomeQuery = await getDb().collection('income')
-                .where('referenceNumber', '==', sessionId)
-                .limit(1)
-                .get();
-            if (incomeQuery.empty) {
-                // Try matching by Stripe session ID in the charge metadata
-                const metaSessionId = ((_m = charge.metadata) === null || _m === void 0 ? void 0 : _m.stripeSessionId) || ((_o = charge.metadata) === null || _o === void 0 ? void 0 : _o.session_id);
-                if (metaSessionId) {
-                    const altQuery = await getDb().collection('income')
-                        .where('referenceNumber', '==', metaSessionId)
-                        .limit(1)
-                        .get();
-                    if (altQuery.empty) {
-                        console.warn(`Refund: No income record found for charge ${charge.id}`);
-                        res.status(200).json({ received: true, skipped: 'no matching income record' });
-                        return;
-                    }
-                }
-                else {
-                    console.warn(`Refund: No income record found for charge ${charge.id}`);
-                    res.status(200).json({ received: true, skipped: 'no matching income record' });
-                    return;
+            // Income records store referenceNumber = the Checkout Session id (cs_...),
+            // but the charge only carries the PaymentIntent id (pi_...). Recover the
+            // Checkout Session id from the PaymentIntent so the lookup can match.
+            let sessionId = null;
+            try {
+                if (charge.payment_intent) {
+                    const sessions = await stripe.checkout.sessions.list({
+                        payment_intent: charge.payment_intent,
+                        limit: 1,
+                    });
+                    if (sessions.data.length)
+                        sessionId = sessions.data[0].id;
                 }
             }
-            const incomeDoc = incomeQuery.empty ? null : incomeQuery.docs[0];
+            catch (lookupErr) {
+                console.warn(`Refund: could not resolve session for charge ${charge.id}:`, lookupErr);
+            }
+            let incomeDoc = null;
+            if (sessionId) {
+                const incomeQuery = await getDb().collection('income')
+                    .where('referenceNumber', '==', sessionId)
+                    .limit(1)
+                    .get();
+                if (!incomeQuery.empty)
+                    incomeDoc = incomeQuery.docs[0];
+            }
             if (!incomeDoc) {
+                console.warn(`Refund: No income record found for charge ${charge.id} (session ${sessionId !== null && sessionId !== void 0 ? sessionId : 'unknown'})`);
                 res.status(200).json({ received: true, skipped: 'no matching income record' });
                 return;
             }
@@ -776,7 +807,8 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
         }
         catch (error) {
             console.error('Error processing refund webhook:', error);
-            res.status(200).json({ received: true, error: 'Refund processing failed — logged for review' });
+            await recordFailedWebhook(event, error);
+            res.status(200).json({ received: true, error: 'Refund processing failed — recorded for review' });
             return;
         }
     }
@@ -788,7 +820,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
             await getDb().collection('adminNotifications').add({
                 type: 'payment_dispute',
                 severity: 'critical',
-                message: `Chargeback dispute opened for $${disputeAmount.toFixed(2)}. Charge: ${dispute.charge}. Reason: ${dispute.reason}. Respond by ${new Date((((_p = dispute.evidence_details) === null || _p === void 0 ? void 0 : _p.due_by) || 0) * 1000).toLocaleDateString()}.`,
+                message: `Chargeback dispute opened for $${disputeAmount.toFixed(2)}. Charge: ${dispute.charge}. Reason: ${dispute.reason}. Respond by ${new Date((((_m = dispute.evidence_details) === null || _m === void 0 ? void 0 : _m.due_by) || 0) * 1000).toLocaleDateString()}.`,
                 disputeId: dispute.id,
                 chargeId: dispute.charge,
                 amount: disputeAmount,

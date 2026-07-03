@@ -139,14 +139,16 @@ exports.sendParentInvites = functions.https.onRequest((req, res) => {
                         },
                         updatedAt: admin.firestore.Timestamp.now(),
                     }, { merge: true });
-                    // Generate a custom invite token (never expires)
+                    // Generate a custom invite token (expires 30 days after issue)
                     const inviteToken = crypto.randomUUID();
-                    // Store the invite token on the pending user doc
+                    // Store the invite token on the pending user doc, stamped so the
+                    // activation endpoint can enforce a 30-day expiry.
                     await pendingQuery.docs[0].ref.update({
                         inviteToken,
+                        inviteTokenCreatedAt: admin.firestore.Timestamp.now(),
                         updatedAt: admin.firestore.Timestamp.now(),
                     });
-                    // Build the setup link (never expires)
+                    // Build the setup link (valid for 30 days)
                     const resetLink = `${SITE_URL}/setup-account?token=${inviteToken}&email=${encodeURIComponent(email)}`;
                     // Resolve player names for the invite email
                     const playerNames = [];

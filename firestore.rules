@@ -316,6 +316,13 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // FAILED STRIPE WEBHOOK EVENTS (dead-letter; written by Cloud Function via
+    // Admin SDK). Admins read/update to reconcile; no client create.
+    match /failedStripeWebhookEvents/{docId} {
+      allow read, update: if isAdmin();
+      allow create, delete: if false;
+    }
+
     // HOMEPAGE POSTS (public-facing content)
     match /homepagePosts/{docId} {
       allow read: if true;

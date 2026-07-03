@@ -79,7 +79,21 @@ export const setAccountPassword = functions.https.onRequest((req, res) => {
         const pendingDoc = pendingQuery.docs[0];
         const pendingData = pendingDoc.data();
 
-        // Token is valid (invite tokens never expire)
+        // Reject an already-used invite (the token is single-use). Without this,
+        // an old invite email could reset the account password indefinitely.
+        if (pendingData.status === 'activated') {
+          res.status(400).json({ error: 'This invite link has already been used. Please use "Forgot password" to sign in.' });
+          return;
+        }
+
+        // Enforce a 30-day expiry on the invite token.
+        const issuedAt = pendingData.inviteTokenCreatedAt?.toDate?.();
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        if (issuedAt && Date.now() - issuedAt.getTime() > THIRTY_DAYS_MS) {
+          res.status(400).json({ error: 'This invite link has expired. Please contact your administrator for a new one.' });
+          return;
+        }
+
         // Find or verify the Firebase Auth user
         let authUser;
         try {
@@ -92,9 +106,11 @@ export const setAccountPassword = functions.https.onRequest((req, res) => {
         // Set the password
         await admin.auth().updateUser(authUser.uid, { password });
 
-        // Mark invite as completed
+        // Mark invite as completed and invalidate the token so the link can't be
+        // reused to take over the account later.
         await pendingDoc.ref.update({
           status: 'activated',
+          inviteToken: admin.firestore.FieldValue.delete(),
           activatedAt: admin.firestore.Timestamp.now(),
           updatedAt: admin.firestore.Timestamp.now(),
         });

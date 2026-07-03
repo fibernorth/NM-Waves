@@ -253,8 +253,8 @@ async function sendParentInviteEmail(data) {
           </div>
 
           <p style="color: #666; font-size: 13px;">
-            This link does not expire. You can use it any time to set your password.
-            If you have any issues, visit
+            This link is valid for 30 days and can be used once to set your password.
+            If it has expired or you have any issues, visit
             <a href="${SITE_URL}/login">${SITE_URL.replace('https://', '')}/login</a>
             and click "Forgot Password" to get a new link.
           </p>
