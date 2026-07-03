@@ -894,14 +894,15 @@ interface PaymentHistoryDialogProps {
 }
 
 const PaymentHistoryDialog = ({ open, onClose, finance, isAdmin, onPlayerQuit, quitLoading }: PaymentHistoryDialogProps) => {
-  if (!finance) return null;
-  const payments: Payment[] = finance.payments || [];
+  // Hooks must be called unconditionally (before the null-finance early return
+  // below) to keep hook order stable across renders. finance is guaranteed
+  // non-null wherever the mutation actually fires, since we return null otherwise.
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const deletePaymentMutation = useMutation({
-    mutationFn: (paymentId: string) => playerFinancesApi.removePayment(finance.id, paymentId),
+    mutationFn: (paymentId: string) => playerFinancesApi.removePayment(finance!.id, paymentId),
     onSuccess: () => {
       toast.success('Payment deleted');
       queryClient.invalidateQueries({ queryKey: ['playerFinances'] });
@@ -916,6 +917,9 @@ const PaymentHistoryDialog = ({ open, onClose, finance, isAdmin, onPlayerQuit, q
       setDeletingPaymentId(null);
     },
   });
+
+  if (!finance) return null;
+  const payments: Payment[] = finance.payments || [];
 
   const sortedPayments = [...payments].sort((a, b) => {
     try {

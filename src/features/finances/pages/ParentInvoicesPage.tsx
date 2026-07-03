@@ -113,58 +113,9 @@ const ParentInvoicesPage = () => {
   const isLoading = loadingChildren || loadingFinances || loadingInvoices;
   const isError = errorChildren || errorFinances || errorInvoices;
 
-  const handleCopyLink = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success('Payment link copied!');
-    } catch {
-      toast.error('Failed to copy link');
-    }
-  };
-
-  if (!isParent || linkedPlayerIds.length === 0) {
-    return (
-      <Box>
-        <Typography variant="h4" gutterBottom>My Invoices</Typography>
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <ChildCareIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No children linked to your account
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Link your children to see their invoices and make payments.
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<LinkIcon />}
-            onClick={() => setLinkChildOpen(true)}
-          >
-            Link a Child
-          </Button>
-          <LinkChildDialog open={linkChildOpen} onClose={() => setLinkChildOpen(false)} />
-        </Paper>
-      </Box>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (isError) {
-    return (
-      <Box>
-        <Typography variant="h4" gutterBottom>My Invoices</Typography>
-        <Alert severity="error">Failed to load invoice data. Please refresh the page or try again later.</Alert>
-      </Box>
-    );
-  }
-
-  // Build a map of financeId -> balanceDue for accurate invoice remaining amounts
+  // Build a map of financeId -> balanceDue for accurate invoice remaining amounts.
+  // These hooks must run on every render (before any early return) to keep hook
+  // order stable; they depend only on query data that defaults to [].
   const financeBalanceMap = useMemo(() => {
     const map = new Map<string, number>();
     for (const f of childFinances) {
@@ -218,6 +169,57 @@ const ParentInvoicesPage = () => {
 
     return result;
   }, [childInvoices, financeBalanceMap]);
+
+  const handleCopyLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Payment link copied!');
+    } catch {
+      toast.error('Failed to copy link');
+    }
+  };
+
+  if (!isParent || linkedPlayerIds.length === 0) {
+    return (
+      <Box>
+        <Typography variant="h4" gutterBottom>My Invoices</Typography>
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <ChildCareIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            No children linked to your account
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Link your children to see their invoices and make payments.
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<LinkIcon />}
+            onClick={() => setLinkChildOpen(true)}
+          >
+            Link a Child
+          </Button>
+          <LinkChildDialog open={linkChildOpen} onClose={() => setLinkChildOpen(false)} />
+        </Paper>
+      </Box>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Box>
+        <Typography variant="h4" gutterBottom>My Invoices</Typography>
+        <Alert severity="error">Failed to load invoice data. Please refresh the page or try again later.</Alert>
+      </Box>
+    );
+  }
 
   // Summarize by child
   const now = new Date();
