@@ -50,11 +50,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // PLAYERS — public read for roster pages (public pages only expose safe fields:
-    // firstName, lastInitial, jerseyNumber, positions). PII fields like contacts
-    // and medical info should be filtered at the application level.
+    // PLAYERS — NOT publicly readable. Full player docs contain minors' DOB,
+    // medical notes, and emergency contacts, so anonymous read is denied.
+    // Public roster pages read sanitized safe fields via the getPublicRoster
+    // Cloud Function instead. (Finer-grained per-parent scoping of authenticated
+    // reads is a tracked follow-up; requires reworking the child-link flow.)
     match /players/{playerId} {
-      allow read: if true;
+      allow read: if isAuth();
       allow write: if isCoach();
     }
 
@@ -259,10 +261,15 @@ service cloud.firestore {
     }
 
     // INVOICE TOKENS (QR code payments)
-    // Public read so payment page works; only admins and cloud functions can create/update.
-    // The markUsed call is done by cloud function (stripe webhook), not client-side.
+    // NOT publicly listable — the docs hold every child's name, fee breakdown,
+    // scholarship amount, and the secret payment token. The public payment page
+    // resolves a single invoice via the getInvoiceByToken Cloud Function.
+    // Parents may read their linked children's invoices; admins read all.
     match /invoiceTokens/{docId} {
-      allow read: if true;
+      allow read: if isAdmin() || (
+        isAuth() && hasRole('parent') &&
+        resource.data.playerId in getUserData(request.auth.uid).linkedPlayerIds
+      );
       allow create: if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();

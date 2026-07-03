@@ -19,7 +19,7 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import { useNavigate } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { teamsApi } from '@/lib/api/teams';
-import { playersApi } from '@/lib/api/players';
+import { getPublicRoster } from '@/lib/api/publicData';
 import type { Team } from '@/types/models';
 
 interface PublicPlayer {
@@ -61,15 +61,11 @@ const PublicTeamsPage = () => {
 
     setLoadingPlayers((prev) => ({ ...prev, [teamId]: true }));
     try {
-      const fullPlayers = await playersApi.getByTeam(teamId);
-      const players: PublicPlayer[] = fullPlayers
-        .map((p) => ({
-          firstName: p.firstName || '',
-          lastInitial: p.lastName ? p.lastName.charAt(0) + '.' : '',
-          jerseyNumber: p.jerseyNumber,
-          positions: p.positions || [],
-        }))
-        .sort((a, b) => a.firstName.localeCompare(b.firstName));
+      // Sanitized roster from Cloud Function (safe fields only), sorted by name.
+      const roster = await getPublicRoster(teamId);
+      const players: PublicPlayer[] = [...roster].sort((a, b) =>
+        a.firstName.localeCompare(b.firstName)
+      );
       setTeamPlayers((prev) => ({ ...prev, [teamId]: players }));
     } catch (err) {
       console.error('Error fetching players for team:', teamId, err);

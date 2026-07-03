@@ -122,16 +122,50 @@ export const invoiceTokensApi = {
 
   /**
    * Get an invoice token by its UUID token string.
+   * Resolved through the getInvoiceByToken Cloud Function: the invoiceTokens
+   * collection is no longer publicly listable (it leaked every child's name,
+   * fee breakdown, and secret token), so the public payment page looks up its
+   * single invoice server-side by presenting the token it already holds.
    */
   getByToken: async (token: string): Promise<InvoiceToken | null> => {
-    const q = query(
-      collection(db, COLLECTION),
-      where('token', '==', token)
+    const callable = httpsCallable<{ token: string }, { invoice: any | null }>(
+      functions,
+      'getInvoiceByToken'
     );
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return null;
-    const docSnap = snapshot.docs[0];
-    return convertToken(docSnap.id, docSnap.data());
+    const result = await callable({ token });
+    const inv = result.data?.invoice;
+    if (!inv) return null;
+    // Map the callable payload (ISO date strings) into an InvoiceToken.
+    return {
+      id: inv.id,
+      financeId: inv.financeId,
+      playerId: inv.playerId,
+      playerName: inv.playerName || '',
+      teamName: inv.teamName || '',
+      season: inv.season || '',
+      amountDue: inv.amountDue || 0,
+      chargeType: inv.chargeType || 'full_balance',
+      chargeLabel: inv.chargeLabel || 'Full Balance',
+      chargeAmount: inv.chargeAmount ?? 0,
+      registrationFee: inv.registrationFee ?? 0,
+      uniformCost: inv.uniformCost ?? 0,
+      tournamentFees: inv.tournamentFees ?? 0,
+      facilityFees: inv.facilityFees ?? 0,
+      equipmentFees: inv.equipmentFees ?? 0,
+      otherFees: inv.otherFees ?? 0,
+      scholarshipAmount: inv.scholarshipAmount ?? 0,
+      totalPaid: inv.totalPaid ?? 0,
+      token: inv.token,
+      invoiceNumber: inv.invoiceNumber || undefined,
+      dueDate: inv.dueDate ? new Date(inv.dueDate) : undefined,
+      paymentTerms: inv.paymentTerms || undefined,
+      expiresAt: inv.expiresAt ? new Date(inv.expiresAt) : new Date(),
+      createdBy: inv.createdBy || '',
+      createdAt: inv.createdAt ? new Date(inv.createdAt) : new Date(),
+      used: inv.used || false,
+      usedAt: inv.usedAt ? new Date(inv.usedAt) : undefined,
+      usedBy: inv.usedBy || undefined,
+    };
   },
 
   /**

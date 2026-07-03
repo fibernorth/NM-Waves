@@ -19,7 +19,7 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import SportsIcon from '@mui/icons-material/Sports';
 import PersonIcon from '@mui/icons-material/Person';
 import { teamsApi } from '@/lib/api/teams';
-import { playersApi } from '@/lib/api/players';
+import { getPublicRoster } from '@/lib/api/publicData';
 import type { Team } from '@/types/models';
 import SponsorBanner from '@/components/common/SponsorBanner';
 
@@ -77,24 +77,8 @@ const PublicTeamDetailPage = () => {
       }
 
       try {
-        const fullPlayers = await playersApi.getByTeam(id);
-        const playersData: PublicPlayer[] = fullPlayers
-          .map((p) => ({
-            firstName: p.firstName || '',
-            lastInitial: p.lastName ? p.lastName.charAt(0) + '.' : '',
-            jerseyNumber: p.jerseyNumber,
-            positions: p.positions || [],
-          }))
-          .sort((a, b) => {
-            // Sort by jersey number first (if available), then by first name
-            if (a.jerseyNumber != null && b.jerseyNumber != null) {
-              return a.jerseyNumber - b.jerseyNumber;
-            }
-            if (a.jerseyNumber != null) return -1;
-            if (b.jerseyNumber != null) return 1;
-            return a.firstName.localeCompare(b.firstName);
-          });
-
+        // Sanitized roster from Cloud Function (safe fields only, already sorted).
+        const playersData = await getPublicRoster(id);
         setPlayers(playersData);
       } catch (err) {
         console.error('Error fetching players:', err);
