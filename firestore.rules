@@ -188,9 +188,12 @@ service cloud.firestore {
     }
 
     // PLAYER FINANCES
-    // Parents can read finance records for their linked children; sponsors can read for sponsored players
+    // Coaches/admins read all; parents read their linked children's records.
+    // Sponsors no longer get blanket read of every player's finances — the
+    // sponsor "pay a player" flow uses the getPlayerFinanceSummary Cloud
+    // Function, which returns only a minimal balance summary.
     match /playerFinances/{docId} {
-      allow read: if isCoach() || isSponsor() || (
+      allow read: if isCoach() || (
         isAuth() && hasRole('parent') &&
         resource.data.playerId in getUserData(request.auth.uid).linkedPlayerIds
       );

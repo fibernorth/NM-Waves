@@ -81,3 +81,55 @@ export const updateLinkedPlayerContact = functions.https.onCall(
     return { success: true };
   }
 );
+
+/**
+ * Returns a MINIMAL finance summary (name, team, season, balance due) for a
+ * player, to any authenticated user. Used by the sponsor "pay a player" flow so
+ * a sponsor can see the outstanding balance of the player they want to fund —
+ * without granting sponsors read access to the full playerFinances documents
+ * (which contain every payer's name/email and the whole payment history).
+ */
+export const getPlayerFinanceSummary = functions.https.onCall(
+  async (data: { playerId: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+    }
+    const { playerId } = data;
+    if (!playerId) {
+      throw new functions.https.HttpsError('invalid-argument', 'playerId is required');
+    }
+
+    const snapshot = await getDb()
+      .collection('playerFinances')
+      .where('playerId', '==', playerId)
+      .orderBy('season', 'desc')
+      .get();
+
+    if (snapshot.empty) return { summary: null };
+
+    const docSnap = snapshot.docs[0];
+    const d = docSnap.data();
+    const totalOwed =
+      (d.registrationFee || 0) +
+      (d.uniformCost || 0) +
+      (d.tournamentFees || 0) +
+      (d.facilityFees || 0) +
+      (d.equipmentFees || 0) +
+      (d.otherFees || 0);
+    const totalPaid = (d.payments || []).reduce(
+      (s: number, p: any) => s + (p.amount || 0),
+      0
+    );
+    const balanceDue = Math.max(0, totalOwed - totalPaid - (d.scholarshipAmount || 0));
+
+    return {
+      summary: {
+        playerName: d.playerName || '',
+        teamName: d.teamName || '',
+        season: d.season || '',
+        balanceDue,
+        financeId: docSnap.id,
+      },
+    };
+  }
+);
