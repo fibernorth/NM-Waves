@@ -41,13 +41,18 @@ functions changes require `firebase deploy --only functions` to take effect.
 - P1 invite tokens: 30-day expiry + single-use + token invalidated on activation (was: never expired, valid after activation).
 - P1 refund webhook: `cs_` session id recovered from the `pi_` PaymentIntent so refunds actually post to the books; dead code removed.
 - P1 webhook failures now dead-lettered (`failedStripeWebhookEvents` + admin alert) instead of silently swallowed.
+- P1 payment writes: `addPayment`/`removePayment` use atomic `arrayUnion`/`arrayRemove` (no concurrent clobber); cascade-delete no longer matches income by amount (could delete the wrong record).
+- P1 `syncToBilling` now excludes quit players from the cost division (was re-charging them and diluting others).
+- P1 sign-in no longer unmounts the app mid-submit (failed logins keep the form + inline error).
 - Build predeploy hooks added; committed `functions/lib` re-synced with source.
 
 **Still open:**
 - **P0-6 Storage `documents/**` role-gating** — needs Firebase Auth **custom claims** (storage rules can't read Firestore roles). Deploy-side change (user→claims sync trigger + one-time backfill) that must be integration-tested; not safe to land blind. Interim mitigation: closing coach self-signup means only admin-provisioned accounts hold privileged roles, and only authenticated users can reach the bucket at all.
 - **Deploy** — all the above is inert until `firebase deploy --only firestore:rules,storage,functions,hosting` (set `functions/.env` first).
 - **Verify in Stripe test mode before launch**: the refund-linkage fix and webhook dead-lettering should be exercised end-to-end. **Transactional webhook idempotency** (duplicate income/GL on concurrent/partial-failure retries) and **switching processing errors to 5xx retries** were deliberately NOT changed blind — they need the money path exercised against Stripe first.
-- Remaining P1 (not started): non-atomic payment add/remove writes; `syncToBilling` re-charging quit players; sign-in global-loading UX.
+- **Needs your input (data/decision, not code):** the donation-receipt org identity is hardcoded to a wrong EIN + "Las Cruces, NM" (should be the Northern Michigan Waves EIN + Traverse City, MI). Fixing correctly requires the real EIN/address — provide them and it's a quick change.
+- **Branding sweep** ("TC Waves Ball Club" appears in emails, signup, dialogs) → "Northern Michigan Waves" is a broad cosmetic pass, deferred.
+- P2 backlog unchanged: automated tests + CI, docs rewrite, pagination, code-splitting, `.npmrc` `strict-ssl`, localhost in the Stripe returnUrl allowlist.
 
 ## 2. Verdict
 
