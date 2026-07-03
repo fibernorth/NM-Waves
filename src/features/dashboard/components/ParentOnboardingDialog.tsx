@@ -20,6 +20,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChildCareIcon from '@mui/icons-material/ChildCare';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { playersApi } from '@/lib/api/players';
+import { updateLinkedPlayerContact } from '@/lib/api/parentActions';
 import { doc, updateDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { useAuthStore } from '@/stores/authStore';
@@ -135,9 +136,11 @@ const ParentOnboardingDialog = ({ open, onClose, linkedPlayerIds }: ParentOnboar
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Update each player
+      // Update each player via the parent-scoped Cloud Function (parents cannot
+      // write the /players collection directly).
       for (const [playerId, form] of Object.entries(playerForms)) {
-        await playersApi.update(playerId, {
+        await updateLinkedPlayerContact({
+          playerId,
           parentName: form.parentName,
           parentEmail: form.parentEmail,
           parentPhone: form.parentPhone,
