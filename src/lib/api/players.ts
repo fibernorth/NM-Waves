@@ -67,6 +67,7 @@ const convertPlayer = (id: string, data: any): Player => ({
     uploadedByName: d.uploadedByName || '',
     uploadedAt: d.uploadedAt?.toDate?.() || new Date(d.uploadedAt) || new Date(),
   })),
+  compliance: data.compliance || undefined,
   active: data.active,
   status: data.status || (data.active ? 'active' : 'inactive'),
   quitDate: data.quitDate?.toDate?.() || undefined,
