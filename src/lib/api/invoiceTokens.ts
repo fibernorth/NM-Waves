@@ -218,6 +218,26 @@ export const invoiceTokensApi = {
   },
 
   /**
+   * Email a single player's parent/guardian an invoice notice or a full account
+   * statement. Recipients are resolved server-side from the player's contacts.
+   */
+  emailBilling: async (
+    financeId: string,
+    mode: 'invoice' | 'statement'
+  ): Promise<{ sent: number; recipients: string[]; mode: string }> => {
+    const callable = httpsCallable<
+      { financeId: string; mode: 'invoice' | 'statement' },
+      { sent: number; recipients: string[]; mode: string }
+    >(functions, 'emailPlayerBilling');
+    try {
+      const result = await callable({ financeId, mode });
+      return result.data;
+    } catch (err: any) {
+      throw new Error(err?.details || err?.message || 'Failed to send email');
+    }
+  },
+
+  /**
    * Get all invoice tokens (optionally filtered by season).
    */
   getAll: async (season?: string): Promise<InvoiceToken[]> => {

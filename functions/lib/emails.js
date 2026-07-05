@@ -37,6 +37,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendBroadcastEmail = sendBroadcastEmail;
 exports.sendPaymentReceipt = sendPaymentReceipt;
 exports.sendInvoiceNotification = sendInvoiceNotification;
+exports.sendPlayerStatement = sendPlayerStatement;
 exports.sendParentInviteEmail = sendParentInviteEmail;
 exports.sendPasswordResetCustomEmail = sendPasswordResetCustomEmail;
 exports.sendBatchInvoiceNotifications = sendBatchInvoiceNotifications;
@@ -264,6 +265,100 @@ async function sendInvoiceNotification(data) {
         <div style="background-color: white; padding: 15px; border-radius: 8px; text-align: center;">
           <p style="margin: 0; color: #666; font-size: 13px;">
             Questions? Reply to this email or contact us at tcwavessoftball@gmail.com
+          </p>
+        </div>
+      </div>
+      ${emailFooter}
+    </div>`;
+    await queueEmail(email, subject, html);
+}
+/**
+ * Sends a full account STATEMENT: every charge line, every payment received
+ * (with date and method), and the running balance — a transaction-history
+ * document, distinct from the invoice notice (which shows only the balance and
+ * a pay button). Used by the per-player "Email Statement" action.
+ */
+async function sendPlayerStatement(data) {
+    const { email, parentName, playerName, teamName, season, feeBreakdown, totalOwed, scholarshipAmount, payments, totalPaid, balanceDue, paymentUrl, statementDate, } = data;
+    const feeItems = [
+        ['Registration Fee', feeBreakdown.registrationFee || 0],
+        ['Uniform Cost', feeBreakdown.uniformCost || 0],
+        ['Tournament Fees', feeBreakdown.tournamentFees || 0],
+        ['Facility Fees', feeBreakdown.facilityFees || 0],
+        ['Equipment Fees', feeBreakdown.equipmentFees || 0],
+        ['Other Fees', feeBreakdown.otherFees || 0],
+    ];
+    const feeRows = feeItems
+        .filter(([, amt]) => amt > 0)
+        .map(([label, amt]) => `<tr><td style="padding: 6px 0; color: #666;">${esc(label)}</td><td style="padding: 6px 0; text-align: right;">$${amt.toFixed(2)}</td></tr>`)
+        .join('');
+    const paymentRows = payments.length
+        ? payments
+            .map((p) => `<tr>
+              <td style="padding: 6px 0; color: #666;">${esc(p.date)}</td>
+              <td style="padding: 6px 0; color: #666;">${esc(p.method)}${p.reference ? ` <span style="color:#999;">(${esc(p.reference)})</span>` : ''}</td>
+              <td style="padding: 6px 0; text-align: right; color: #2e7d32;">-$${p.amount.toFixed(2)}</td>
+            </tr>`)
+            .join('')
+        : `<tr><td colspan="3" style="padding: 8px 0; color: #999; text-align: center;">No payments recorded yet</td></tr>`;
+    const subject = `Account Statement: ${playerName} - Northern Michigan Waves`;
+    const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      ${emailHeader}
+      <div style="padding: 30px; background-color: #f5f5f5;">
+        <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <h2 style="color: #333; margin-top: 0;">Account Statement</h2>
+            <div style="text-align:right; color:#999; font-size:13px;">As of ${esc(statementDate)}</div>
+          </div>
+          <p>Hi ${esc(parentName || 'Parent/Guardian')},</p>
+          <p>Here is the account statement for <strong>${esc(playerName)}</strong> on the <strong>${esc(teamName)}</strong> team for the <strong>${esc(season)}</strong> season.</p>
+
+          <h3 style="color:#555; font-size:15px; margin: 20px 0 4px;">Charges</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            ${feeRows || '<tr><td style="padding:6px 0;color:#999;">No charges on file</td></tr>'}
+            <tr style="border-top: 2px solid #ddd;">
+              <td style="padding: 8px 0; font-weight: bold;">Total Charges</td>
+              <td style="padding: 8px 0; text-align: right; font-weight: bold;">$${totalOwed.toFixed(2)}</td>
+            </tr>
+            ${scholarshipAmount ? `<tr><td style="padding: 6px 0; color: #1976d2;">Scholarship / Financial Aid</td><td style="padding: 6px 0; text-align: right; color: #1976d2;">-$${scholarshipAmount.toFixed(2)}</td></tr>` : ''}
+          </table>
+
+          <h3 style="color:#555; font-size:15px; margin: 24px 0 4px;">Payments</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr style="border-bottom:1px solid #eee;">
+              <td style="padding: 4px 0; color:#999; font-size:12px;">Date</td>
+              <td style="padding: 4px 0; color:#999; font-size:12px;">Method</td>
+              <td style="padding: 4px 0; color:#999; font-size:12px; text-align:right;">Amount</td>
+            </tr>
+            ${paymentRows}
+            <tr style="border-top: 2px solid #ddd;">
+              <td style="padding: 8px 0; font-weight: bold;" colspan="2">Total Paid</td>
+              <td style="padding: 8px 0; text-align: right; font-weight: bold; color:#2e7d32;">-$${totalPaid.toFixed(2)}</td>
+            </tr>
+          </table>
+
+          <table style="width: 100%; border-collapse: collapse; margin-top: 12px;">
+            <tr style="border-top: 2px solid #ddd; background-color: ${balanceDue > 0 ? '#fff3e0' : '#e8f5e9'};">
+              <td style="padding: 10px 0; font-weight: bold; font-size: 16px;">Balance Due</td>
+              <td style="padding: 10px 0; text-align: right; font-weight: bold; font-size: 16px; color: ${balanceDue > 0 ? '#e65100' : '#2e7d32'};">$${balanceDue.toFixed(2)}</td>
+            </tr>
+          </table>
+
+          ${balanceDue > 0 && paymentUrl ? `
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${paymentUrl}" style="display: inline-block; background-color: #1565c0; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+              Pay Balance
+            </a>
+          </div>` : ''}
+          <p style="text-align: center; color: #666; font-size: 13px;">
+            Log in to your parent account at <a href="${SITE_URL}">${SITE_URL.replace('https://', '')}</a> to view details and make a payment.
+          </p>
+        </div>
+
+        <div style="background-color: white; padding: 15px; border-radius: 8px; text-align: center;">
+          <p style="margin: 0; color: #666; font-size: 13px;">
+            Questions? Reply to this email or contact us at ${ORG_EMAIL}
           </p>
         </div>
       </div>

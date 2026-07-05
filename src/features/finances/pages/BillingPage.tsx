@@ -31,6 +31,7 @@ import {
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { playerFinancesApi } from '@/lib/api/finances';
+import { invoiceTokensApi } from '@/lib/api/invoiceTokens';
 import { playersApi } from '@/lib/api/players';
 import { costCalculationApi } from '@/lib/api/costCalculation';
 import { sponsorsApi } from '@/lib/api/sponsors';
@@ -45,6 +46,8 @@ import PeopleIcon from '@mui/icons-material/People';
 import BusinessIcon from '@mui/icons-material/Business';
 import QrCodeIcon from '@mui/icons-material/QrCode';
 import HistoryIcon from '@mui/icons-material/History';
+import EmailIcon from '@mui/icons-material/Email';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import AddIcon from '@mui/icons-material/Add';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import ExitToAppIcon from '@mui/icons-material/ExitToApp';
@@ -167,6 +170,18 @@ const BillingPage = () => {
     const availableBalance = totalContributed - totalApplied;
     return { totalContributed, totalApplied, availableBalance, count: sponsors.length };
   }, [sponsors]);
+
+  // Email an invoice notice or full account statement to a player's parents.
+  const emailBillingMutation = useMutation({
+    mutationFn: ({ financeId, mode }: { financeId: string; mode: 'invoice' | 'statement' }) =>
+      invoiceTokensApi.emailBilling(financeId, mode),
+    onSuccess: (res) => {
+      toast.success(
+        `${res.mode === 'statement' ? 'Statement' : 'Invoice'} emailed to ${res.recipients.join(', ')}`
+      );
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to send email'),
+  });
 
   const handleRecordPayment = (finance: PlayerFinance) => {
     setSelectedFinance(finance);
@@ -332,42 +347,83 @@ const BillingPage = () => {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 160,
+      width: 236,
       sortable: false,
-      renderCell: (params) => (
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          <Tooltip title="Payment History">
-            <IconButton size="small" color="secondary" onClick={() => setHistoryFinance(params.row)}>
-              <HistoryIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          {isAdmin && (
-            <>
-              <Tooltip title="Record Payment">
-                <IconButton
-                  size="small"
-                  color="success"
-                  onClick={() => handleRecordPayment(params.row)}
-                >
-                  <PaymentIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="QR Invoice">
-                <IconButton
-                  size="small"
-                  color="info"
-                  onClick={() => {
-                    setQrFinance(params.row);
-                    setQrDialogOpen(true);
-                  }}
-                >
-                  <QrCodeIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </>
-          )}
-        </Box>
-      ),
+      renderCell: (params) => {
+        const emailingThis =
+          emailBillingMutation.isPending &&
+          emailBillingMutation.variables?.financeId === params.row.id;
+        return (
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Tooltip title="Payment History">
+              <IconButton size="small" color="secondary" onClick={() => setHistoryFinance(params.row)}>
+                <HistoryIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            {isAdmin && (
+              <>
+                <Tooltip title="Record Payment">
+                  <IconButton
+                    size="small"
+                    color="success"
+                    onClick={() => handleRecordPayment(params.row)}
+                  >
+                    <PaymentIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Email Invoice (balance + pay link)">
+                  <span>
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      disabled={emailBillingMutation.isPending}
+                      onClick={() =>
+                        emailBillingMutation.mutate({ financeId: params.row.id, mode: 'invoice' })
+                      }
+                    >
+                      {emailingThis && emailBillingMutation.variables?.mode === 'invoice' ? (
+                        <CircularProgress size={16} />
+                      ) : (
+                        <EmailIcon fontSize="small" />
+                      )}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Tooltip title="Email Statement (itemized charges & payments)">
+                  <span>
+                    <IconButton
+                      size="small"
+                      color="primary"
+                      disabled={emailBillingMutation.isPending}
+                      onClick={() =>
+                        emailBillingMutation.mutate({ financeId: params.row.id, mode: 'statement' })
+                      }
+                    >
+                      {emailingThis && emailBillingMutation.variables?.mode === 'statement' ? (
+                        <CircularProgress size={16} />
+                      ) : (
+                        <ReceiptLongIcon fontSize="small" />
+                      )}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <Tooltip title="QR Invoice">
+                  <IconButton
+                    size="small"
+                    color="info"
+                    onClick={() => {
+                      setQrFinance(params.row);
+                      setQrDialogOpen(true);
+                    }}
+                  >
+                    <QrCodeIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </>
+            )}
+          </Box>
+        );
+      },
     },
   ];
 
