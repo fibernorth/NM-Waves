@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { tryoutApplicantsApi } from '@/lib/api/tryoutApplicants';
 
-const AGE_GROUPS = ['8U', '10U', '12U', '14U', '16U', '18U'];
+const AGE_GROUPS = ['8U', '9U', '10U', '11U', '12U', '13U', '14U', '16U', '18U'];
 
 const POSITIONS = [
   'Pitcher',

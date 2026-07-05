@@ -51,11 +51,18 @@ const computeLeagueAge = (dob: string): number | null => {
   return age;
 };
 
-/** Division from league age: round up to the next even number, minimum 8U. */
+/**
+ * Division from league age: one division per single year (8U–14U), except the
+ * top two brackets are combined — 16U covers ages 15 & 16, and 18U covers ages
+ * 17 & 18. Anything 8 or under is 8U.
+ */
 const computeDivision = (dob: string): string => {
   const age = computeLeagueAge(dob);
   if (age == null) return '—';
-  const div = Math.max(8, age % 2 === 0 ? age : age + 1);
+  let div = age;
+  if (div <= 8) div = 8;
+  else if (div === 15) div = 16;
+  else if (div === 17 || div > 18) div = 18;
   return `${div}U`;
 };
 
