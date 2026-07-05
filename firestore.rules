@@ -305,6 +305,13 @@ service cloud.firestore {
       allow create: if true;
     }
 
+    // COACH APPLICATIONS — public can apply; only admins review/update.
+    match /coachApplications/{docId} {
+      allow create: if true;
+      allow read, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
     // APP SETTINGS
     match /appSettings/{docId} {
       allow read: if isAuth();

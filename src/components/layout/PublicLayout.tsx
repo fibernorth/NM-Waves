@@ -28,6 +28,8 @@ const NAV_LINKS = [
   { label: 'Schedule', path: '/schedule' },
   { label: 'Gallery', path: '/gallery' },
   { label: 'Sponsors', path: '/sponsors' },
+  { label: 'Tryouts', path: '/tryouts' },
+  { label: 'Coach With Us', path: '/coach-application' },
   { label: 'Contact', path: '/contact' },
 ];
 

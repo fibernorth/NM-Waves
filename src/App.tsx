@@ -122,6 +122,8 @@ import EmailParentsPage from './features/admin/pages/EmailParentsPage';
 import SurveysPage from './features/surveys/pages/SurveysPage';
 import SurveyAdminPage from './features/surveys/pages/SurveyAdminPage';
 import TryoutApplicantsPage from './features/tryouts/pages/TryoutApplicantsPage';
+import CoachApplicationPage from './features/public/pages/CoachApplicationPage';
+import CoachApplicationsPage from './features/admin/pages/CoachApplicationsPage';
 
 // Components
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -167,6 +169,7 @@ function App() {
               <Route path="/sponsors" element={<PublicSponsorsPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/tryouts" element={<TryoutRegistrationPage />} />
+              <Route path="/coach-application" element={<CoachApplicationPage />} />
               <Route path="/privacy" element={<PrivacyPolicyPage />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/sponsorship-packages" element={<SponsorshipPackagesPage />} />
@@ -257,6 +260,7 @@ function App() {
               <Route path="/admin/zip-upload" element={<ZipUploadPage />} />
               <Route path="/admin/settings" element={<AdminSettingsPage />} />
               <Route path="/admin/email-parents" element={<EmailParentsPage />} />
+              <Route path="/coach-applications" element={<CoachApplicationsPage />} />
             </Route>
 
             {/* 404 - Redirect to public home */}

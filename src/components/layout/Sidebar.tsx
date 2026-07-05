@@ -32,6 +32,7 @@ import ChatIcon from '@mui/icons-material/Chat';
 import EmailIcon from '@mui/icons-material/Email';
 import PollIcon from '@mui/icons-material/Poll';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
+import SportsIcon from '@mui/icons-material/Sports';
 import PeopleIcon from '@mui/icons-material/People';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import FundraiseIcon from '@mui/icons-material/Paid';
@@ -105,6 +106,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Surveys', icon: <PollIcon />, path: '/surveys', roles: ['parent'] },
     { text: 'Surveys', icon: <PollIcon />, path: '/manage-surveys', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Tryout Signups', icon: <HowToRegIcon />, path: '/tryout-signups', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Coach Applications', icon: <SportsIcon />, path: '/coach-applications', roles: ['admin', 'master-admin'] },
     { text: 'Stats', icon: <ScoreboardIcon />, path: '/stats', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Homepage Manager', icon: <WebIcon />, path: '/homepage-manager', roles: ['admin', 'master-admin'] },
   ];
