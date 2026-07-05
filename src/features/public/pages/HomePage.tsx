@@ -431,6 +431,24 @@ const HomePage = () => {
             </Button>
             <Button
               component={RouterLink}
+              to="/coach-application"
+              variant="contained"
+              size="large"
+              sx={{
+                backgroundColor: 'rgba(255,255,255,0.15)',
+                color: 'white',
+                fontWeight: 600,
+                px: 4,
+                border: '1px solid rgba(255,255,255,0.6)',
+                '&:hover': {
+                  backgroundColor: 'rgba(255,255,255,0.25)',
+                },
+              }}
+            >
+              Coach With Us
+            </Button>
+            <Button
+              component={RouterLink}
               to="/about"
               variant="outlined"
               size="large"

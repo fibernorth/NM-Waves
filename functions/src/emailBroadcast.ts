@@ -29,26 +29,38 @@ export const emailAllParents = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('invalid-argument', 'Subject and message are required');
   }
 
-  const teamIds: string[] = Array.isArray(data?.teamIds) ? data.teamIds.map(String) : [];
-  const playerIds: string[] = Array.isArray(data?.playerIds) ? data.playerIds.map(String) : [];
-  const filtered = teamIds.length > 0 || playerIds.length > 0;
-
-  const snap = await getDb().collection('players').where('active', '==', true).get();
-  const teamIdSet = new Set(teamIds);
-  const playerIdSet = new Set(playerIds);
-
   const emails = new Set<string>();
-  for (const doc of snap.docs) {
-    const p = doc.data();
-    if (filtered && !teamIdSet.has(p.teamId) && !playerIdSet.has(doc.id)) continue;
-    for (const c of p.contacts || []) {
-      if (c && c.email) emails.add(String(c.email).trim().toLowerCase());
+
+  if (data?.tryoutSignups) {
+    // Audience: everyone who registered for tryouts (their contact email).
+    const snap = await getDb().collection('tryout-applicants').get();
+    for (const doc of snap.docs) {
+      const a = doc.data();
+      if (a.email) emails.add(String(a.email).trim().toLowerCase());
     }
-    if (p.parentEmail) emails.add(String(p.parentEmail).trim().toLowerCase());
+  } else {
+    const teamIds: string[] = Array.isArray(data?.teamIds) ? data.teamIds.map(String) : [];
+    const playerIds: string[] = Array.isArray(data?.playerIds) ? data.playerIds.map(String) : [];
+    const filtered = teamIds.length > 0 || playerIds.length > 0;
+    const teamIdSet = new Set(teamIds);
+    const playerIdSet = new Set(playerIds);
+
+    // Note: read all players and skip quit — do not rely on an `active` flag.
+    const snap = await getDb().collection('players').get();
+    for (const doc of snap.docs) {
+      const p = doc.data();
+      if (p.status === 'quit') continue;
+      if (filtered && !teamIdSet.has(p.teamId) && !playerIdSet.has(doc.id)) continue;
+      for (const c of p.contacts || []) {
+        if (c && c.email) emails.add(String(c.email).trim().toLowerCase());
+      }
+      if (p.parentEmail) emails.add(String(p.parentEmail).trim().toLowerCase());
+    }
   }
+
   const recipients = [...emails].filter((e) => e.includes('@'));
   if (recipients.length === 0) {
-    throw new functions.https.HttpsError('failed-precondition', 'No parent emails found for the selected recipients');
+    throw new functions.https.HttpsError('failed-precondition', 'No email addresses found for the selected recipients');
   }
 
   const result = await sendBroadcastEmail(recipients, subject, message);

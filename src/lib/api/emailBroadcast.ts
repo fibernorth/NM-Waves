@@ -15,10 +15,10 @@ export interface BroadcastResult {
 export const emailAllParents = async (
   subject: string,
   message: string,
-  filters?: { teamIds?: string[]; playerIds?: string[] }
+  filters?: { teamIds?: string[]; playerIds?: string[]; tryoutSignups?: boolean }
 ): Promise<BroadcastResult> => {
   const callable = httpsCallable<
-    { subject: string; message: string; teamIds?: string[]; playerIds?: string[] },
+    { subject: string; message: string; teamIds?: string[]; playerIds?: string[]; tryoutSignups?: boolean },
     BroadcastResult
   >(functions, 'emailAllParents');
   const res = await callable({
@@ -26,6 +26,7 @@ export const emailAllParents = async (
     message,
     teamIds: filters?.teamIds || [],
     playerIds: filters?.playerIds || [],
+    tryoutSignups: filters?.tryoutSignups || false,
   });
   return res.data;
 };
