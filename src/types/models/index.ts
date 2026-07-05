@@ -1119,7 +1119,7 @@ export interface BankReconciliation {
 // SURVEYS (private parent surveys — results hidden from coaches)
 // ============================================================
 
-export type SurveyQuestionType = 'text' | 'multiple_choice' | 'rating';
+export type SurveyQuestionType = 'text' | 'multiple_choice' | 'rating' | 'checkbox';
 
 export interface SurveyQuestion {
   id: string;

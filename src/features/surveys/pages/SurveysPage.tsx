@@ -10,6 +10,8 @@ import {
   TextField,
   Radio,
   RadioGroup,
+  Checkbox,
+  FormGroup,
   FormControlLabel,
   FormControl,
   FormLabel,
@@ -161,6 +163,30 @@ const SurveysPage = () => {
                       <FormControlLabel key={opt} value={opt} control={<Radio />} label={opt} />
                     ))}
                   </RadioGroup>
+                )}
+                {q.type === 'checkbox' && (
+                  <FormGroup>
+                    {(q.options || []).map((opt) => {
+                      const chosen = (answers[q.id] ? answers[q.id].split(' | ') : []);
+                      return (
+                        <FormControlLabel
+                          key={opt}
+                          control={
+                            <Checkbox
+                              checked={chosen.includes(opt)}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...chosen, opt]
+                                  : chosen.filter((o) => o !== opt);
+                                setAnswers((p) => ({ ...p, [q.id]: next.join(' | ') }));
+                              }}
+                            />
+                          }
+                          label={opt}
+                        />
+                      );
+                    })}
+                  </FormGroup>
                 )}
                 {q.type === 'rating' && (
                   <Rating

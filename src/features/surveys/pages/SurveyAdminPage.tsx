@@ -9,6 +9,7 @@ import {
   Stack,
   TextField,
   MenuItem,
+  Menu,
   Checkbox,
   FormControlLabel,
   Divider,
@@ -35,6 +36,7 @@ import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
+import { SURVEY_TEMPLATES, type SurveyTemplate } from '@/features/surveys/templates';
 import type { Survey, SurveyQuestion, SurveyQuestionType, Team, Player } from '@/types/models';
 import toast from 'react-hot-toast';
 
@@ -63,6 +65,7 @@ const SurveyAdminPage = () => {
   const [selTeams, setSelTeams] = useState<Team[]>([]);
   const [selPlayers, setSelPlayers] = useState<Player[]>([]);
   const [resultsSurvey, setResultsSurvey] = useState<Survey | null>(null);
+  const [templateMenuAnchor, setTemplateMenuAnchor] = useState<null | HTMLElement>(null);
 
   const { data: allSurveys = [], isLoading } = useQuery({
     queryKey: ['allSurveys'],
@@ -87,6 +90,27 @@ const SurveyAdminPage = () => {
 
   const openNew = () => { setEditing(null); resetBuilder(); setBuilderOpen(true); };
 
+  const openFromTemplate = (tpl: SurveyTemplate) => {
+    setEditing(null);
+    setTitle(tpl.title);
+    setDescription(tpl.description);
+    setQuestions(
+      tpl.questions.map((q) => ({
+        id: crypto.randomUUID(),
+        text: q.text,
+        type: q.type,
+        options: q.options || [],
+        required: q.required || false,
+        visibleToCoaches: q.visibleToCoaches || false,
+      }))
+    );
+    setAudience('all');
+    setSelTeams([]);
+    setSelPlayers([]);
+    setTemplateMenuAnchor(null);
+    setBuilderOpen(true);
+  };
+
   const openEdit = (s: Survey) => {
     setEditing(s);
     setTitle(s.title);
@@ -107,7 +131,7 @@ const SurveyAdminPage = () => {
         .map((q) => ({
           ...q,
           text: q.text.trim(),
-          options: q.type === 'multiple_choice' ? (q.options || []).filter((o) => o.trim()) : [],
+          options: q.type === 'multiple_choice' || q.type === 'checkbox' ? (q.options || []).filter((o) => o.trim()) : [],
         }));
       const assignedTeamIds = audience === 'teams' ? selTeams.map((t) => t.id) : [];
       const assignedPlayerIds = audience === 'players' ? selPlayers.map((p) => p.id) : [];
@@ -176,7 +200,17 @@ const SurveyAdminPage = () => {
           <PollIcon color="primary" />
           <Typography variant="h4">Surveys</Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openNew}>New Survey</Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button variant="outlined" onClick={(e) => setTemplateMenuAnchor(e.currentTarget)}>
+            New from Template
+          </Button>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openNew}>New Survey</Button>
+          <Menu anchorEl={templateMenuAnchor} open={!!templateMenuAnchor} onClose={() => setTemplateMenuAnchor(null)}>
+            {SURVEY_TEMPLATES.map((tpl) => (
+              <MenuItem key={tpl.key} onClick={() => openFromTemplate(tpl)}>{tpl.name}</MenuItem>
+            ))}
+          </Menu>
+        </Box>
       </Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Responses are anonymous. Admins see all answers; a coach who creates a survey sees only the answers to
@@ -254,7 +288,8 @@ const SurveyAdminPage = () => {
                 <TextField select label="Type" size="small" sx={{ minWidth: 170 }} value={q.type}
                   onChange={(e) => updateQuestion(q.id, { type: e.target.value as SurveyQuestionType })}>
                   <MenuItem value="text">Text answer</MenuItem>
-                  <MenuItem value="multiple_choice">Multiple choice</MenuItem>
+                  <MenuItem value="multiple_choice">Multiple choice (pick one)</MenuItem>
+                  <MenuItem value="checkbox">Checkboxes (pick many)</MenuItem>
                   <MenuItem value="rating">Rating (1–5)</MenuItem>
                 </TextField>
                 <FormControlLabel
@@ -268,7 +303,7 @@ const SurveyAdminPage = () => {
                   />
                 </Tooltip>
               </Box>
-              {q.type === 'multiple_choice' && (
+              {(q.type === 'multiple_choice' || q.type === 'checkbox') && (
                 <TextField label="Options (one per line)" fullWidth multiline minRows={2} sx={{ mt: 1 }}
                   value={(q.options || []).join('\n')} onChange={(e) => updateQuestion(q.id, { options: e.target.value.split('\n') })}
                   helperText="Enter each choice on its own line" />
