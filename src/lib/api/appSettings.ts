@@ -54,14 +54,14 @@ const NOTIFICATIONS_DOC = 'appSettings/notifications';
 const SEASON_DOC = 'appSettings/season';
 
 const DEFAULT_ORG: OrgSettings = {
-  orgName: 'TC Waves Ball Club',
+  orgName: 'Northern Michigan Waves',
   tagline: 'Work as a Team, Win as a Team, Better Every Time',
   email: 'tcwavessoftball@gmail.com',
   phone: '',
-  address: '',
+  address: '555 S Rusch Rd',
   city: 'Traverse City',
   state: 'MI',
-  zip: '',
+  zip: '49696',
   ein: '',
   logoUrl: '/images/logo.png',
   websiteUrl: '',

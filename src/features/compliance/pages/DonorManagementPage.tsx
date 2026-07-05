@@ -31,6 +31,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import { donorsApi, donorReceiptsApi } from '@/lib/api/donors';
+import { appSettingsApi } from '@/lib/api/appSettings';
 import type { Donor, DonorReceipt } from '@/types/models';
 
 const donorTypeColors: Record<string, 'info' | 'success' | 'secondary' | 'warning'> = {
@@ -110,6 +111,13 @@ const DonorManagementPage = () => {
     queryFn: () => donorReceiptsApi.getByTaxYear(receiptYearFilter),
   });
 
+  // Organization identity for tax receipts — read from Admin Settings so the
+  // EIN, legal name, and address are correct (not hardcoded).
+  const { data: org } = useQuery({
+    queryKey: ['orgSettings'],
+    queryFn: () => appSettingsApi.getOrg(),
+  });
+
   // ---- Summary calculations ----
   const totalGiven = useMemo(() => donors.reduce((sum, d) => sum + d.totalGiven, 0), [donors]);
   const activeDonors = useMemo(() => donors.filter((d) => d.active).length, [donors]);
@@ -183,9 +191,13 @@ const DonorManagementPage = () => {
         goodsOrServicesValue: params.goodsOrServicesProvided
           ? params.goodsOrServicesValue
           : undefined,
-        orgName: 'TC Waves Ball Club',
-        orgEIN: '88-4060076',
-        orgAddress: 'Las Cruces, NM',
+        orgName: org?.orgName || 'Northern Michigan Waves',
+        orgEIN: org?.ein || '',
+        orgAddress: [
+          org?.address,
+          [org?.city, org?.state].filter(Boolean).join(', '),
+          org?.zip,
+        ].filter(Boolean).join(', ') || 'Traverse City, MI',
         createdBy: user?.uid || '',
       });
     },
