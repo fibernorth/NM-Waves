@@ -29,15 +29,34 @@ import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import type { Player } from '@/types/models';
 import toast from 'react-hot-toast';
 
-const computeAge = (dob: string): number | null => {
+/**
+ * Softball "league age": the player's age as of the upcoming Sept 1 cutoff,
+ * where turning that age exactly ON Sept 1 does NOT count yet (so a player who
+ * turns 9 on Sept 1 is age 8 → 8U). Implemented as age as of Aug 31 of the
+ * upcoming season year.
+ */
+const computeLeagueAge = (dob: string): number | null => {
   if (!dob) return null;
   const d = new Date(dob);
   if (isNaN(d.getTime())) return null;
   const now = new Date();
-  let age = now.getFullYear() - d.getFullYear();
-  const m = now.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  // Determine the upcoming Sept 1 (Sept = month index 8).
+  let seasonYear = now.getFullYear();
+  if (now > new Date(seasonYear, 8, 1)) seasonYear += 1;
+  // Cutoff is Aug 31 the day before Sept 1 (Aug = month index 7).
+  const cutoff = new Date(seasonYear, 7, 31);
+  let age = cutoff.getFullYear() - d.getFullYear();
+  const m = cutoff.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && cutoff.getDate() < d.getDate())) age--;
   return age;
+};
+
+/** Division from league age: round up to the next even number, minimum 8U. */
+const computeDivision = (dob: string): string => {
+  const age = computeLeagueAge(dob);
+  if (age == null) return '—';
+  const div = Math.max(8, age % 2 === 0 ? age : age + 1);
+  return `${div}U`;
 };
 
 const STATUS_COLORS: Record<TryoutStatus, 'default' | 'info' | 'warning' | 'success' | 'error'> = {
@@ -69,12 +88,18 @@ const TryoutApplicantsPage = () => {
     },
     {
       field: 'age',
-      headerName: 'Age',
-      width: 80,
+      headerName: 'Age (Sept 1)',
+      width: 100,
       type: 'number',
-      valueGetter: (params) => computeAge(params.row.dateOfBirth),
+      valueGetter: (params) => computeLeagueAge(params.row.dateOfBirth),
     },
-    { field: 'ageGroup', headerName: 'Age Group', width: 110 },
+    {
+      field: 'division',
+      headerName: 'Division',
+      width: 100,
+      valueGetter: (params) => computeDivision(params.row.dateOfBirth),
+    },
+    { field: 'ageGroup', headerName: 'Requested', width: 110 },
     { field: 'location', headerName: 'Location', flex: 0.8, minWidth: 130 },
     { field: 'positionsInterested', headerName: 'Positions', flex: 0.8, minWidth: 120 },
     { field: 'priorExperience', headerName: 'Experience', flex: 1.4, minWidth: 200 },
@@ -227,7 +252,8 @@ const ApplicantDialog = ({ applicant, isAdmin, evaluatorId, evaluatorName, onClo
   });
 
   if (!applicant) return null;
-  const age = computeAge(applicant.dateOfBirth);
+  const age = computeLeagueAge(applicant.dateOfBirth);
+  const division = computeDivision(applicant.dateOfBirth);
 
   return (
     <Dialog open onClose={onClose} maxWidth="md" fullWidth>
@@ -237,8 +263,9 @@ const ApplicantDialog = ({ applicant, isAdmin, evaluatorId, evaluatorName, onClo
       </DialogTitle>
       <DialogContent dividers>
         <Grid container spacing={1.5} sx={{ mb: 2 }}>
-          <Info label="Age" value={age != null ? String(age) : '—'} />
-          <Info label="Age Group" value={applicant.ageGroup} />
+          <Info label="Age (as of Sept 1)" value={age != null ? String(age) : '—'} />
+          <Info label="Division" value={division} />
+          <Info label="Requested Group" value={applicant.ageGroup} />
           <Info label="Location" value={applicant.location || '—'} />
           <Info label="Positions" value={applicant.positionsInterested || '—'} />
           <Info label="Parent/Guardian" value={applicant.parentName} />
