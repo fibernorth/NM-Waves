@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+
+# Keep private/app areas out of search results
+Disallow: /dashboard
+Disallow: /login
+Disallow: /signup
+Disallow: /setup-account
+Disallow: /reset-password
+Disallow: /pay/
+Disallow: /admin/
+Disallow: /finances/
+Disallow: /compliance/
+
+Sitemap: https://tcw-website-builder.web.app/sitemap.xml
