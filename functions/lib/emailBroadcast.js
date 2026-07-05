@@ -39,9 +39,12 @@ const admin = __importStar(require("firebase-admin"));
 const emails_1 = require("./emails");
 const getDb = () => admin.firestore();
 /**
- * Admin-only broadcast: email every active player's parent/guardian contacts.
- * Gathers unique emails from active players' contacts (and the legacy
- * parentEmail field) and sends one branded message via the club's Gmail.
+ * Admin-only broadcast: email active players' parent/guardian contacts.
+ * With no filters, targets ALL active players. Optional filters narrow the
+ * audience: teamIds (players on any selected team) and/or playerIds
+ * (individually selected players) — the audience is the union of both.
+ * Gathers unique emails from players' contacts (and the legacy parentEmail
+ * field) and sends one branded message via the club's Gmail.
  */
 exports.emailAllParents = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
@@ -58,11 +61,17 @@ exports.emailAllParents = functions.https.onCall(async (data, context) => {
     if (!subject || !message) {
         throw new functions.https.HttpsError('invalid-argument', 'Subject and message are required');
     }
-    // Collect unique parent/guardian emails from active players.
+    const teamIds = Array.isArray(data === null || data === void 0 ? void 0 : data.teamIds) ? data.teamIds.map(String) : [];
+    const playerIds = Array.isArray(data === null || data === void 0 ? void 0 : data.playerIds) ? data.playerIds.map(String) : [];
+    const filtered = teamIds.length > 0 || playerIds.length > 0;
     const snap = await getDb().collection('players').where('active', '==', true).get();
+    const teamIdSet = new Set(teamIds);
+    const playerIdSet = new Set(playerIds);
     const emails = new Set();
     for (const doc of snap.docs) {
         const p = doc.data();
+        if (filtered && !teamIdSet.has(p.teamId) && !playerIdSet.has(doc.id))
+            continue;
         for (const c of p.contacts || []) {
             if (c && c.email)
                 emails.add(String(c.email).trim().toLowerCase());
@@ -72,7 +81,7 @@ exports.emailAllParents = functions.https.onCall(async (data, context) => {
     }
     const recipients = [...emails].filter((e) => e.includes('@'));
     if (recipients.length === 0) {
-        throw new functions.https.HttpsError('failed-precondition', 'No parent emails found on active players');
+        throw new functions.https.HttpsError('failed-precondition', 'No parent emails found for the selected recipients');
     }
     const result = await (0, emails_1.sendBroadcastEmail)(recipients, subject, message);
     return { recipientCount: recipients.length, ...result };

@@ -8,13 +8,24 @@ export interface BroadcastResult {
 }
 
 /**
- * Email all active players' parents/guardians. Admin only (enforced server-side).
+ * Email active players' parents/guardians. Admin only (enforced server-side).
+ * With no filters, everyone is emailed; teamIds/playerIds narrow the audience
+ * (union of players on selected teams + individually selected players).
  */
-export const emailAllParents = async (subject: string, message: string): Promise<BroadcastResult> => {
-  const callable = httpsCallable<{ subject: string; message: string }, BroadcastResult>(
-    functions,
-    'emailAllParents'
-  );
-  const res = await callable({ subject, message });
+export const emailAllParents = async (
+  subject: string,
+  message: string,
+  filters?: { teamIds?: string[]; playerIds?: string[] }
+): Promise<BroadcastResult> => {
+  const callable = httpsCallable<
+    { subject: string; message: string; teamIds?: string[]; playerIds?: string[] },
+    BroadcastResult
+  >(functions, 'emailAllParents');
+  const res = await callable({
+    subject,
+    message,
+    teamIds: filters?.teamIds || [],
+    playerIds: filters?.playerIds || [],
+  });
   return res.data;
 };
