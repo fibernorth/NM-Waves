@@ -121,6 +121,7 @@ import AdminSettingsPage from './features/admin/pages/AdminSettingsPage';
 import EmailParentsPage from './features/admin/pages/EmailParentsPage';
 import SurveysPage from './features/surveys/pages/SurveysPage';
 import SurveyAdminPage from './features/surveys/pages/SurveyAdminPage';
+import TryoutApplicantsPage from './features/tryouts/pages/TryoutApplicantsPage';
 
 // Components
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -220,6 +221,7 @@ function App() {
               <Route path="/media" element={<MediaPage />} />
               <Route path="/metrics" element={<MetricsPage />} />
               <Route path="/manage-surveys" element={<SurveyAdminPage />} />
+              <Route path="/tryout-signups" element={<TryoutApplicantsPage />} />
             </Route>
 
             {/* Protected Routes - Admin and above */}

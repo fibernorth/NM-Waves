@@ -38,6 +38,7 @@ const tryoutSchema = z.object({
   playerLastName: z.string().min(1, 'Player last name is required').max(50),
   dateOfBirth: z.string().min(1, 'Date of birth is required'),
   ageGroup: z.string().min(1, 'Age group is required'),
+  location: z.string().min(1, 'City/town is required').max(100),
   parentName: z.string().min(1, 'Parent/guardian name is required').max(100),
   email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
   phone: z.string().min(1, 'Phone number is required').max(20),
@@ -65,6 +66,7 @@ const TryoutRegistrationPage = () => {
       playerLastName: '',
       dateOfBirth: '',
       ageGroup: '',
+      location: '',
       parentName: '',
       email: '',
       phone: '',
@@ -83,6 +85,7 @@ const TryoutRegistrationPage = () => {
         playerLastName: data.playerLastName.trim(),
         dateOfBirth: data.dateOfBirth,
         ageGroup: data.ageGroup,
+        location: data.location.trim(),
         parentName: data.parentName.trim(),
         email: data.email.trim(),
         phone: data.phone.trim(),
@@ -240,6 +243,24 @@ const TryoutRegistrationPage = () => {
                             </MenuItem>
                           ))}
                         </TextField>
+                      )}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="location"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          label="City / Town"
+                          placeholder="e.g. Traverse City"
+                          error={!!errors.location}
+                          helperText={errors.location?.message || 'Where the player lives (for travel distance)'}
+                          required
+                        />
                       )}
                     />
                   </Grid>
