@@ -177,7 +177,7 @@ const PublicPaymentPage = () => {
   const handleShare = async () => {
     const shareData = {
       title: `Invoice: ${invoiceToken.chargeLabel || 'Payment'} - ${invoiceToken.playerName}`,
-      text: `TC Waves Ball Club invoice for ${invoiceToken.playerName}: ${invoiceToken.chargeLabel || 'Payment'} - ${fmt(effectiveAmountDue)}`,
+      text: `Northern Michigan Waves invoice for ${invoiceToken.playerName}: ${invoiceToken.chargeLabel || 'Payment'} - ${fmt(effectiveAmountDue)}`,
       url: pageUrl,
     };
     if (navigator.share) {
@@ -192,7 +192,7 @@ const PublicPaymentPage = () => {
       {/* ====== HEADER ====== */}
       <Box sx={{ textAlign: 'center', mb: 3 }}>
         <SportsBaseballIcon sx={{ fontSize: 44, color: 'primary.main', mb: 0.5 }} />
-        <Typography variant="h5" fontWeight={700}>TC Waves Ball Club</Typography>
+        <Typography variant="h5" fontWeight={700}>Northern Michigan Waves</Typography>
         <Typography variant="body2" color="text.secondary">Invoice #{invoiceNumber}</Typography>
       </Box>
 

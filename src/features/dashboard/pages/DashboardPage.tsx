@@ -243,7 +243,7 @@ const DashboardPage = () => {
   const getSubtitle = () => {
     if (isParent && !isCoachOrAbove) return "Here's an overview of your children's activity";
     if (isCoachOnly) return "Here's an overview of your teams and upcoming events";
-    return "Here's an overview of the TC Waves organization";
+    return "Here's an overview of the Northern Michigan Waves organization";
   };
 
   return (

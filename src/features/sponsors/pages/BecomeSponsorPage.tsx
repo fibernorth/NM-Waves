@@ -80,7 +80,7 @@ const BecomeSponsorPage = () => {
             Become a Sponsor
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Support TC Waves players by becoming a sponsor. Your contribution is tax-deductible
+            Support Northern Michigan Waves players by becoming a sponsor. Your contribution is tax-deductible
             and directly supports youth athletics in Northern Michigan.
           </Typography>
         </Box>

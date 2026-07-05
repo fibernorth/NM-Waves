@@ -85,7 +85,7 @@ const defaultBackgroundCheckForm = {
 const defaultForm990Form = {
   taxYear: currentYear,
   formType: '990-N' as Form990Data['formType'],
-  orgName: 'TC Waves Ball Club',
+  orgName: 'Northern Michigan Waves',
   orgEIN: '88-4060076',
   orgAddress: '',
   orgPhone: '',
@@ -743,7 +743,7 @@ const ComplianceDashboardPage = () => {
           Compliance Dashboard
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Track volunteer hours, background checks, and Form 990 data for TC Waves Ball Club.
+          Track volunteer hours, background checks, and Form 990 data for Northern Michigan Waves.
         </Typography>
       </Box>
 

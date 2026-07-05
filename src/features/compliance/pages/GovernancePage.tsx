@@ -628,7 +628,7 @@ const GovernancePage = () => {
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4">Governance & Board</Typography>
         <Typography variant="body2" color="text.secondary">
-          Manage board meetings, minutes, and governance documents for TC Waves Ball Club.
+          Manage board meetings, minutes, and governance documents for Northern Michigan Waves.
         </Typography>
       </Box>
 

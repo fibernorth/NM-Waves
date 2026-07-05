@@ -108,7 +108,7 @@ const ScoreCard = ({ post }: { post: HomepagePost }) => (
         {post.gameDate ? format(post.gameDate, 'MMM d, yyyy') : ''}
       </Typography>
       <Typography variant="subtitle2" sx={{ mt: 0.5 }}>
-        {post.teamName || 'TC Waves'}
+        {post.teamName || 'Northern Michigan Waves'}
       </Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, my: 1 }}>
         <Typography variant="h4" fontWeight={700} color={post.result === 'W' ? 'success.main' : post.result === 'L' ? 'error.main' : 'text.primary'}>
@@ -286,7 +286,7 @@ const SwagStoreBanner = ({ settings }: { settings: SwagStoreSettings }) => {
 const ORG_SCHEMA = JSON.stringify({
   '@context': 'https://schema.org',
   '@type': 'SportsOrganization',
-  name: 'TC Waves Ball Club',
+  name: 'Northern Michigan Waves',
   description: 'Youth travel softball organization in Traverse City, Michigan',
   url: window.location.origin,
   logo: `${window.location.origin}/images/logo.png`,
@@ -367,7 +367,7 @@ const HomePage = () => {
           <Box
             component="img"
             src="/images/logo.png"
-            alt="TC Waves Logo"
+            alt="Northern Michigan Waves Logo"
             sx={{
               width: { xs: 120, md: 160 },
               height: 'auto',
@@ -382,7 +382,7 @@ const HomePage = () => {
             gutterBottom
             sx={{ fontSize: { xs: '2rem', md: '3rem' } }}
           >
-            TC Waves Ball Club
+            Northern Michigan Waves
           </Typography>
           <Typography
             variant="h5"
@@ -724,7 +724,7 @@ const HomePage = () => {
             gutterBottom
             sx={{ fontSize: { xs: '1.75rem', md: '2.25rem' }, mb: 1 }}
           >
-            Why Join TC Waves?
+            Why Join Northern Michigan Waves?
           </Typography>
           <Typography
             variant="body1"

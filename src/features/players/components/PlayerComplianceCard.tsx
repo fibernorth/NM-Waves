@@ -44,7 +44,7 @@ const COMPLIANCE_CONTENT: Record<ComplianceKey, { title: string; body: string }>
     title: 'Concussion Awareness & Return-to-Play Protocol',
     body: `TC WAVES BALL CLUB - CONCUSSION PROTOCOL
 
-As a parent/guardian of a TC Waves Ball Club athlete, I acknowledge that I have reviewed and understand the following:
+As a parent/guardian of a Northern Michigan Waves athlete, I acknowledge that I have reviewed and understand the following:
 
 WHAT IS A CONCUSSION?
 A concussion is a brain injury caused by a bump, blow, or jolt to the head, or by a hit to the body that causes the head and brain to move rapidly back and forth. Even a "ding" or what seems to be a mild bump to the head can be serious.
@@ -88,7 +88,7 @@ By acknowledging this document, I confirm that:
 
 PLEASE READ CAREFULLY. THIS IS A LEGAL DOCUMENT THAT AFFECTS YOUR RIGHTS.
 
-In consideration of the participation of my child in TC Waves Ball Club activities, I acknowledge and agree to the following:
+In consideration of the participation of my child in Northern Michigan Waves activities, I acknowledge and agree to the following:
 
 ASSUMPTION OF RISK:
 I understand that participation in softball and related activities involves inherent risks, including but not limited to:
@@ -102,13 +102,13 @@ I understand that participation in softball and related activities involves inhe
 I voluntarily assume all such risks and accept personal responsibility for any injury or illness that may result from participation.
 
 RELEASE AND WAIVER:
-To the fullest extent permitted by law, I release, waive, and discharge TC Waves Ball Club, Inc., its officers, directors, coaches, volunteers, and agents from any and all claims, demands, or causes of action arising out of or related to my child's participation in TC Waves Ball Club activities, including but not limited to claims for negligence.
+To the fullest extent permitted by law, I release, waive, and discharge Northern Michigan Waves, Inc., its officers, directors, coaches, volunteers, and agents from any and all claims, demands, or causes of action arising out of or related to my child's participation in Northern Michigan Waves activities, including but not limited to claims for negligence.
 
 MEDICAL AUTHORIZATION:
-In the event of a medical emergency, I authorize TC Waves Ball Club coaches and staff to seek emergency medical treatment for my child if I or my designated emergency contact cannot be reached. I accept financial responsibility for any medical expenses incurred.
+In the event of a medical emergency, I authorize Northern Michigan Waves coaches and staff to seek emergency medical treatment for my child if I or my designated emergency contact cannot be reached. I accept financial responsibility for any medical expenses incurred.
 
 PHOTO/VIDEO CONSENT:
-I grant TC Waves Ball Club permission to photograph and/or video record my child during practices, games, and events for use in team materials, social media, and promotional content. I understand I may opt out of this in writing at any time.
+I grant Northern Michigan Waves permission to photograph and/or video record my child during practices, games, and events for use in team materials, social media, and promotional content. I understand I may opt out of this in writing at any time.
 
 EQUIPMENT:
 I understand that I am responsible for the proper care and return of any organization-owned equipment issued to my child. Failure to return equipment may result in a charge for replacement cost.
@@ -119,7 +119,7 @@ I have read this waiver, fully understand its terms, and sign it freely and volu
     title: 'Player Code of Conduct',
     body: `TC WAVES BALL CLUB - PLAYER CODE OF CONDUCT
 
-As a player of the TC Waves Ball Club, I agree to the following standards of behavior:
+As a player of the Northern Michigan Waves, I agree to the following standards of behavior:
 
 SPORTSMANSHIP:
 - I will treat teammates, opponents, coaches, umpires, and spectators with respect at all times.
@@ -137,7 +137,7 @@ TEAMWORK:
 - I will support and encourage my teammates.
 - I will not engage in bullying, hazing, or exclusionary behavior.
 - I will communicate openly with my coaches about concerns or issues.
-- I will represent the TC Waves Ball Club positively in the community.
+- I will represent the Northern Michigan Waves positively in the community.
 
 PERSONAL RESPONSIBILITY:
 - I will take care of equipment and facilities.
@@ -156,13 +156,13 @@ I understand that violations of this Code of Conduct may result in:
 - Game or practice suspension
 - Dismissal from the team (at the discretion of the coaching staff and club leadership)
 
-By acknowledging this document, I confirm that I have read, understand, and agree to abide by this Player Code of Conduct for the duration of my participation with TC Waves Ball Club.`,
+By acknowledging this document, I confirm that I have read, understand, and agree to abide by this Player Code of Conduct for the duration of my participation with Northern Michigan Waves.`,
   },
   parentConduct: {
     title: 'Parent/Guardian Code of Conduct',
     body: `TC WAVES BALL CLUB - PARENT/GUARDIAN CODE OF CONDUCT
 
-As a parent or guardian of a TC Waves Ball Club player, I agree to the following:
+As a parent or guardian of a Northern Michigan Waves player, I agree to the following:
 
 RESPECT:
 - I will treat all coaches, players, parents, umpires, and event staff with respect and courtesy.
@@ -202,7 +202,7 @@ Violations of this Code of Conduct may result in:
 - Permanent removal of the parent/guardian from team activities
 - In severe cases, removal of the player from the team
 
-The TC Waves Ball Club is committed to providing a safe, positive, and supportive environment for all participants. Your cooperation is essential to achieving this goal.
+The Northern Michigan Waves is committed to providing a safe, positive, and supportive environment for all participants. Your cooperation is essential to achieving this goal.
 
 By acknowledging this document, I confirm that I have read, understand, and agree to abide by this Parent/Guardian Code of Conduct.`,
   },

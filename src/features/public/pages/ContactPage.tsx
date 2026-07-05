@@ -39,7 +39,7 @@ const ContactPage = () => {
             Contact Us
           </Typography>
           <Typography variant="h6" sx={{ mt: 1, opacity: 0.9, fontWeight: 300 }}>
-            Get in touch with TC Waves Ball Club
+            Get in touch with Northern Michigan Waves
           </Typography>
         </Container>
       </Box>

@@ -120,7 +120,7 @@ const TryoutRegistrationPage = () => {
             Tryout Registration
           </Typography>
           <Typography variant="h6" sx={{ mt: 1, opacity: 0.9, fontWeight: 300 }}>
-            Register your player for TC Waves tryouts
+            Register your player for Northern Michigan Waves tryouts
           </Typography>
         </Container>
       </Box>

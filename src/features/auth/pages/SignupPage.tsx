@@ -73,7 +73,7 @@ const SignupPage = () => {
             Create Account
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Join TC Waves Ball Club
+            Join Northern Michigan Waves
           </Typography>
         </Box>
 

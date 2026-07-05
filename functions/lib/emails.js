@@ -59,11 +59,11 @@ function esc(str) {
 // Shared email header/footer for brand consistency
 const emailHeader = `
   <div style="background-color: #1565c0; color: white; padding: 20px; text-align: center;">
-    <h1 style="margin: 0;">TC Waves Ball Club</h1>
+    <h1 style="margin: 0;">Northern Michigan Waves</h1>
   </div>`;
 const emailFooter = `
   <div style="padding: 20px; text-align: center; color: #999; font-size: 12px;">
-    <p>TC Waves Ball Club, Inc. &bull; Traverse City, Michigan</p>
+    <p>Northern Michigan Waves, Inc. &bull; Traverse City, Michigan</p>
     <p>${ORG_EMAIL}</p>
   </div>`;
 /**
@@ -93,7 +93,7 @@ async function queueEmail(to, subject, html) {
     if (transporter) {
         try {
             await transporter.sendMail({
-                from: `"TC Waves Ball Club" <${ORG_EMAIL}>`,
+                from: `"Northern Michigan Waves" <${ORG_EMAIL}>`,
                 to,
                 cc: to !== ORG_EMAIL ? ORG_EMAIL : undefined,
                 subject,
@@ -151,7 +151,7 @@ async function sendBroadcastEmail(recipients, subject, plainMessage) {
     for (let i = 0; i < recipients.length; i += CHUNK) {
         const batch = recipients.slice(i, i + CHUNK);
         await transporter.sendMail({
-            from: `"TC Waves Ball Club" <${ORG_EMAIL}>`,
+            from: `"Northern Michigan Waves" <${ORG_EMAIL}>`,
             to: ORG_EMAIL,
             bcc: batch,
             subject,
@@ -176,7 +176,7 @@ async function sendPaymentReceipt(receiptData) {
     const formattedDate = date.toLocaleDateString('en-US', {
         year: 'numeric', month: 'long', day: 'numeric',
     });
-    const subject = `Payment Receipt - TC Waves Ball Club`;
+    const subject = `Payment Receipt - Northern Michigan Waves`;
     const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       ${emailHeader}
@@ -214,7 +214,7 @@ async function sendInvoiceNotification(data) {
         feeBreakdown.equipmentFees ? `<tr><td style="padding: 6px 0; color: #666;">Equipment Fees</td><td style="padding: 6px 0; text-align: right;">$${feeBreakdown.equipmentFees.toFixed(2)}</td></tr>` : '',
         feeBreakdown.otherFees ? `<tr><td style="padding: 6px 0; color: #666;">Other Fees</td><td style="padding: 6px 0; text-align: right;">$${feeBreakdown.otherFees.toFixed(2)}</td></tr>` : '',
     ].filter(Boolean).join('');
-    const subject = `Invoice Notice: ${playerName} - TC Waves Ball Club`;
+    const subject = `Invoice Notice: ${playerName} - Northern Michigan Waves`;
     const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       ${emailHeader}
@@ -276,15 +276,15 @@ async function sendParentInviteEmail(data) {
     const playerList = playerNames.length > 0
         ? playerNames.map(n => `<li><strong>${esc(n)}</strong></li>`).join('')
         : '<li>Your child</li>';
-    const subject = `You're Invited - TC Waves Ball Club Parent Portal`;
+    const subject = `You're Invited - Northern Michigan Waves Parent Portal`;
     const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       ${emailHeader}
       <div style="padding: 30px; background-color: #f5f5f5;">
         <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-          <h2 style="color: #333; margin-top: 0;">Welcome to TC Waves!</h2>
+          <h2 style="color: #333; margin-top: 0;">Welcome to Northern Michigan Waves!</h2>
           <p>Hi ${esc(parentName || 'Parent/Guardian')},</p>
-          <p>An account has been created for you on the TC Waves Ball Club parent portal. You can use it to:</p>
+          <p>An account has been created for you on the Northern Michigan Waves parent portal. You can use it to:</p>
           <ul style="color: #555;">
             <li>View invoices and payment history</li>
             <li>Make payments online</li>
@@ -315,7 +315,7 @@ async function sendParentInviteEmail(data) {
 }
 async function sendPasswordResetCustomEmail(data) {
     const { email, resetLink } = data;
-    const subject = `Password Reset - TC Waves Ball Club`;
+    const subject = `Password Reset - Northern Michigan Waves`;
     const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       ${emailHeader}
@@ -323,7 +323,7 @@ async function sendPasswordResetCustomEmail(data) {
         <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
           <h2 style="color: #333; margin-top: 0;">Password Reset Request</h2>
           <p>Hi,</p>
-          <p>We received a request to reset the password for your TC Waves account. Click the button below to set a new password:</p>
+          <p>We received a request to reset the password for your Northern Michigan Waves account. Click the button below to set a new password:</p>
 
           <div style="text-align: center; margin: 24px 0;">
             <a href="${resetLink}" style="display: inline-block; background-color: #1565c0; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">

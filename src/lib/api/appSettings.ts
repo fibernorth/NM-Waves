@@ -75,7 +75,7 @@ const DEFAULT_NOTIFICATIONS: NotificationSettings = {
   sendAnnouncementEmails: false,
   sendReminderEmails: false,
   reminderDaysBefore: 7,
-  emailFromName: 'TC Waves Ball Club',
+  emailFromName: 'Northern Michigan Waves',
   emailReplyTo: 'tcwavessoftball@gmail.com',
 };
 

@@ -47,11 +47,11 @@ const PublicLayout = () => {
         <Box
           component="img"
           src="/images/logo.png"
-          alt="TC Waves"
+          alt="Northern Michigan Waves"
           sx={{ height: 28, width: 'auto' }}
         />
         <Typography variant="h6" color="primary" fontWeight={700}>
-          TC Waves
+          Northern Michigan Waves
         </Typography>
       </Box>
       <Divider />
@@ -99,7 +99,7 @@ const PublicLayout = () => {
               <Box
                 component="img"
                 src="/images/logo.png"
-                alt="TC Waves"
+                alt="Northern Michigan Waves"
                 sx={{ height: 36, width: 'auto' }}
               />
               <Typography
@@ -107,7 +107,7 @@ const PublicLayout = () => {
                 noWrap
                 sx={{ fontWeight: 700, color: 'primary.main' }}
               >
-                TC Waves Ball Club
+                Northern Michigan Waves
               </Typography>
             </Box>
 
@@ -193,7 +193,7 @@ const PublicLayout = () => {
           >
             <Box sx={{ textAlign: { xs: 'center', md: 'left' } }}>
               <Typography variant="h6" fontWeight={700} gutterBottom>
-                TC Waves Ball Club
+                Northern Michigan Waves
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.85 }}>
                 Work as a Team, Win as a Team, Better Every Time
@@ -228,7 +228,7 @@ const PublicLayout = () => {
           </Box>
           <SponsorBanner mode="footer" />
           <Typography variant="body2" align="center" sx={{ opacity: 0.7, mt: 2 }}>
-            &copy; {new Date().getFullYear()} TC Waves Ball Club, Inc. All rights reserved.
+            &copy; {new Date().getFullYear()} Northern Michigan Waves, Inc. All rights reserved.
           </Typography>
           <Typography variant="caption" align="center" display="block" sx={{ opacity: 0.45, mt: 0.5 }}>
             Developed by KSA08 Enterprises

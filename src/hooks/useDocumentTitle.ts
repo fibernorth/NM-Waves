@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 
-const BASE_TITLE = 'TC Waves Ball Club';
+const BASE_TITLE = 'Northern Michigan Waves';
 
 /**
  * Sets document.title on mount and restores on unmount.
- * Usage: useDocumentTitle('About Us')  →  "About Us | TC Waves Ball Club"
+ * Usage: useDocumentTitle('About Us')  →  "About Us | Northern Michigan Waves"
  */
 export function useDocumentTitle(title?: string) {
   useEffect(() => {

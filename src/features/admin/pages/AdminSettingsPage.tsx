@@ -577,7 +577,7 @@ const SwagStoreSettingsTab = () => {
             value={form.label}
             onChange={(e) => setForm({ ...form, label: e.target.value })}
             fullWidth
-            placeholder="Shop TC Waves Gear!"
+            placeholder="Shop Northern Michigan Waves Gear!"
             helperText="Text shown on the public homepage banner"
           />
         </Grid>

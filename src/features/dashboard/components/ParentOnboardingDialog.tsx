@@ -172,7 +172,7 @@ const ParentOnboardingDialog = ({ open, onClose, linkedPlayerIds }: ParentOnboar
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
-        Welcome to TC Waves!
+        Welcome to Northern Michigan Waves!
         <Typography variant="body2" color="text.secondary">
           Please review and update the information for your child{linkedPlayers.length > 1 ? 'ren' : ''}. This helps us keep accurate records.
         </Typography>

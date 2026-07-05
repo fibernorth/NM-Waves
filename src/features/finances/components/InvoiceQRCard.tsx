@@ -250,7 +250,7 @@ const InvoiceQRCard = ({ finance, open, onClose }: InvoiceQRCardProps) => {
   const handleShare = async (invoice: InvoiceDisplay) => {
     const shareData = {
       title: `Invoice: ${invoice.chargeLabel} - ${finance.playerName}`,
-      text: `TC Waves Ball Club invoice for ${finance.playerName}: ${invoice.chargeLabel} - $${invoice.amountDue.toFixed(2)}`,
+      text: `Northern Michigan Waves invoice for ${finance.playerName}: ${invoice.chargeLabel} - $${invoice.amountDue.toFixed(2)}`,
       url: invoice.url,
     };
 

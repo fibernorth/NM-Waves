@@ -453,7 +453,7 @@ const DonorManagementPage = () => {
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4">Donor Management</Typography>
         <Typography variant="body2" color="text.secondary">
-          Manage donors and generate IRS-compliant donation receipts for TC Waves Ball Club.
+          Manage donors and generate IRS-compliant donation receipts for Northern Michigan Waves.
         </Typography>
       </Box>
 

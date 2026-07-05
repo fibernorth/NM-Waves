@@ -209,7 +209,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
         <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
           <SportsBaseballIcon sx={{ mr: 1, color: 'primary.main' }} />
           <Box>
-            <Box sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>TC Waves</Box>
+            <Box sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>Northern Michigan Waves</Box>
             <Box sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>Ball Club</Box>
           </Box>
         </Box>

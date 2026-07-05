@@ -87,7 +87,7 @@ const SponsorshipPackagesPage = () => {
             Sponsorship Packages
           </Typography>
           <Typography variant="h6" sx={{ mt: 1, opacity: 0.9, fontWeight: 300 }}>
-            Partner with TC Waves and support youth athletics
+            Partner with Northern Michigan Waves and support youth athletics
           </Typography>
         </Container>
       </Box>
@@ -96,7 +96,7 @@ const SponsorshipPackagesPage = () => {
         {/* Why Sponsor Section */}
         <Paper sx={{ p: { xs: 3, md: 4 }, mb: 4 }}>
           <Typography variant="h4" fontWeight={600} gutterBottom color="primary.main">
-            Why Sponsor TC Waves?
+            Why Sponsor Northern Michigan Waves?
           </Typography>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
