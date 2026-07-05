@@ -284,7 +284,26 @@ exports.stripeWebhook = functions
         const metadata = session.metadata || {};
         try {
             const amount = (session.amount_total || 0) / 100;
-            const processingFee = Math.round((amount * 0.029 + 0.30) * 100) / 100;
+            // Default to the standard-pricing estimate, then replace with the ACTUAL
+            // fee Stripe deducted (read from the charge's balance transaction) so the
+            // books match Stripe's real deposit exactly — card type, international
+            // surcharges, etc. all get captured rather than assumed.
+            let processingFee = Math.round((amount * 0.029 + 0.30) * 100) / 100;
+            try {
+                if (session.payment_intent) {
+                    const pi = await stripe.paymentIntents.retrieve(String(session.payment_intent), {
+                        expand: ['latest_charge.balance_transaction'],
+                    });
+                    const charge = pi.latest_charge;
+                    const bt = charge && typeof charge !== 'string' ? charge.balance_transaction : null;
+                    if (bt && typeof bt !== 'string' && typeof bt.fee === 'number') {
+                        processingFee = bt.fee / 100;
+                    }
+                }
+            }
+            catch (feeErr) {
+                console.error('Could not read actual Stripe fee, using estimate:', feeErr === null || feeErr === void 0 ? void 0 : feeErr.message);
+            }
             const paymentDate = admin.firestore.Timestamp.now();
             const paymentId = `stripe_${session.id}`;
             // === SPONSOR-ONLY PAYMENT (no financeId) ===
