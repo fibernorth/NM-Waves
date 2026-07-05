@@ -26,45 +26,9 @@ import { tryoutApplicantsApi, type TryoutApplicant, type TryoutStatus } from '@/
 import { playersApi } from '@/lib/api/players';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
+import { computeLeagueAge, computeDivision } from '@/lib/utils/leagueAge';
 import type { Player } from '@/types/models';
 import toast from 'react-hot-toast';
-
-/**
- * Softball "league age": the player's age as of the upcoming Sept 1 cutoff,
- * where turning that age exactly ON Sept 1 does NOT count yet (so a player who
- * turns 9 on Sept 1 is age 8 → 8U). Implemented as age as of Aug 31 of the
- * upcoming season year.
- */
-const computeLeagueAge = (dob: string): number | null => {
-  if (!dob) return null;
-  const d = new Date(dob);
-  if (isNaN(d.getTime())) return null;
-  const now = new Date();
-  // Determine the upcoming Sept 1 (Sept = month index 8).
-  let seasonYear = now.getFullYear();
-  if (now > new Date(seasonYear, 8, 1)) seasonYear += 1;
-  // Cutoff is Aug 31 the day before Sept 1 (Aug = month index 7).
-  const cutoff = new Date(seasonYear, 7, 31);
-  let age = cutoff.getFullYear() - d.getFullYear();
-  const m = cutoff.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && cutoff.getDate() < d.getDate())) age--;
-  return age;
-};
-
-/**
- * Division from league age: one division per single year (8U–14U), except the
- * top two brackets are combined — 16U covers ages 15 & 16, and 18U covers ages
- * 17 & 18. Anything 8 or under is 8U.
- */
-const computeDivision = (dob: string): string => {
-  const age = computeLeagueAge(dob);
-  if (age == null) return '—';
-  let div = age;
-  if (div <= 8) div = 8;
-  else if (div === 15) div = 16;
-  else if (div === 17 || div > 18) div = 18;
-  return `${div}U`;
-};
 
 const STATUS_COLORS: Record<TryoutStatus, 'default' | 'info' | 'warning' | 'success' | 'error'> = {
   new: 'info',

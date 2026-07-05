@@ -104,6 +104,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Messaging', icon: <ChatIcon />, path: '/messaging', roles: ['all'] },
     { text: 'Email Parents', icon: <EmailIcon />, path: '/admin/email-parents', roles: ['admin', 'master-admin'] },
     { text: 'Surveys', icon: <PollIcon />, path: '/surveys', roles: ['parent'] },
+    { text: 'Register for Tryouts', icon: <HowToRegIcon />, path: '/register-tryouts', roles: ['parent'] },
     { text: 'Surveys', icon: <PollIcon />, path: '/manage-surveys', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Tryout Signups', icon: <HowToRegIcon />, path: '/tryout-signups', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Coach Applications', icon: <SportsIcon />, path: '/coach-applications', roles: ['admin', 'master-admin'] },

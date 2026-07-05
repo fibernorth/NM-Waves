@@ -95,6 +95,21 @@ const EmailParentsPage = () => {
     },
   });
 
+  const loadLoginTemplate = () => {
+    setSubject('Set up your Northern Michigan Waves parent account');
+    setMessage(
+      `Hi Waves families,\n\n` +
+        `You now have access to the Northern Michigan Waves parent portal, where you can view your player's information, pay invoices, see schedules, take surveys, and register for tryouts.\n\n` +
+        `To get started:\n` +
+        `1. Go to https://tcw-website-builder.web.app and click "Parent Login".\n` +
+        `2. If this is your first time, click "Forgot Password" and enter the email address this message was sent to, then follow the link to set your password.\n` +
+        `3. Once you're logged in, open your Dashboard and link your child to your account if it isn't already linked.\n\n` +
+        `From your account you can also register your player for next season's tryouts.\n\n` +
+        `If you have any trouble, just reply to this email.\n\n` +
+        `Go Waves!`
+    );
+  };
+
   const audienceChosen = mode === 'all' || mode === 'tryouts' || selected.size > 0;
   const canSend = subject.trim().length > 0 && message.trim().length > 0 && audienceChosen;
   const audienceLabel = mode === 'all'
@@ -195,6 +210,11 @@ const EmailParentsPage = () => {
           </Box>
         )}
 
+        <Box sx={{ mb: 1 }}>
+          <Button size="small" variant="text" onClick={loadLoginTemplate}>
+            Insert "portal login setup" template
+          </Button>
+        </Box>
         <TextField label="Subject" fullWidth margin="normal" value={subject} onChange={(e) => setSubject(e.target.value)}
           placeholder="e.g. Practice moved to 5pm on Saturday" inputProps={{ maxLength: 150 }} />
         <TextField label="Message" fullWidth margin="normal" multiline minRows={8} value={message} onChange={(e) => setMessage(e.target.value)}

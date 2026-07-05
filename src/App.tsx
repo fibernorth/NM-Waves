@@ -122,6 +122,7 @@ import EmailParentsPage from './features/admin/pages/EmailParentsPage';
 import SurveysPage from './features/surveys/pages/SurveysPage';
 import SurveyAdminPage from './features/surveys/pages/SurveyAdminPage';
 import TryoutApplicantsPage from './features/tryouts/pages/TryoutApplicantsPage';
+import RegisterTryoutPage from './features/tryouts/pages/RegisterTryoutPage';
 import CoachApplicationPage from './features/public/pages/CoachApplicationPage';
 import CoachApplicationsPage from './features/admin/pages/CoachApplicationsPage';
 
@@ -210,6 +211,7 @@ function App() {
               <Route path="/tournaments" element={<TournamentsPage />} />
               <Route path="/stats" element={<TeamStatsPage />} />
               <Route path="/surveys" element={<SurveysPage />} />
+              <Route path="/register-tryouts" element={<RegisterTryoutPage />} />
             </Route>
 
             {/* Protected Routes - Coach and above */}
