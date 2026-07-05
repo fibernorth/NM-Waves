@@ -394,7 +394,7 @@ const HomePage = () => {
               fontStyle: 'italic',
             }}
           >
-            Work as a Team, Win as a Team, Better Every Time
+            Work as a team, Win as a team, Better every time
           </Typography>
           <Typography
             variant="h6"

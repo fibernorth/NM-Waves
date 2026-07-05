@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.stripeWebhook = exports.createCheckoutSession = void 0;
 const functions = __importStar(require("firebase-functions"));
@@ -42,6 +43,7 @@ const admin = __importStar(require("firebase-admin"));
 const stripe_1 = __importDefault(require("stripe"));
 const emails_1 = require("./emails");
 const getDb = () => admin.firestore();
+const SITE_URL = process.env.SITE_URL || ((_a = functions.config().app) === null || _a === void 0 ? void 0 : _a.site_url) || 'https://nmwaves.com';
 /**
  * Compute fee total from a player finance document.
  * Must match the formula in src/lib/api/finances.ts → computeFeeTotal.
@@ -643,9 +645,30 @@ exports.stripeWebhook = functions
                     }
                 }
             }
-            // 5. Send payment receipt email
+            // 5. Send payment receipt email — include the up-to-date account balance
+            //    (computed from the freshly-updated finance record) so the payer sees
+            //    what, if anything, remains owed right in the receipt.
             const recipientEmail = ((_l = session.customer_details) === null || _l === void 0 ? void 0 : _l.email) || '';
             if (recipientEmail) {
+                let balanceDue;
+                let receiptPayUrl;
+                try {
+                    const freshFinance = await financeRef.get();
+                    if (freshFinance.exists) {
+                        const fData = freshFinance.data();
+                        const owed = computeFeeTotal(fData) - (fData.scholarshipAmount || 0);
+                        const paid = (fData.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+                        balanceDue = Math.max(0, owed - paid);
+                        // If a balance remains and this checkout carried an invoice token
+                        // (left open because it wasn't fully satisfied), reuse it as a pay link.
+                        if (balanceDue > 0.005 && invoiceToken) {
+                            receiptPayUrl = `${SITE_URL}/pay/${invoiceToken}`;
+                        }
+                    }
+                }
+                catch (balErr) {
+                    console.error('Failed to compute receipt balance:', balErr);
+                }
                 try {
                     await (0, emails_1.sendPaymentReceipt)({
                         email: recipientEmail,
@@ -656,6 +679,8 @@ exports.stripeWebhook = functions
                         date: new Date(),
                         sponsorBusinessName: sponsorId ? (_m = (await getDb().collection('sponsors').doc(sponsorId).get()).data()) === null || _m === void 0 ? void 0 : _m.businessName : undefined,
                         stripeSessionId: session.id,
+                        balanceDue,
+                        paymentUrl: receiptPayUrl,
                     });
                 }
                 catch (emailErr) {

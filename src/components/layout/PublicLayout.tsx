@@ -198,7 +198,7 @@ const PublicLayout = () => {
                 Northern Michigan Waves
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.85 }}>
-                Work as a Team, Win as a Team, Better Every Time
+                Work as a team, Win as a team, Better every time
               </Typography>
             </Box>
             <Box sx={{ textAlign: { xs: 'center', md: 'right' } }}>

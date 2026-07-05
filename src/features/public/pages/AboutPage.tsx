@@ -42,7 +42,7 @@ const AboutPage = () => {
             align="center"
             sx={{ fontStyle: 'italic', mb: 3, color: 'text.secondary' }}
           >
-            "Work as a Team, Win as a Team, Better Every Time"
+            "Work as a team, Win as a team, Better every time"
           </Typography>
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
             Northern Michigan Waves is a Michigan non-profit youth amateur athletic organization

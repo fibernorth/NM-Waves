@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { sendPaymentReceipt } from './emails';
 
 const getDb = () => admin.firestore();
+const SITE_URL = process.env.SITE_URL || functions.config().app?.site_url || 'https://nmwaves.com';
 
 /**
  * Compute fee total from a player finance document.
@@ -682,9 +683,29 @@ export const stripeWebhook = functions
         }
       }
 
-      // 5. Send payment receipt email
+      // 5. Send payment receipt email — include the up-to-date account balance
+      //    (computed from the freshly-updated finance record) so the payer sees
+      //    what, if anything, remains owed right in the receipt.
       const recipientEmail = session.customer_details?.email || '';
       if (recipientEmail) {
+        let balanceDue: number | undefined;
+        let receiptPayUrl: string | undefined;
+        try {
+          const freshFinance = await financeRef.get();
+          if (freshFinance.exists) {
+            const fData = freshFinance.data()!;
+            const owed = computeFeeTotal(fData) - (fData.scholarshipAmount || 0);
+            const paid = (fData.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
+            balanceDue = Math.max(0, owed - paid);
+            // If a balance remains and this checkout carried an invoice token
+            // (left open because it wasn't fully satisfied), reuse it as a pay link.
+            if (balanceDue > 0.005 && invoiceToken) {
+              receiptPayUrl = `${SITE_URL}/pay/${invoiceToken}`;
+            }
+          }
+        } catch (balErr) {
+          console.error('Failed to compute receipt balance:', balErr);
+        }
         try {
           await sendPaymentReceipt({
             email: recipientEmail,
@@ -695,6 +716,8 @@ export const stripeWebhook = functions
             date: new Date(),
             sponsorBusinessName: sponsorId ? (await getDb().collection('sponsors').doc(sponsorId).get()).data()?.businessName : undefined,
             stripeSessionId: session.id,
+            balanceDue,
+            paymentUrl: receiptPayUrl,
           });
         } catch (emailErr) {
           console.error('Failed to send receipt email:', emailErr);

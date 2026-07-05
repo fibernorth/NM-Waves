@@ -55,7 +55,7 @@ const SEASON_DOC = 'appSettings/season';
 
 const DEFAULT_ORG: OrgSettings = {
   orgName: 'Northern Michigan Waves',
-  tagline: 'Work as a Team, Win as a Team, Better Every Time',
+  tagline: 'Work as a team, Win as a team, Better every time',
   email: 'tcwavessoftball@gmail.com',
   phone: '',
   address: '555 S Rusch Rd',

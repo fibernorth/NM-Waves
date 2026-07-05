@@ -160,18 +160,25 @@ interface ReceiptData {
   sponsorBusinessName?: string;
   isAnonymous?: boolean;
   stripeSessionId?: string;
+  // Post-payment account balance. When provided, the receipt shows the
+  // remaining balance (and, if still owed, a Pay Remaining Balance button).
+  balanceDue?: number;
+  paymentUrl?: string;
 }
 
 export async function sendPaymentReceipt(receiptData: ReceiptData): Promise<void> {
   const {
     email, amount, playerName, teamName, season, date,
-    sponsorBusinessName, stripeSessionId,
+    sponsorBusinessName, stripeSessionId, balanceDue, paymentUrl,
   } = receiptData;
 
   const formattedAmount = `$${amount.toFixed(2)}`;
   const formattedDate = date.toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
+
+  const hasBalance = typeof balanceDue === 'number';
+  const owes = hasBalance && (balanceDue as number) > 0.005;
 
   const subject = `Payment Receipt - Northern Michigan Waves`;
   const html = `
@@ -183,13 +190,28 @@ export async function sendPaymentReceipt(receiptData: ReceiptData): Promise<void
           <p>Thank you for your payment! Here are the details:</p>
           <table style="width: 100%; border-collapse: collapse;">
             <tr><td style="padding: 8px 0; color: #666;">Date:</td><td style="padding: 8px 0; font-weight: bold;">${formattedDate}</td></tr>
-            <tr><td style="padding: 8px 0; color: #666;">Amount:</td><td style="padding: 8px 0; font-weight: bold; color: #2e7d32;">${formattedAmount}</td></tr>
+            <tr><td style="padding: 8px 0; color: #666;">Amount Paid:</td><td style="padding: 8px 0; font-weight: bold; color: #2e7d32;">${formattedAmount}</td></tr>
             <tr><td style="padding: 8px 0; color: #666;">Player:</td><td style="padding: 8px 0; font-weight: bold;">${esc(playerName)}</td></tr>
             <tr><td style="padding: 8px 0; color: #666;">Team:</td><td style="padding: 8px 0;">${esc(teamName)}</td></tr>
             <tr><td style="padding: 8px 0; color: #666;">Season:</td><td style="padding: 8px 0;">${esc(season)}</td></tr>
             ${sponsorBusinessName ? `<tr><td style="padding: 8px 0; color: #666;">Sponsor:</td><td style="padding: 8px 0;">${esc(sponsorBusinessName)}</td></tr>` : ''}
             ${stripeSessionId ? `<tr><td style="padding: 8px 0; color: #666;">Reference:</td><td style="padding: 8px 0; font-size: 12px;">${esc(stripeSessionId)}</td></tr>` : ''}
+            ${hasBalance ? `
+            <tr style="border-top: 2px solid #ddd; background-color: ${owes ? '#fff3e0' : '#e8f5e9'};">
+              <td style="padding: 10px 0; font-weight: bold; font-size: 16px;">Remaining Balance:</td>
+              <td style="padding: 10px 0; font-weight: bold; font-size: 16px; color: ${owes ? '#e65100' : '#2e7d32'};">$${(balanceDue as number).toFixed(2)}</td>
+            </tr>` : ''}
           </table>
+          ${!hasBalance ? '' : owes ? `
+          ${paymentUrl ? `
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${paymentUrl}" style="display: inline-block; background-color: #1565c0; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+              Pay Remaining Balance
+            </a>
+          </div>` : ''}
+          <p style="text-align: center; color: #666; font-size: 13px;">Log in to your parent account at <a href="${SITE_URL}">${SITE_URL.replace('https://', '')}</a> to view details and pay the balance.</p>
+          ` : `
+          <p style="text-align: center; color: #2e7d32; font-weight: bold; margin: 16px 0 0;">Your account is paid in full — thank you! 🎉</p>`}
         </div>
         <div style="background-color: white; padding: 15px; border-radius: 8px; text-align: center;">
           <p style="margin: 0; color: #666; font-size: 14px;">
