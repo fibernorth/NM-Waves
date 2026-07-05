@@ -323,6 +323,23 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    // SURVEYS — questions are readable by any signed-in user (so parents can
+    // fill them out); only admins create/edit them.
+    match /surveys/{docId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // SURVEY RESPONSES — private. Any signed-in user may SUBMIT (create), but
+    // results are readable ONLY by admins/master-admins — coaches explicitly
+    // cannot see them. Responses are immutable once submitted.
+    match /surveyResponses/{docId} {
+      allow create: if isAuth();
+      allow read: if isAdmin();
+      allow update: if false;
+      allow delete: if isMasterAdmin();
+    }
+
     // HOMEPAGE POSTS (public-facing content)
     match /homepagePosts/{docId} {
       allow read: if true;

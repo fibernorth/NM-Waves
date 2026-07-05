@@ -85,3 +85,4 @@ export {
   searchLinkablePlayers,
   linkChild,
 } from './parentActions';
+export { emailAllParents } from './emailBroadcast';

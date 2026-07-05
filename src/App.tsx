@@ -118,6 +118,9 @@ import HomepageManagerPage from './features/homepage-manager/pages/HomepageManag
 // Admin Pages
 import ZipUploadPage from './features/admin/pages/ZipUploadPage';
 import AdminSettingsPage from './features/admin/pages/AdminSettingsPage';
+import EmailParentsPage from './features/admin/pages/EmailParentsPage';
+import SurveysPage from './features/surveys/pages/SurveysPage';
+import SurveyAdminPage from './features/surveys/pages/SurveyAdminPage';
 
 // Components
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -202,6 +205,7 @@ function App() {
               <Route path="/my-invoices" element={<ParentInvoicesPage />} />
               <Route path="/tournaments" element={<TournamentsPage />} />
               <Route path="/stats" element={<TeamStatsPage />} />
+              <Route path="/surveys" element={<SurveysPage />} />
             </Route>
 
             {/* Protected Routes - Coach and above */}
@@ -249,6 +253,8 @@ function App() {
               <Route path="/homepage-manager" element={<HomepageManagerPage />} />
               <Route path="/admin/zip-upload" element={<ZipUploadPage />} />
               <Route path="/admin/settings" element={<AdminSettingsPage />} />
+              <Route path="/admin/email-parents" element={<EmailParentsPage />} />
+              <Route path="/admin/surveys" element={<SurveyAdminPage />} />
             </Route>
 
             {/* 404 - Redirect to public home */}

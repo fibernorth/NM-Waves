@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.linkChild = exports.searchLinkablePlayers = exports.getPlayerFinanceSummary = exports.updateLinkedPlayerContact = exports.getInvoiceByToken = exports.getPublicRoster = exports.sendCustomPasswordReset = exports.setAccountPassword = exports.listDrivePhotos = exports.batchAnalyzeMedia = exports.analyzeMedia = exports.moderateMedia = exports.batchGenerateInvoices = exports.generateInvoiceToken = exports.stripeWebhook = exports.createCheckoutSession = exports.sendInvoiceEmails = exports.sendParentInvites = exports.cleanupExpiredTokens = exports.onUserDisabled = exports.scrapeGameChanger = void 0;
+exports.emailAllParents = exports.linkChild = exports.searchLinkablePlayers = exports.getPlayerFinanceSummary = exports.updateLinkedPlayerContact = exports.getInvoiceByToken = exports.getPublicRoster = exports.sendCustomPasswordReset = exports.setAccountPassword = exports.listDrivePhotos = exports.batchAnalyzeMedia = exports.analyzeMedia = exports.moderateMedia = exports.batchGenerateInvoices = exports.generateInvoiceToken = exports.stripeWebhook = exports.createCheckoutSession = exports.sendInvoiceEmails = exports.sendParentInvites = exports.cleanupExpiredTokens = exports.onUserDisabled = exports.scrapeGameChanger = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const sendInvites_1 = require("./sendInvites");
@@ -122,4 +122,6 @@ Object.defineProperty(exports, "updateLinkedPlayerContact", { enumerable: true, 
 Object.defineProperty(exports, "getPlayerFinanceSummary", { enumerable: true, get: function () { return parentActions_1.getPlayerFinanceSummary; } });
 Object.defineProperty(exports, "searchLinkablePlayers", { enumerable: true, get: function () { return parentActions_1.searchLinkablePlayers; } });
 Object.defineProperty(exports, "linkChild", { enumerable: true, get: function () { return parentActions_1.linkChild; } });
+var emailBroadcast_1 = require("./emailBroadcast");
+Object.defineProperty(exports, "emailAllParents", { enumerable: true, get: function () { return emailBroadcast_1.emailAllParents; } });
 //# sourceMappingURL=index.js.map

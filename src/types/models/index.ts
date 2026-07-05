@@ -1114,3 +1114,42 @@ export interface BankReconciliation {
   createdAt: Date;
   updatedAt: Date;
 }
+
+// ============================================================
+// SURVEYS (private parent surveys — results hidden from coaches)
+// ============================================================
+
+export type SurveyQuestionType = 'text' | 'multiple_choice' | 'rating';
+
+export interface SurveyQuestion {
+  id: string;
+  text: string;
+  type: SurveyQuestionType;
+  options?: string[]; // for multiple_choice
+  required?: boolean;
+}
+
+export interface Survey {
+  id: string;
+  title: string;
+  description?: string;
+  questions: SurveyQuestion[];
+  active: boolean;
+  anonymous: boolean; // if true, responses store no identifying info
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SurveyAnswer {
+  questionId: string;
+  questionText: string;
+  value: string; // free text, chosen option, or rating as string
+}
+
+export interface SurveyResponse {
+  id: string;
+  surveyId: string;
+  answers: SurveyAnswer[];
+  submittedAt: Date;
+}

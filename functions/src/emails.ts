@@ -93,6 +93,59 @@ async function queueEmail(to: string, subject: string, html: string): Promise<vo
   });
 }
 
+/**
+ * Send one message to many parent recipients via BCC (chunked). Powers the
+ * "Email all parents" admin broadcast. The admin's plain-text message is
+ * escaped and wrapped in the club's branded email template.
+ */
+export async function sendBroadcastEmail(
+  recipients: string[],
+  subject: string,
+  plainMessage: string
+): Promise<{ sent: number; queued: boolean }> {
+  const bodyHtml = esc(plainMessage).replace(/\n/g, '<br>');
+  const html = `${emailHeader}<div style="padding: 20px; color: #333; font-size: 15px; line-height: 1.6;">${bodyHtml}</div>${emailFooter}`;
+
+  const transporter = getTransporter();
+  if (!transporter) {
+    await getDb().collection('mail').add({
+      to: ORG_EMAIL,
+      bccCount: recipients.length,
+      message: { subject, html },
+      sent: false,
+      broadcast: true,
+      createdAt: admin.firestore.Timestamp.now(),
+    });
+    return { sent: 0, queued: true };
+  }
+
+  // Chunk the BCC list so no single message has an unwieldy recipient count.
+  const CHUNK = 90;
+  let sent = 0;
+  for (let i = 0; i < recipients.length; i += CHUNK) {
+    const batch = recipients.slice(i, i + CHUNK);
+    await transporter.sendMail({
+      from: `"TC Waves Ball Club" <${ORG_EMAIL}>`,
+      to: ORG_EMAIL,
+      bcc: batch,
+      subject,
+      html,
+    });
+    sent += batch.length;
+  }
+
+  await getDb().collection('mail').add({
+    to: ORG_EMAIL,
+    bccCount: sent,
+    subject,
+    sent: true,
+    broadcast: true,
+    sentAt: admin.firestore.Timestamp.now(),
+    createdAt: admin.firestore.Timestamp.now(),
+  });
+  return { sent, queued: false };
+}
+
 // ============================================================
 // PAYMENT RECEIPT
 // ============================================================
