@@ -5,7 +5,7 @@ import cors from 'cors';
 import { sendParentInviteEmail, sendBatchInvoiceNotifications } from './emails';
 
 const corsHandler = cors({ origin: true });
-const SITE_URL = process.env.SITE_URL || 'https://nmwaves.com';
+const SITE_URL = process.env.SITE_URL || functions.config().app?.site_url || 'https://nmwaves.com';
 
 /**
  * Compute fee total from a player finance document.

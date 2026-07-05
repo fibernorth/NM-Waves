@@ -44,7 +44,7 @@ const getDb = () => admin.firestore();
  * Uses service account credentials from Firebase Functions config.
  */
 exports.listDrivePhotos = functions.https.onCall(async (_data, context) => {
-    var _a, _b;
+    var _a, _b, _c;
     // Require authentication
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated');
@@ -65,8 +65,8 @@ exports.listDrivePhotos = functions.https.onCall(async (_data, context) => {
     }
     const folderId = settings.googleDrive.folderId;
     try {
-        // Service account credentials from environment (functions/.env).
-        const serviceAccountStr = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT;
+        // Prefer env var (functions/.env); fall back to legacy functions.config().
+        const serviceAccountStr = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT || ((_c = functions.config().google_drive) === null || _c === void 0 ? void 0 : _c.service_account);
         if (!serviceAccountStr) {
             console.error('Google Drive service account not configured (set GOOGLE_DRIVE_SERVICE_ACCOUNT)');
             return { photos: [] };

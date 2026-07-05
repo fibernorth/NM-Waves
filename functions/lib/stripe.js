@@ -82,7 +82,10 @@ async function recordFailedWebhook(event, error) {
     }
 }
 function getStripe() {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
+    var _a;
+    // Prefer env vars (functions/.env); fall back to legacy functions.config()
+    // so existing deployments keep working until secrets are moved to .env.
+    const secretKey = process.env.STRIPE_SECRET_KEY || ((_a = functions.config().stripe) === null || _a === void 0 ? void 0 : _a.secret_key);
     if (!secretKey) {
         throw new Error('Stripe secret key not configured (set STRIPE_SECRET_KEY)');
     }
@@ -227,13 +230,13 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
  * Stripe webhook handler for processing completed payments.
  */
 exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
     if (req.method !== 'POST') {
         res.status(405).send('Method Not Allowed');
         return;
     }
     const stripe = getStripe();
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ((_a = functions.config().stripe) === null || _a === void 0 ? void 0 : _a.webhook_secret);
     let event = undefined;
     // Try signature verification first (works with legacy webhook endpoints).
     // If it fails, fall back to parsing the body and verifying via the Stripe API
@@ -279,7 +282,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
             const paymentId = `stripe_${session.id}`;
             // === SPONSOR-ONLY PAYMENT (no financeId) ===
             if (metadata.paymentType === 'sponsorship') {
-                const businessName = metadata.sponsorBusinessName || ((_a = session.customer_details) === null || _a === void 0 ? void 0 : _a.name) || 'Unknown Sponsor';
+                const businessName = metadata.sponsorBusinessName || ((_b = session.customer_details) === null || _b === void 0 ? void 0 : _b.name) || 'Unknown Sponsor';
                 const target = metadata.sponsorshipTarget || 'organization';
                 const notes = metadata.sponsorNotes || '';
                 // Idempotency check: see if this session was already processed
@@ -296,8 +299,8 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                 // 1. Create sponsor record
                 const sponsorRef = await getDb().collection('sponsors').add({
                     businessName,
-                    contactName: metadata.payerName || ((_b = session.customer_details) === null || _b === void 0 ? void 0 : _b.name) || '',
-                    contactEmail: ((_c = session.customer_details) === null || _c === void 0 ? void 0 : _c.email) || '',
+                    contactName: metadata.payerName || ((_c = session.customer_details) === null || _c === void 0 ? void 0 : _c.name) || '',
+                    contactEmail: ((_d = session.customer_details) === null || _d === void 0 ? void 0 : _d.email) || '',
                     level: 'custom',
                     sponsorshipType: target === 'player' ? 'player_sponsor' : target === 'team' ? 'team_sponsor' : 'general',
                     season: new Date().getFullYear().toString(),
@@ -324,7 +327,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                     amount,
                     source: businessName,
                     description: `Sponsorship payment from ${businessName} (${target})`,
-                    payerName: metadata.payerName || ((_d = session.customer_details) === null || _d === void 0 ? void 0 : _d.name) || '',
+                    payerName: metadata.payerName || ((_e = session.customer_details) === null || _e === void 0 ? void 0 : _e.name) || '',
                     paymentMethod: 'credit_card',
                     referenceNumber: session.id,
                     notes: notes ? `${notes} | Stripe Session: ${session.id}` : `Stripe Checkout Session: ${session.id}`,
@@ -426,8 +429,8 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                     notes: sponsorId
                         ? `Stripe payment${isAnonymous === 'true' ? ' (anonymous sponsor)' : ''}`
                         : 'Stripe payment',
-                    payerName: payerName || ((_e = session.customer_details) === null || _e === void 0 ? void 0 : _e.name) || '',
-                    payerEmail: ((_f = session.customer_details) === null || _f === void 0 ? void 0 : _f.email) || '',
+                    payerName: payerName || ((_f = session.customer_details) === null || _f === void 0 ? void 0 : _f.name) || '',
+                    payerEmail: ((_g = session.customer_details) === null || _g === void 0 ? void 0 : _g.email) || '',
                     stripeSessionId: session.id,
                     isAnonymous: isAnonymous === 'true',
                     processingFee,
@@ -446,7 +449,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
             }
             // 2. Record income entry (tagged with sourcePaymentId for reconciliation)
             const incomeCategory = sponsorId ? 'sponsorships' : 'player_payments';
-            let incomeSource = payerName || ((_g = session.customer_details) === null || _g === void 0 ? void 0 : _g.name) || 'Stripe Payment';
+            let incomeSource = payerName || ((_h = session.customer_details) === null || _h === void 0 ? void 0 : _h.name) || 'Stripe Payment';
             if (sponsorId) {
                 const sponsorDoc = await getDb().collection('sponsors').doc(sponsorId).get();
                 if (sponsorDoc.exists) {
@@ -459,7 +462,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                 amount,
                 source: incomeSource,
                 description: `Stripe payment for ${playerName || 'player'}`,
-                payerName: payerName || ((_h = session.customer_details) === null || _h === void 0 ? void 0 : _h.name) || '',
+                payerName: payerName || ((_j = session.customer_details) === null || _j === void 0 ? void 0 : _j.name) || '',
                 paymentMethod: 'credit_card',
                 referenceNumber: session.id,
                 playerId,
@@ -623,7 +626,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                         const tokenUpdate = {
                             used: true,
                             usedAt: paymentDate,
-                            usedBy: ((_j = session.customer_details) === null || _j === void 0 ? void 0 : _j.email) || 'stripe',
+                            usedBy: ((_k = session.customer_details) === null || _k === void 0 ? void 0 : _k.email) || 'stripe',
                         };
                         if (userId) {
                             tokenUpdate.paidByUserId = userId;
@@ -636,7 +639,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                 }
             }
             // 5. Send payment receipt email
-            const recipientEmail = ((_k = session.customer_details) === null || _k === void 0 ? void 0 : _k.email) || '';
+            const recipientEmail = ((_l = session.customer_details) === null || _l === void 0 ? void 0 : _l.email) || '';
             if (recipientEmail) {
                 try {
                     await (0, emails_1.sendPaymentReceipt)({
@@ -646,7 +649,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                         teamName: teamName || '',
                         season: season || '',
                         date: new Date(),
-                        sponsorBusinessName: sponsorId ? (_l = (await getDb().collection('sponsors').doc(sponsorId).get()).data()) === null || _l === void 0 ? void 0 : _l.businessName : undefined,
+                        sponsorBusinessName: sponsorId ? (_m = (await getDb().collection('sponsors').doc(sponsorId).get()).data()) === null || _m === void 0 ? void 0 : _m.businessName : undefined,
                         stripeSessionId: session.id,
                     });
                 }
@@ -820,7 +823,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
             await getDb().collection('adminNotifications').add({
                 type: 'payment_dispute',
                 severity: 'critical',
-                message: `Chargeback dispute opened for $${disputeAmount.toFixed(2)}. Charge: ${dispute.charge}. Reason: ${dispute.reason}. Respond by ${new Date((((_m = dispute.evidence_details) === null || _m === void 0 ? void 0 : _m.due_by) || 0) * 1000).toLocaleDateString()}.`,
+                message: `Chargeback dispute opened for $${disputeAmount.toFixed(2)}. Charge: ${dispute.charge}. Reason: ${dispute.reason}. Respond by ${new Date((((_o = dispute.evidence_details) === null || _o === void 0 ? void 0 : _o.due_by) || 0) * 1000).toLocaleDateString()}.`,
                 disputeId: dispute.id,
                 chargeId: dispute.charge,
                 amount: disputeAmount,

@@ -32,6 +32,7 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendPaymentReceipt = sendPaymentReceipt;
 exports.sendInvoiceNotification = sendInvoiceNotification;
@@ -39,12 +40,13 @@ exports.sendParentInviteEmail = sendParentInviteEmail;
 exports.sendPasswordResetCustomEmail = sendPasswordResetCustomEmail;
 exports.sendBatchInvoiceNotifications = sendBatchInvoiceNotifications;
 const admin = __importStar(require("firebase-admin"));
+const functions = __importStar(require("firebase-functions"));
 const nodemailer = __importStar(require("nodemailer"));
 const getDb = () => admin.firestore();
 const ORG_EMAIL = 'tcwavessoftball@gmail.com';
-// Runtime config now comes from environment variables (functions/.env), since
-// functions.config() (Cloud Runtime Config) was shut down at the end of 2025.
-const SITE_URL = process.env.SITE_URL || 'https://nmwaves.com';
+// Prefer env vars (functions/.env); fall back to legacy functions.config()
+// so existing deployments keep working until secrets are moved to .env.
+const SITE_URL = process.env.SITE_URL || ((_a = functions.config().app) === null || _a === void 0 ? void 0 : _a.site_url) || 'https://nmwaves.com';
 /** Escape HTML special characters to prevent XSS in email templates */
 function esc(str) {
     return str
@@ -68,8 +70,9 @@ const emailFooter = `
  * Requires environment variables SMTP_USER and SMTP_PASS (set in functions/.env).
  */
 function getTransporter() {
-    const user = process.env.SMTP_USER || ORG_EMAIL;
-    const pass = process.env.SMTP_PASS;
+    var _a, _b;
+    const user = process.env.SMTP_USER || ((_a = functions.config().smtp) === null || _a === void 0 ? void 0 : _a.user) || ORG_EMAIL;
+    const pass = process.env.SMTP_PASS || ((_b = functions.config().smtp) === null || _b === void 0 ? void 0 : _b.pass);
     if (!pass) {
         console.warn('[email] SMTP password not configured. Set SMTP_PASS in functions/.env');
         return null;

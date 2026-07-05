@@ -54,7 +54,9 @@ async function recordFailedWebhook(event: Stripe.Event, error: unknown): Promise
 }
 
 function getStripe(): Stripe {
-  const secretKey = process.env.STRIPE_SECRET_KEY;
+  // Prefer env vars (functions/.env); fall back to legacy functions.config()
+  // so existing deployments keep working until secrets are moved to .env.
+  const secretKey = process.env.STRIPE_SECRET_KEY || functions.config().stripe?.secret_key;
   if (!secretKey) {
     throw new Error('Stripe secret key not configured (set STRIPE_SECRET_KEY)');
   }
@@ -227,7 +229,7 @@ export const stripeWebhook = functions.https.onRequest(async (req, res) => {
   }
 
   const stripe = getStripe();
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || functions.config().stripe?.webhook_secret;
 
   let event: Stripe.Event = undefined as any;
 

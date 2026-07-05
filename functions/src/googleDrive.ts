@@ -35,8 +35,8 @@ export const listDrivePhotos = functions.https.onCall(async (_data, context) => 
   const folderId = settings.googleDrive.folderId;
 
   try {
-    // Service account credentials from environment (functions/.env).
-    const serviceAccountStr = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT;
+    // Prefer env var (functions/.env); fall back to legacy functions.config().
+    const serviceAccountStr = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT || functions.config().google_drive?.service_account;
 
     if (!serviceAccountStr) {
       console.error('Google Drive service account not configured (set GOOGLE_DRIVE_SERVICE_ACCOUNT)');

@@ -1,12 +1,13 @@
 import * as admin from 'firebase-admin';
+import * as functions from 'firebase-functions';
 import * as nodemailer from 'nodemailer';
 
 const getDb = () => admin.firestore();
 
 const ORG_EMAIL = 'tcwavessoftball@gmail.com';
-// Runtime config now comes from environment variables (functions/.env), since
-// functions.config() (Cloud Runtime Config) was shut down at the end of 2025.
-const SITE_URL = process.env.SITE_URL || 'https://nmwaves.com';
+// Prefer env vars (functions/.env); fall back to legacy functions.config()
+// so existing deployments keep working until secrets are moved to .env.
+const SITE_URL = process.env.SITE_URL || functions.config().app?.site_url || 'https://nmwaves.com';
 
 /** Escape HTML special characters to prevent XSS in email templates */
 function esc(str: string): string {
@@ -34,8 +35,8 @@ const emailFooter = `
  * Requires environment variables SMTP_USER and SMTP_PASS (set in functions/.env).
  */
 function getTransporter() {
-  const user = process.env.SMTP_USER || ORG_EMAIL;
-  const pass = process.env.SMTP_PASS;
+  const user = process.env.SMTP_USER || functions.config().smtp?.user || ORG_EMAIL;
+  const pass = process.env.SMTP_PASS || functions.config().smtp?.pass;
 
   if (!pass) {
     console.warn('[email] SMTP password not configured. Set SMTP_PASS in functions/.env');

@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendCustomPasswordReset = exports.setAccountPassword = void 0;
 const functions = __importStar(require("firebase-functions"));
@@ -43,7 +44,7 @@ const crypto = __importStar(require("crypto"));
 const cors_1 = __importDefault(require("cors"));
 const emails_1 = require("./emails");
 const corsHandler = (0, cors_1.default)({ origin: true });
-const SITE_URL = process.env.SITE_URL || 'https://nmwaves.com';
+const SITE_URL = process.env.SITE_URL || ((_a = functions.config().app) === null || _a === void 0 ? void 0 : _a.site_url) || 'https://nmwaves.com';
 /**
  * HTTP function to set a user's password using a custom invite or reset token.
  *
