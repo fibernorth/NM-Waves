@@ -63,9 +63,13 @@ exports.emailAllParents = functions.https.onCall(async (data, context) => {
     }
     const emails = new Set();
     if (data === null || data === void 0 ? void 0 : data.tryoutSignups) {
-        // Audience: everyone who registered for tryouts (their contact email).
+        // Audience: tryout registrants. Optionally narrow to specific applicant ids.
+        const idFilter = Array.isArray(data === null || data === void 0 ? void 0 : data.tryoutApplicantIds) ? data.tryoutApplicantIds.map(String) : [];
+        const idSet = new Set(idFilter);
         const snap = await getDb().collection('tryout-applicants').get();
         for (const doc of snap.docs) {
+            if (idSet.size > 0 && !idSet.has(doc.id))
+                continue;
             const a = doc.data();
             if (a.email)
                 emails.add(String(a.email).trim().toLowerCase());
