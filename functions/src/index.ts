@@ -86,4 +86,4 @@ export {
   linkChild,
 } from './parentActions';
 export { emailAllParents } from './emailBroadcast';
-export { emailPlayerBilling } from './billingEmails';
+export { emailPlayerBilling, emailOutstandingInvoices } from './billingEmails';

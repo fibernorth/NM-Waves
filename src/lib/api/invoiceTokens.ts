@@ -238,6 +238,28 @@ export const invoiceTokensApi = {
   },
 
   /**
+   * Email an invoice notice to every player who has an outstanding balance.
+   * Returns how many were emailed plus any skipped for missing email.
+   */
+  emailOutstanding: async (): Promise<{
+    emailed: number;
+    players: string[];
+    skippedNoBalance: number;
+    skippedNoEmail: string[];
+  }> => {
+    const callable = httpsCallable<
+      Record<string, never>,
+      { emailed: number; players: string[]; skippedNoBalance: number; skippedNoEmail: string[] }
+    >(functions, 'emailOutstandingInvoices');
+    try {
+      const result = await callable({});
+      return result.data;
+    } catch (err: any) {
+      throw new Error(err?.details || err?.message || 'Failed to email invoices');
+    }
+  },
+
+  /**
    * Get all invoice tokens (optionally filtered by season).
    */
   getAll: async (season?: string): Promise<InvoiceToken[]> => {

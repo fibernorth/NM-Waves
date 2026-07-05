@@ -212,3 +212,66 @@ export const emailPlayerBilling = functions.https.onCall(async (data, context) =
 
   return { sent: emails.length, recipients: emails, mode };
 });
+
+/**
+ * Admin-only: email an invoice notice to EVERY player with an outstanding
+ * balance in one action. For each such player it resolves the parent email(s),
+ * reuses or mints a pay link, and sends the branded invoice. Players with no
+ * balance, quit players, or players with no email on file are skipped and
+ * reported back so nothing fails silently.
+ */
+export const emailOutstandingInvoices = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+  }
+  const userDoc = await getDb().collection('users').doc(context.auth.uid).get();
+  const udata = userDoc.data() || {};
+  const roles: string[] = udata.roles || (udata.role ? [udata.role] : []);
+  if (!roles.includes('admin') && !roles.includes('master-admin')) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+
+  const snap = await getDb().collection('playerFinances').get();
+  let emailed = 0;
+  let skippedNoBalance = 0;
+  const skippedNoEmail: string[] = [];
+  const players: string[] = [];
+
+  for (const doc of snap.docs) {
+    const f = doc.data();
+    if (f.status === 'quit') { skippedNoBalance++; continue; }
+    const totalOwed = computeFeeTotal(f);
+    const totalPaid = (f.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
+    const scholarshipAmount = f.scholarshipAmount || 0;
+    const balanceDue = totalOwed - totalPaid - scholarshipAmount;
+    if (balanceDue <= 0.005) { skippedNoBalance++; continue; }
+
+    const playerId = String(f.playerId || '');
+    const { emails, parentName } = await resolveParentEmails(playerId);
+    if (emails.length === 0) { skippedNoEmail.push(f.playerName || playerId); continue; }
+
+    const payUrl = await ensureFullBalancePayUrl(doc.id, playerId, f, context.auth.uid);
+    const feeBreakdown = {
+      registrationFee: f.registrationFee || 0,
+      uniformCost: f.uniformCost || 0,
+      tournamentFees: f.tournamentFees || 0,
+      facilityFees: f.facilityFees || 0,
+      equipmentFees: f.equipmentFees || 0,
+      otherFees: f.otherFees || 0,
+    };
+    for (const email of emails) {
+      await sendInvoiceNotification({
+        email, parentName,
+        playerName: f.playerName || '',
+        teamName: f.teamName || '',
+        season: f.season || '',
+        totalOwed, totalPaid, balanceDue, feeBreakdown, scholarshipAmount,
+        paymentUrl: payUrl || undefined,
+      });
+    }
+    emailed++;
+    players.push(f.playerName || playerId);
+  }
+
+  return { emailed, players, skippedNoBalance, skippedNoEmail };
+});

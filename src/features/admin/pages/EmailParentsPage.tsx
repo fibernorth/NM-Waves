@@ -23,8 +23,10 @@ import {
 } from '@mui/material';
 import EmailIcon from '@mui/icons-material/Email';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { emailAllParents, type BroadcastResult } from '@/lib/api/emailBroadcast';
+import { invoiceTokensApi } from '@/lib/api/invoiceTokens';
 import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
 import { tryoutApplicantsApi } from '@/lib/api/tryoutApplicants';
@@ -136,6 +138,23 @@ const EmailParentsPage = () => {
     onError: (err: any) => { setConfirmOpen(false); toast.error(err?.message || 'Failed to send. Please try again.'); },
   });
 
+  const [invoiceConfirmOpen, setInvoiceConfirmOpen] = useState(false);
+  const invoiceMutation = useMutation({
+    mutationFn: () => invoiceTokensApi.emailOutstanding(),
+    onSuccess: (res) => {
+      setInvoiceConfirmOpen(false);
+      if (res.emailed === 0) {
+        toast.success('No players currently have an outstanding balance.');
+      } else {
+        toast.success(`Invoices emailed for ${res.emailed} player${res.emailed === 1 ? '' : 's'}.`);
+      }
+      if (res.skippedNoEmail.length > 0) {
+        toast.error(`No email on file for: ${res.skippedNoEmail.join(', ')}`, { duration: 6000 });
+      }
+    },
+    onError: (err: any) => { setInvoiceConfirmOpen(false); toast.error(err?.message || 'Failed to email invoices.'); },
+  });
+
   const needsSelection = mode === 'choose' || mode === 'tryouts';
   const audienceChosen = mode === 'all' || selected.size > 0;
   const canSend = subject.trim().length > 0 && message.trim().length > 0 && audienceChosen;
@@ -233,6 +252,41 @@ const EmailParentsPage = () => {
           <Button variant="contained" startIcon={<EmailIcon />} disabled={!canSend || sendMutation.isPending} onClick={() => setConfirmOpen(true)}>Send</Button>
         </Box>
       </Paper>
+
+      <Paper sx={{ p: 3, maxWidth: 720, mt: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <ReceiptLongIcon color="primary" />
+          <Typography variant="subtitle1" fontWeight={600}>Email invoices to outstanding players</Typography>
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Sends a branded invoice with the current balance and a Pay Now link to the parents of
+          every player who still owes money. Players who are paid in full are skipped automatically.
+        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            variant="outlined"
+            startIcon={invoiceMutation.isPending ? <CircularProgress size={18} /> : <ReceiptLongIcon />}
+            disabled={invoiceMutation.isPending}
+            onClick={() => setInvoiceConfirmOpen(true)}
+          >
+            Email outstanding invoices
+          </Button>
+        </Box>
+      </Paper>
+
+      <Dialog open={invoiceConfirmOpen} onClose={() => !invoiceMutation.isPending && setInvoiceConfirmOpen(false)}>
+        <DialogTitle>Email invoices to all outstanding players?</DialogTitle>
+        <DialogContent><DialogContentText>
+          Every player with a balance due will have an invoice emailed to their parent/guardian, each with a Pay Now link. This can't be undone.
+        </DialogContentText></DialogContent>
+        <DialogActions>
+          <Button onClick={() => setInvoiceConfirmOpen(false)} disabled={invoiceMutation.isPending}>Cancel</Button>
+          <Button variant="contained" onClick={() => invoiceMutation.mutate()} disabled={invoiceMutation.isPending}
+            startIcon={invoiceMutation.isPending ? <CircularProgress size={18} /> : <ReceiptLongIcon />}>
+            {invoiceMutation.isPending ? 'Sending…' : 'Email invoices'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={confirmOpen} onClose={() => !sendMutation.isPending && setConfirmOpen(false)}>
         <DialogTitle>Send this message?</DialogTitle>
