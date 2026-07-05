@@ -102,7 +102,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Messaging', icon: <ChatIcon />, path: '/messaging', roles: ['all'] },
     { text: 'Email Parents', icon: <EmailIcon />, path: '/admin/email-parents', roles: ['admin', 'master-admin'] },
     { text: 'Surveys', icon: <PollIcon />, path: '/surveys', roles: ['parent'] },
-    { text: 'Surveys', icon: <PollIcon />, path: '/admin/surveys', roles: ['admin', 'master-admin'] },
+    { text: 'Surveys', icon: <PollIcon />, path: '/manage-surveys', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Stats', icon: <ScoreboardIcon />, path: '/stats', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Homepage Manager', icon: <WebIcon />, path: '/homepage-manager', roles: ['admin', 'master-admin'] },
   ];

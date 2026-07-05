@@ -1127,6 +1127,7 @@ export interface SurveyQuestion {
   type: SurveyQuestionType;
   options?: string[]; // for multiple_choice
   required?: boolean;
+  visibleToCoaches?: boolean; // if true, the survey's creator (a coach) may see answers to this question
 }
 
 export interface Survey {
@@ -1136,7 +1137,11 @@ export interface Survey {
   questions: SurveyQuestion[];
   active: boolean;
   anonymous: boolean; // if true, responses store no identifying info
+  // Audience: empty both = everyone; otherwise players on assignedTeamIds OR in assignedPlayerIds.
+  assignedTeamIds: string[];
+  assignedPlayerIds: string[];
   createdBy: string;
+  createdByRole?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1152,4 +1157,5 @@ export interface SurveyResponse {
   surveyId: string;
   answers: SurveyAnswer[];
   submittedAt: Date;
+  surveyCreatedBy?: string; // present only on coach-visible projection docs
 }

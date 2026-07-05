@@ -219,6 +219,7 @@ function App() {
               <Route path="/documents" element={<DocumentsPage />} />
               <Route path="/media" element={<MediaPage />} />
               <Route path="/metrics" element={<MetricsPage />} />
+              <Route path="/manage-surveys" element={<SurveyAdminPage />} />
             </Route>
 
             {/* Protected Routes - Admin and above */}
@@ -254,7 +255,6 @@ function App() {
               <Route path="/admin/zip-upload" element={<ZipUploadPage />} />
               <Route path="/admin/settings" element={<AdminSettingsPage />} />
               <Route path="/admin/email-parents" element={<EmailParentsPage />} />
-              <Route path="/admin/surveys" element={<SurveyAdminPage />} />
             </Route>
 
             {/* 404 - Redirect to public home */}

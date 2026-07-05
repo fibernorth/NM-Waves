@@ -324,20 +324,33 @@ service cloud.firestore {
     }
 
     // SURVEYS — questions are readable by any signed-in user (so parents can
-    // fill them out); only admins create/edit them.
+    // fill them out). Coaches and admins can create surveys; a survey can be
+    // edited/deleted by an admin or by the coach who created it.
     match /surveys/{docId} {
       allow read: if isAuth();
-      allow write: if isAdmin();
+      allow create: if isCoach();
+      allow update, delete: if isAdmin() || (isCoach() && resource.data.createdBy == request.auth.uid);
     }
 
-    // SURVEY RESPONSES — private. Any signed-in user may SUBMIT (create), but
-    // results are readable ONLY by admins/master-admins — coaches explicitly
-    // cannot see them. Responses are immutable once submitted.
+    // SURVEY RESPONSES (full) — private. Any signed-in user may SUBMIT (create),
+    // but the complete answer set is readable ONLY by admins/master-admins.
+    // Immutable once submitted.
     match /surveyResponses/{docId} {
       allow create: if isAuth();
       allow read: if isAdmin();
       allow update: if false;
       allow delete: if isMasterAdmin();
+    }
+
+    // SURVEY RESPONSES (coach-visible projection) — contains only the answers to
+    // questions marked visible-to-coaches. Readable by admins and by the coach
+    // who created the survey (so coaches get their own feedback). Coaches can
+    // never see the full/admin-only answers, which live in surveyResponses.
+    match /surveyResponsesCoach/{docId} {
+      allow create: if isAuth();
+      allow read: if isAdmin() || (isCoach() && resource.data.surveyCreatedBy == request.auth.uid);
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
     // HOMEPAGE POSTS (public-facing content)

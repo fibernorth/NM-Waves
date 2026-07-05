@@ -24,7 +24,9 @@ import {
 import PollIcon from '@mui/icons-material/Poll';
 import LockIcon from '@mui/icons-material/Lock';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { surveysApi, surveyResponsesApi } from '@/lib/api/surveys';
+import { surveysApi, surveyResponsesApi, surveyMatchesAudience } from '@/lib/api/surveys';
+import { playersApi } from '@/lib/api/players';
+import { useAuthStore } from '@/stores/authStore';
 import type { Survey, SurveyAnswer } from '@/types/models';
 import toast from 'react-hot-toast';
 
@@ -33,10 +35,26 @@ const SurveysPage = () => {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
 
+  const { user } = useAuthStore();
+  const linkedPlayerIds = user?.linkedPlayerIds || [];
+
   const { data: surveys = [], isLoading } = useQuery({
     queryKey: ['activeSurveys'],
     queryFn: () => surveysApi.getActive(),
   });
+
+  // Fetch the parent's linked children to know which teams/players they belong
+  // to, so we only show surveys targeted at them.
+  const { data: children = [] } = useQuery({
+    queryKey: ['linkedChildrenForSurveys', ...linkedPlayerIds],
+    queryFn: async () => {
+      const results = await Promise.all(linkedPlayerIds.map((id) => playersApi.getById(id)));
+      return results.filter(Boolean) as NonNullable<Awaited<ReturnType<typeof playersApi.getById>>>[];
+    },
+    enabled: linkedPlayerIds.length > 0,
+  });
+
+  const childTeamIds = children.map((c) => c.teamId).filter(Boolean) as string[];
 
   const submitMutation = useMutation({
     mutationFn: async () => {
@@ -46,7 +64,7 @@ const SurveysPage = () => {
         questionText: q.text,
         value: answers[q.id] ?? '',
       }));
-      await surveyResponsesApi.submit(active.id, payload);
+      await surveyResponsesApi.submit(active, payload);
     },
     onSuccess: () => {
       if (active) setCompletedIds((prev) => new Set(prev).add(active.id));
@@ -65,7 +83,9 @@ const SurveysPage = () => {
   const missingRequired =
     active?.questions.some((q) => q.required && !(answers[q.id] ?? '').trim()) ?? false;
 
-  const visible = surveys.filter((s) => !completedIds.has(s.id));
+  const visible = surveys
+    .filter((s) => surveyMatchesAudience(s, childTeamIds, linkedPlayerIds))
+    .filter((s) => !completedIds.has(s.id));
 
   return (
     <Box>
