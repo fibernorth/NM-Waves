@@ -54,8 +54,9 @@ async function recordFailedWebhook(event: Stripe.Event, error: unknown): Promise
 }
 
 function getStripe(): Stripe {
-  // Prefer env vars (functions/.env); fall back to legacy functions.config()
-  // so existing deployments keep working until secrets are moved to .env.
+  // STRIPE_SECRET_KEY is bound from Google Secret Manager via .runWith({ secrets })
+  // on each Stripe function, so it arrives in process.env at runtime. The legacy
+  // functions.config() fallback remains only for older deploys not yet migrated.
   const secretKey = process.env.STRIPE_SECRET_KEY || functions.config().stripe?.secret_key;
   if (!secretKey) {
     throw new Error('Stripe secret key not configured (set STRIPE_SECRET_KEY)');
@@ -83,7 +84,9 @@ interface CheckoutSessionParams {
  * Creates a Stripe Checkout Session for a payment.
  * Called by the client to initiate Stripe Checkout.
  */
-export const createCheckoutSession = functions.https.onCall(
+export const createCheckoutSession = functions
+  .runWith({ secrets: ['STRIPE_SECRET_KEY'] })
+  .https.onCall(
   async (data: CheckoutSessionParams, context) => {
     const { financeId, playerId, amount, sponsorId, isAnonymous, invoiceToken, returnUrl, payerEmail, payerName, sponsorBusinessName, sponsorshipTarget, sponsorNotes } = data;
 
@@ -222,7 +225,9 @@ export const createCheckoutSession = functions.https.onCall(
 /**
  * Stripe webhook handler for processing completed payments.
  */
-export const stripeWebhook = functions.https.onRequest(async (req, res) => {
+export const stripeWebhook = functions
+  .runWith({ secrets: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'] })
+  .https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;
