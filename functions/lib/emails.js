@@ -427,24 +427,24 @@ async function sendParentInviteEmail(data) {
 }
 async function sendPasswordResetCustomEmail(data) {
     const { email, resetLink } = data;
-    const subject = `Password Reset - Northern Michigan Waves`;
+    const subject = `Set Your Password - Northern Michigan Waves`;
     const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       ${emailHeader}
       <div style="padding: 30px; background-color: #f5f5f5;">
         <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-          <h2 style="color: #333; margin-top: 0;">Password Reset Request</h2>
+          <h2 style="color: #333; margin-top: 0;">Set Your Password</h2>
           <p>Hi,</p>
-          <p>We received a request to reset the password for your Northern Michigan Waves account. Click the button below to set a new password:</p>
+          <p>Use the button below to create (or reset) the password for your Northern Michigan Waves account:</p>
 
           <div style="text-align: center; margin: 24px 0;">
             <a href="${resetLink}" style="display: inline-block; background-color: #1565c0; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
-              Reset Your Password
+              Set Your Password
             </a>
           </div>
 
           <p style="color: #666; font-size: 13px;">
-            This link will expire in 48 hours. If you did not request a password reset,
+            This link will expire in 48 hours. If you did not request this,
             you can safely ignore this email.
           </p>
         </div>
