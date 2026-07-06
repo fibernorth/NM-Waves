@@ -18,8 +18,10 @@ import {
   surveysApi,
   surveyMatchesAudience,
   surveyIsClosed,
+  effectiveTeamIdsForChildren,
   loadCompletedSurveys,
 } from '@/lib/api/surveys';
+import { teamsApi } from '@/lib/api/teams';
 import { tryoutApplicantsApi } from '@/lib/api/tryoutApplicants';
 import { tryoutSessionsApi } from '@/lib/api/tryoutSessions';
 import { useAuthStore } from '@/stores/authStore';
@@ -56,7 +58,8 @@ const ParentAttentionCard = ({ linkedChildren }: Props) => {
     queryFn: () => tryoutSessionsApi.getUpcoming(),
   });
 
-  const childTeamIds = linkedChildren.map((c) => c.teamId).filter(Boolean) as string[];
+  const { data: teams = [] } = useQuery({ queryKey: ['teams'], queryFn: () => teamsApi.getAll() });
+  const childTeamIds = effectiveTeamIdsForChildren(linkedChildren, teams);
   const completed = loadCompletedSurveys(uid);
   const pendingSurveys = surveys
     .filter((s) => !surveyIsClosed(s))

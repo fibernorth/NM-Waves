@@ -96,8 +96,13 @@ const SurveyAdminPage = () => {
     queryKey: ['allSurveys'],
     queryFn: () => surveysApi.getAll(),
   });
-  const { data: teams = [] } = useQuery({ queryKey: ['activeTeams'], queryFn: () => teamsApi.getActive() });
-  const { data: players = [] } = useQuery({ queryKey: ['activePlayers'], queryFn: () => playersApi.getActive() });
+  // Load ALL teams/players and filter in code: many player docs don't carry an
+  // `active: true` flag, so the where('active'==true) query silently returns
+  // nothing (same failure Email Parents hit). Quit players are excluded.
+  const { data: allTeams = [] } = useQuery({ queryKey: ['teams'], queryFn: () => teamsApi.getAll() });
+  const teams = allTeams.filter((t) => t.active !== false);
+  const { data: allPlayers = [] } = useQuery({ queryKey: ['playersAll'], queryFn: () => playersApi.getAll() });
+  const players = allPlayers.filter((p) => p.status !== 'quit');
 
   // Admins manage all surveys; coaches manage only the ones they created.
   const surveys = admin ? allSurveys : allSurveys.filter((s) => s.createdBy === user?.uid);

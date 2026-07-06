@@ -41,11 +41,13 @@ import {
   surveyResponsesApi,
   surveyMatchesAudience,
   surveyIsClosed,
+  effectiveTeamIdsForChildren,
   loadCompletedSurveys,
   saveCompletedSurveys,
   ANSWER_SEPARATOR,
 } from '@/lib/api/surveys';
 import { playersApi } from '@/lib/api/players';
+import { teamsApi } from '@/lib/api/teams';
 import { useAuthStore } from '@/stores/authStore';
 import type { Survey, SurveyAnswer, SurveyQuestion } from '@/types/models';
 import { format } from 'date-fns';
@@ -89,7 +91,10 @@ const SurveysPage = () => {
     },
     enabled: linkedPlayerIds.length > 0,
   });
-  const childTeamIds = children.map((c) => c.teamId).filter(Boolean) as string[];
+  // Teams are publicly readable; used to also match children to teams by NAME,
+  // since player records sometimes carry a stale teamId.
+  const { data: teams = [] } = useQuery({ queryKey: ['teams'], queryFn: () => teamsApi.getAll() });
+  const childTeamIds = effectiveTeamIdsForChildren(children, teams);
 
   const submitMutation = useMutation({
     mutationFn: async () => {

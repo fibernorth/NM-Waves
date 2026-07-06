@@ -94,6 +94,30 @@ export const surveyMatchesAudience = (
   return false;
 };
 
+/**
+ * Team ids a family belongs to, for audience matching. Player records in this
+ * app often carry a stale teamId while the teamName is correct (other code
+ * even auto-heals this), so a child counts as being on a team when EITHER the
+ * id or the name matches — otherwise team-targeted surveys silently vanish
+ * for exactly the families they were meant for.
+ */
+export const effectiveTeamIdsForChildren = (
+  children: Array<{ teamId?: string; teamName?: string }>,
+  teams: Array<{ id: string; name: string }>
+): string[] => {
+  const ids = new Set<string>();
+  for (const c of children) {
+    if (c.teamId) ids.add(c.teamId);
+    if (c.teamName) {
+      const byName = teams.find(
+        (t) => t.name.trim().toLowerCase() === c.teamName!.trim().toLowerCase()
+      );
+      if (byName) ids.add(byName.id);
+    }
+  }
+  return [...ids];
+};
+
 export const surveysApi = {
   getAll: async (): Promise<Survey[]> => {
     const q = query(collection(db, SURVEYS), orderBy('createdAt', 'desc'));
