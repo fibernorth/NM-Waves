@@ -218,14 +218,21 @@ exports.sendCustomPasswordReset = functions.https.onRequest((req, res) => {
         }
         const db = admin.firestore();
         try {
-            // Rate limiting: max 3 reset requests per email per hour
+            // Rate limiting: max 3 reset requests per email per hour.
+            // Query by email only (a single-field filter needs no composite index),
+            // then apply the 1-hour window in memory so this flow never depends on a
+            // composite index being built.
             const oneHourAgo = new Date();
             oneHourAgo.setHours(oneHourAgo.getHours() - 1);
-            const recentResets = await db.collection('passwordResets')
+            const byEmail = await db.collection('passwordResets')
                 .where('email', '==', email)
-                .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(oneHourAgo))
                 .get();
-            if (recentResets.size >= 3) {
+            const recentCount = byEmail.docs.filter((doc) => {
+                const c = doc.data().createdAt;
+                const created = (c === null || c === void 0 ? void 0 : c.toDate) ? c.toDate() : (c ? new Date(c) : null);
+                return created ? created >= oneHourAgo : false;
+            }).length;
+            if (recentCount >= 3) {
                 // Return success message to avoid revealing rate limit as an enumeration signal
                 res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
                 return;
