@@ -366,13 +366,21 @@ service cloud.firestore {
       allow delete: if isMasterAdmin();
     }
 
-    // SURVEY RESPONSES (coach-visible projection) — contains only the answers to
-    // questions marked visible-to-coaches. Readable by admins and by the coach
-    // who created the survey (so coaches get their own feedback). Coaches can
-    // never see the full/admin-only answers, which live in surveyResponses.
+    // SURVEY RESPONSES (coach-visible projection) — contains only the answers
+    // to questions marked visible-to-coaches. Readable by admins, the coach
+    // who created the survey, and any coach whose team is in the survey's
+    // audience (denormalized onto each doc as audienceAllCoaches /
+    // audienceTeamIds at submit time). Coaches never see the full/admin-only
+    // answers, which live in surveyResponses.
     match /surveyResponsesCoach/{docId} {
       allow create: if isAuth();
-      allow read: if isAdmin() || (isCoach() && resource.data.surveyCreatedBy == request.auth.uid);
+      allow read: if isAdmin() || (isCoach() && (
+        resource.data.surveyCreatedBy == request.auth.uid ||
+        ('audienceAllCoaches' in resource.data && resource.data.audienceAllCoaches == true) ||
+        ('audienceTeamIds' in resource.data &&
+         'teamIds' in getUserData(request.auth.uid) &&
+         resource.data.audienceTeamIds.hasAny(getUserData(request.auth.uid).teamIds))
+      ));
       allow update: if false;
       allow delete: if isAdmin();
     }

@@ -104,8 +104,20 @@ const SurveyAdminPage = () => {
   const { data: allPlayers = [] } = useQuery({ queryKey: ['playersAll'], queryFn: () => playersApi.getAll() });
   const players = allPlayers.filter((p) => p.status !== 'quit');
 
-  // Admins manage all surveys; coaches manage only the ones they created.
-  const surveys = admin ? allSurveys : allSurveys.filter((s) => s.createdBy === user?.uid);
+  // Admins see all surveys. Coaches see the ones they created PLUS any survey
+  // whose audience covers one of their teams (results access — editing stays
+  // with the owner). canManage gates the mutation actions per card.
+  const coachTeamIds = user?.teamIds || [];
+  const surveys = admin
+    ? allSurveys
+    : allSurveys.filter(
+        (s) =>
+          s.createdBy === user?.uid ||
+          s.audienceAllCoaches === true ||
+          ((s.assignedTeamIds?.length || 0) === 0 && (s.assignedPlayerIds?.length || 0) === 0) ||
+          (s.audienceTeamIds || s.assignedTeamIds || []).some((id) => coachTeamIds.includes(id))
+      );
+  const canManage = (s: Survey) => admin || s.createdBy === user?.uid;
 
   // Response counts, shown on each card without opening results.
   const { data: counts = {} } = useQuery({
@@ -189,6 +201,27 @@ const SurveyAdminPage = () => {
         }));
       const assignedTeamIds = audience === 'teams' ? selTeams.map((t) => t.id) : [];
       const assignedPlayerIds = audience === 'players' ? selPlayers.map((p) => p.id) : [];
+      // Which coaches may see coach-visible answers: everyone-surveys → all
+      // coaches; team surveys → those teams' coaches; player surveys → the
+      // coaches of those players' teams (resolved by id, healed by team name).
+      const audienceAllCoaches = audience === 'all';
+      const audienceTeamIds =
+        audience === 'teams'
+          ? assignedTeamIds
+          : audience === 'players'
+          ? [
+              ...new Set(
+                selPlayers
+                  .map(
+                    (p) =>
+                      p.teamId ||
+                      teams.find((t) => t.name.trim().toLowerCase() === (p.teamName || '').trim().toLowerCase())?.id ||
+                      ''
+                  )
+                  .filter(Boolean)
+              ),
+            ]
+          : [];
       // End-of-day so "closes Jul 20" includes all of Jul 20.
       const closesAt = closesAtStr ? new Date(`${closesAtStr}T23:59:59`) : null;
       if (editing) {
@@ -199,6 +232,8 @@ const SurveyAdminPage = () => {
           closesAt,
           assignedTeamIds,
           assignedPlayerIds,
+          audienceTeamIds,
+          audienceAllCoaches,
         });
       } else {
         await surveysApi.create({
@@ -210,6 +245,8 @@ const SurveyAdminPage = () => {
           closesAt,
           assignedTeamIds,
           assignedPlayerIds,
+          audienceTeamIds,
+          audienceAllCoaches,
           createdBy: user?.uid || '',
           createdByRole: admin ? 'admin' : 'coach',
         });
@@ -303,8 +340,8 @@ const SurveyAdminPage = () => {
         </Box>
       </Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Responses are anonymous. Admins see all answers; a coach who creates a survey sees only the answers to
-        questions they mark &ldquo;coaches can see.&rdquo;
+        Responses are anonymous. Admins see all answers. Coaches whose players received a survey see only the
+        answers to questions marked &ldquo;coaches can see&rdquo; — never the rest.
       </Typography>
 
       {isLoading ? (
@@ -332,7 +369,9 @@ const SurveyAdminPage = () => {
                 )}
                 <Chip label={status.label} color={status.color} size="small" />
                 <Button size="small" onClick={() => setResultsSurvey(s)}>Results</Button>
-                <Button size="small" onClick={() => loadIntoBuilder(s, false)}>Edit</Button>
+                {canManage(s) && (
+                  <Button size="small" onClick={() => loadIntoBuilder(s, false)}>Edit</Button>
+                )}
                 <Tooltip title="Duplicate this survey as a new draft">
                   <IconButton size="small" onClick={() => loadIntoBuilder(s, true)}>
                     <ContentCopyIcon fontSize="small" />
@@ -345,22 +384,26 @@ const SurveyAdminPage = () => {
                     </IconButton>
                   </Tooltip>
                 )}
-                <Button size="small" onClick={() => toggleActive.mutate(s)} disabled={toggleActive.isPending}>
-                  {s.active ? 'Deactivate' : 'Activate'}
-                </Button>
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={() => {
-                    const count = counts[s.id] ?? 0;
-                    const warning = count > 0
-                      ? `Delete "${s.title}"? It has ${count} response${count === 1 ? '' : 's'} — export the CSV first if you need them, because results will no longer be viewable after deletion. Deactivating instead keeps the results.`
-                      : `Delete "${s.title}"?`;
-                    if (confirm(warning)) removeMutation.mutate(s);
-                  }}
-                >
-                  <DeleteIcon fontSize="small" />
-                </IconButton>
+                {canManage(s) && (
+                  <>
+                    <Button size="small" onClick={() => toggleActive.mutate(s)} disabled={toggleActive.isPending}>
+                      {s.active ? 'Deactivate' : 'Activate'}
+                    </Button>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={() => {
+                        const count = counts[s.id] ?? 0;
+                        const warning = count > 0
+                          ? `Delete "${s.title}"? It has ${count} response${count === 1 ? '' : 's'} — export the CSV first if you need them, because results will no longer be viewable after deletion. Deactivating instead keeps the results.`
+                          : `Delete "${s.title}"?`;
+                        if (confirm(warning)) removeMutation.mutate(s);
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </>
+                )}
               </Paper>
             );
           })}

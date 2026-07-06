@@ -1142,6 +1142,10 @@ export interface Survey {
   // Audience: empty both = everyone; otherwise players on assignedTeamIds OR in assignedPlayerIds.
   assignedTeamIds: string[];
   assignedPlayerIds: string[];
+  // Coach visibility (denormalized at save time so security rules can check it):
+  // coaches of these teams may read coach-visible answers; true = every coach.
+  audienceTeamIds?: string[];
+  audienceAllCoaches?: boolean;
   createdBy: string;
   createdByRole?: string;
   createdAt: Date;

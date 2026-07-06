@@ -68,6 +68,8 @@ const convertSurvey = (id: string, data: any): Survey => ({
   closesAt: data.closesAt?.toDate?.() || null,
   assignedTeamIds: data.assignedTeamIds || [],
   assignedPlayerIds: data.assignedPlayerIds || [],
+  audienceTeamIds: data.audienceTeamIds || [],
+  audienceAllCoaches: data.audienceAllCoaches ?? undefined,
   createdBy: data.createdBy || '',
   createdByRole: data.createdByRole,
   createdAt: data.createdAt?.toDate?.() || new Date(),
@@ -184,9 +186,22 @@ export const surveyResponsesApi = {
       );
       if (coachVisibleIds.size > 0) {
         const coachAnswers = answers.filter((a) => coachVisibleIds.has(a.questionId));
+        // Tag the doc with the survey's coach audience so the rules can grant
+        // read access to every coach whose players received the survey — not
+        // just the creator. Older surveys without the denormalized fields fall
+        // back to their team assignment (everyone-surveys → all coaches).
+        const noAssignment =
+          (survey.assignedTeamIds?.length || 0) === 0 && (survey.assignedPlayerIds?.length || 0) === 0;
+        const audienceAllCoaches = survey.audienceAllCoaches ?? noAssignment;
+        const audienceTeamIds =
+          survey.audienceTeamIds && survey.audienceTeamIds.length > 0
+            ? survey.audienceTeamIds
+            : survey.assignedTeamIds || [];
         await addDoc(collection(db, COACH_RESPONSES), {
           surveyId: survey.id,
           surveyCreatedBy: survey.createdBy,
+          audienceAllCoaches,
+          audienceTeamIds,
           answers: coachAnswers,
           submittedAt: Timestamp.now(),
         });
@@ -206,23 +221,32 @@ export const surveyResponsesApi = {
   },
 
   /**
-   * Coach-visible projection. When called by a coach, coachUid MUST be passed:
-   * the security rule only allows reading docs where surveyCreatedBy == uid,
-   * and Firestore rejects list queries that don't provably satisfy the rule —
-   * so the query itself must carry the surveyCreatedBy filter.
+   * Coach-visible projection. A coach may read a survey's coach-visible
+   * answers when the survey's audience covers one of their teams (rules check
+   * the denormalized audience tags per document), or when they created it.
+   * The broad surveyId query works for tagged (new) responses; if it's denied
+   * — e.g. legacy untagged docs — fall back to the creator-only query.
    */
   getCoachVisibleBySurvey: async (surveyId: string, coachUid?: string): Promise<SurveyResponse[]> => {
-    const q = coachUid
-      ? query(
-          collection(db, COACH_RESPONSES),
-          where('surveyId', '==', surveyId),
-          where('surveyCreatedBy', '==', coachUid)
-        )
-      : query(collection(db, COACH_RESPONSES), where('surveyId', '==', surveyId));
-    const snap = await getDocs(q);
-    return snap.docs
-      .map((d) => convertResponse(d.id, d.data()))
-      .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+    const run = async (creatorOnly: boolean) => {
+      const q = creatorOnly && coachUid
+        ? query(
+            collection(db, COACH_RESPONSES),
+            where('surveyId', '==', surveyId),
+            where('surveyCreatedBy', '==', coachUid)
+          )
+        : query(collection(db, COACH_RESPONSES), where('surveyId', '==', surveyId));
+      const snap = await getDocs(q);
+      return snap.docs
+        .map((d) => convertResponse(d.id, d.data()))
+        .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+    };
+    try {
+      return await run(false);
+    } catch {
+      if (!coachUid) return [];
+      return run(true);
+    }
   },
 
   /**
@@ -232,15 +256,28 @@ export const surveyResponsesApi = {
    */
   countBySurvey: async (surveyId: string, isAdmin: boolean, coachUid?: string): Promise<number> => {
     try {
-      const q = isAdmin
-        ? query(collection(db, RESPONSES), where('surveyId', '==', surveyId))
-        : query(
+      if (isAdmin) {
+        const snap = await getCountFromServer(
+          query(collection(db, RESPONSES), where('surveyId', '==', surveyId))
+        );
+        return snap.data().count;
+      }
+      // Coach: audience-based count first, creator-only fallback for legacy docs.
+      try {
+        const snap = await getCountFromServer(
+          query(collection(db, COACH_RESPONSES), where('surveyId', '==', surveyId))
+        );
+        return snap.data().count;
+      } catch {
+        const snap = await getCountFromServer(
+          query(
             collection(db, COACH_RESPONSES),
             where('surveyId', '==', surveyId),
             where('surveyCreatedBy', '==', coachUid || '')
-          );
-      const snap = await getCountFromServer(q);
-      return snap.data().count;
+          )
+        );
+        return snap.data().count;
+      }
     } catch {
       return 0;
     }
