@@ -41,6 +41,8 @@ import {
   surveyResponsesApi,
   surveyMatchesAudience,
   surveyIsClosed,
+  loadCompletedSurveys,
+  saveCompletedSurveys,
   ANSWER_SEPARATOR,
 } from '@/lib/api/surveys';
 import { playersApi } from '@/lib/api/players';
@@ -48,27 +50,6 @@ import { useAuthStore } from '@/stores/authStore';
 import type { Survey, SurveyAnswer, SurveyQuestion } from '@/types/models';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
-
-/**
- * Responses are anonymous, so completion can't be tracked server-side without
- * defeating that. Persist "I already took this" locally per account so a page
- * refresh doesn't re-offer a survey the parent already submitted.
- */
-const completedKey = (uid: string) => `nmw-surveys-completed-${uid}`;
-const loadCompleted = (uid: string): Set<string> => {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(completedKey(uid)) || '[]'));
-  } catch {
-    return new Set();
-  }
-};
-const saveCompleted = (uid: string, ids: Set<string>) => {
-  try {
-    localStorage.setItem(completedKey(uid), JSON.stringify([...ids]));
-  } catch {
-    /* storage unavailable — in-memory tracking still applies */
-  }
-};
 
 /** Is this question answered well enough to count toward progress/required? */
 const isAnswered = (q: SurveyQuestion, value: string | undefined): boolean => {
@@ -85,13 +66,13 @@ const SurveysPage = () => {
 
   const [active, setActive] = useState<Survey | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [completedIds, setCompletedIds] = useState<Set<string>>(() => loadCompleted(uid));
+  const [completedIds, setCompletedIds] = useState<Set<string>>(() => loadCompletedSurveys(uid));
 
   // Re-read the completion list if the signed-in account changes (or auth
   // finishes hydrating after first render) so one account's history never
   // hides or re-shows surveys for another.
   useEffect(() => {
-    setCompletedIds(loadCompleted(uid));
+    setCompletedIds(loadCompletedSurveys(uid));
   }, [uid]);
 
   const { data: surveys = [], isLoading } = useQuery({
@@ -127,7 +108,7 @@ const SurveysPage = () => {
       if (active) {
         setCompletedIds((prev) => {
           const next = new Set(prev).add(active.id);
-          saveCompleted(uid, next);
+          saveCompletedSurveys(uid, next);
           return next;
         });
       }

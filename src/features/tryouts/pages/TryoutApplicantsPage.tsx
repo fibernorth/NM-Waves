@@ -27,6 +27,7 @@ import { playersApi } from '@/lib/api/players';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import { computeLeagueAge, computeDivision } from '@/lib/utils/leagueAge';
+import TryoutSessionsManager from '../components/TryoutSessionsManager';
 import type { Player } from '@/types/models';
 import toast from 'react-hot-toast';
 
@@ -71,6 +72,19 @@ const TryoutApplicantsPage = () => {
       valueGetter: (params) => computeDivision(params.row.dateOfBirth),
     },
     { field: 'ageGroup', headerName: 'Requested', width: 110 },
+    {
+      field: 'sessionLabel',
+      headerName: 'Tryout Date',
+      flex: 1,
+      minWidth: 160,
+      valueGetter: (params) => params.row.sessionLabel || '',
+      renderCell: (params) =>
+        params.value ? (
+          <span>{params.value}</span>
+        ) : (
+          <Chip size="small" label="No date chosen" variant="outlined" color="warning" />
+        ),
+    },
     { field: 'location', headerName: 'Location', flex: 0.8, minWidth: 130 },
     { field: 'positionsInterested', headerName: 'Positions', flex: 0.8, minWidth: 120 },
     { field: 'priorExperience', headerName: 'Experience', flex: 1.4, minWidth: 200 },
@@ -112,6 +126,8 @@ const TryoutApplicantsPage = () => {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Click any column header to sort (age, location, experience, status…). Use the toolbar to filter or export.
       </Typography>
+
+      <TryoutSessionsManager />
 
       {isError ? (
         <Alert severity="error">Failed to load tryout signups.</Alert>

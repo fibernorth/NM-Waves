@@ -46,6 +46,11 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { format } from 'date-fns';
 import LinkChildDialog from '@/features/players/components/LinkChildDialog';
 import ParentOnboardingDialog from '../components/ParentOnboardingDialog';
+import ParentAttentionCard from '../components/ParentAttentionCard';
+import { googleCalendarUrl, downloadIcs, type CalendarEvent } from '@/lib/utils/calendarLinks';
+import { IconButton, Tooltip } from '@mui/material';
+import GoogleIcon from '@mui/icons-material/Google';
+import DownloadIcon from '@mui/icons-material/Download';
 import {
   collection,
   doc,
@@ -145,14 +150,14 @@ const DashboardPage = () => {
     },
   });
 
-  const { data: upcomingEvents = [], isLoading: eventsLoading } = useQuery({
+  const { data: rawEvents = [], isLoading: eventsLoading } = useQuery({
     queryKey: ['dashboard-events'],
     queryFn: async () => {
       const q = query(
         collection(db, 'schedules'),
         where('startTime', '>=', Timestamp.now()),
         orderBy('startTime'),
-        limit(5)
+        limit(20)
       );
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({
@@ -160,7 +165,7 @@ const DashboardPage = () => {
         ...doc.data(),
         startTime: doc.data().startTime?.toDate() || new Date(),
         endTime: doc.data().endTime?.toDate() || new Date(),
-      }));
+      })) as any[];
     },
   });
 
@@ -185,6 +190,23 @@ const DashboardPage = () => {
       return results.flat();
     },
     enabled: isParent && linkedPlayerIds.length > 0,
+  });
+
+  // Parents see only their children's teams' events (club-wide events with no
+  // team attached still show); everyone else sees the full upcoming list.
+  const childTeamIdsForEvents = linkedChildren.map((c) => c.teamId).filter(Boolean) as string[];
+  const upcomingEvents = (
+    isParent && !isCoachOrAbove
+      ? rawEvents.filter((e: any) => !e.teamId || childTeamIdsForEvents.includes(e.teamId))
+      : rawEvents
+  ).slice(0, 6);
+
+  const toCalEvent = (e: any): CalendarEvent => ({
+    title: e.title || 'NM Waves event',
+    start: e.startTime,
+    end: e.endTime && e.endTime > e.startTime ? e.endTime : new Date(e.startTime.getTime() + 2 * 60 * 60 * 1000),
+    location: e.location || undefined,
+    description: e.teamName ? `${e.teamName} — Northern Michigan Waves` : 'Northern Michigan Waves',
   });
 
   // Admin financial stats - use balanceDue for scholarship-accurate outstanding balance
@@ -257,6 +279,9 @@ const DashboardPage = () => {
       <Typography variant="body1" color="text.secondary" gutterBottom sx={{ mb: 4 }}>
         {getSubtitle()}
       </Typography>
+
+      {/* Parent: surveys / tryout status that needs action */}
+      {isParent && <ParentAttentionCard linkedChildren={linkedChildren} />}
 
       {/* Parent: Children Cards */}
       {isParent && (
@@ -482,7 +507,20 @@ const DashboardPage = () => {
                   <CalendarMonthIcon color="primary" />
                   <Typography variant="h6">Upcoming Events</Typography>
                 </Box>
-                <Button size="small" onClick={() => navigate(isCoachOrAbove ? '/schedules' : '/schedule')}>View All</Button>
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  {upcomingEvents.length > 0 && (
+                    <Tooltip title="Download these events (.ics) — opens in Google Calendar, Apple Calendar, or Outlook">
+                      <Button
+                        size="small"
+                        startIcon={<DownloadIcon />}
+                        onClick={() => downloadIcs(upcomingEvents.map(toCalEvent))}
+                      >
+                        Sync
+                      </Button>
+                    </Tooltip>
+                  )}
+                  <Button size="small" onClick={() => navigate(isCoachOrAbove ? '/schedules' : '/schedule')}>View All</Button>
+                </Box>
               </Box>
               {eventsLoading ? (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -495,7 +533,23 @@ const DashboardPage = () => {
               ) : (
                 <List dense disablePadding>
                   {upcomingEvents.map((e: any) => (
-                    <ListItem key={e.id} sx={{ px: 0 }}>
+                    <ListItem
+                      key={e.id}
+                      sx={{ px: 0 }}
+                      secondaryAction={
+                        <Tooltip title="Add to Google Calendar">
+                          <IconButton
+                            size="small"
+                            component="a"
+                            href={googleCalendarUrl(toCalEvent(e))}
+                            target="_blank"
+                            rel="noopener"
+                          >
+                            <GoogleIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      }
+                    >
                       <ListItemIcon sx={{ minWidth: 32 }}>
                         {eventTypeIcons[e.eventType] || eventTypeIcons.other}
                       </ListItemIcon>

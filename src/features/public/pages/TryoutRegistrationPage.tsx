@@ -15,8 +15,11 @@ import {
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useQuery } from '@tanstack/react-query';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { tryoutApplicantsApi } from '@/lib/api/tryoutApplicants';
+import { tryoutSessionsApi, sessionLabel } from '@/lib/api/tryoutSessions';
+import { format } from 'date-fns';
 
 const AGE_GROUPS = ['8U', '9U', '10U', '11U', '12U', '13U', '14U', '16U', '18U'];
 
@@ -53,6 +56,12 @@ const TryoutRegistrationPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState('');
+
+  const { data: sessions = [] } = useQuery({
+    queryKey: ['tryoutSessionsUpcoming'],
+    queryFn: () => tryoutSessionsApi.getUpcoming(),
+  });
 
   const {
     control,
@@ -80,6 +89,7 @@ const TryoutRegistrationPage = () => {
     setSubmitting(true);
 
     try {
+      const chosen = sessions.find((s) => s.id === sessionId);
       await tryoutApplicantsApi.create({
         playerFirstName: data.playerFirstName.trim(),
         playerLastName: data.playerLastName.trim(),
@@ -91,9 +101,12 @@ const TryoutRegistrationPage = () => {
         phone: data.phone.trim(),
         positionsInterested: data.positionsInterested,
         priorExperience: data.priorExperience?.trim() || '',
+        sessionId: chosen?.id,
+        sessionLabel: chosen ? sessionLabel(chosen) : undefined,
       });
       setSubmitted(true);
       reset();
+      setSessionId('');
     } catch (err) {
       console.error('Error submitting tryout registration:', err);
       setSubmitError('There was an error submitting your registration. Please try again later.');
@@ -156,6 +169,19 @@ const TryoutRegistrationPage = () => {
             </Box>
           ) : (
             <>
+              {sessions.length > 0 && (
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" fontWeight={600} gutterBottom>Tryout dates & locations</Typography>
+                  {sessions.map((s) => (
+                    <Typography key={s.id} variant="body2">
+                      • {format(s.date, 'EEEE, MMMM d, yyyy')}
+                      {s.startTime ? ` — ${s.startTime}${s.endTime ? `–${s.endTime}` : ''}` : ''}
+                      {s.location ? ` @ ${s.location}` : ''}
+                      {s.ageGroups.length > 0 ? ` (${s.ageGroups.join(', ')})` : ''}
+                    </Typography>
+                  ))}
+                </Alert>
+              )}
               <Typography variant="h5" fontWeight={600} gutterBottom>
                 Player Information
               </Typography>
@@ -372,6 +398,24 @@ const TryoutRegistrationPage = () => {
                       )}
                     />
                   </Grid>
+
+                  {sessions.length > 0 && (
+                    <Grid item xs={12}>
+                      <TextField
+                        select
+                        fullWidth
+                        label="Which tryout date will you attend?"
+                        value={sessionId}
+                        onChange={(e) => setSessionId(e.target.value)}
+                        helperText="Optional — you can decide later"
+                      >
+                        <MenuItem value="">Not sure yet</MenuItem>
+                        {sessions.map((s) => (
+                          <MenuItem key={s.id} value={s.id}>{sessionLabel(s)}</MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                  )}
 
                   {/* Submit */}
                   <Grid item xs={12}>

@@ -30,6 +30,28 @@ export const ANSWER_SEPARATOR = ' | ';
 export const surveyIsClosed = (s: Survey): boolean =>
   !!s.closesAt && s.closesAt.getTime() < Date.now();
 
+/**
+ * Responses are anonymous, so completion can't be tracked server-side without
+ * defeating that. "Already took this" is remembered locally per account so a
+ * refresh doesn't re-offer a submitted survey. Shared by the Surveys page and
+ * the dashboard's "needs your attention" card.
+ */
+const completedKey = (uid: string) => `nmw-surveys-completed-${uid}`;
+export const loadCompletedSurveys = (uid: string): Set<string> => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(completedKey(uid)) || '[]'));
+  } catch {
+    return new Set();
+  }
+};
+export const saveCompletedSurveys = (uid: string, ids: Set<string>): void => {
+  try {
+    localStorage.setItem(completedKey(uid), JSON.stringify([...ids]));
+  } catch {
+    /* storage unavailable — in-memory tracking still applies */
+  }
+};
+
 const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) if (v !== undefined) out[k] = v;

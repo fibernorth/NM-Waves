@@ -5,6 +5,7 @@ import {
   getDocs,
   updateDoc,
   query,
+  where,
   orderBy,
   Timestamp,
 } from 'firebase/firestore';
@@ -25,6 +26,9 @@ export interface TryoutApplicantData {
   phone: string;
   positionsInterested: string;
   priorExperience: string;
+  sessionId?: string; // chosen tryout date (tryoutSessions doc id)
+  sessionLabel?: string; // denormalized "Sat, Aug 9 · 9:00 AM · Twin Birch"
+  playerId?: string; // set when registered by a parent for an existing player
 }
 
 export interface TryoutApplicant extends TryoutApplicantData {
@@ -59,20 +63,48 @@ const convertApplicant = (id: string, data: any): TryoutApplicant => ({
   phone: data.phone || '',
   positionsInterested: data.positionsInterested || '',
   priorExperience: data.priorExperience || '',
+  sessionId: data.sessionId || undefined,
+  sessionLabel: data.sessionLabel || undefined,
+  playerId: data.playerId || undefined,
   status: data.status || 'new',
   submittedAt: data.submittedAt?.toDate?.() || new Date(),
   convertedPlayerId: data.convertedPlayerId,
 });
 
+/** Strip undefined values so Firestore accepts the write. */
+const clean = <T extends Record<string, unknown>>(obj: T): T => {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) if (v !== undefined) out[k] = v;
+  return out as T;
+};
+
 export const tryoutApplicantsApi = {
   /** Public: submit a new tryout registration */
   create: async (data: TryoutApplicantData): Promise<string> => {
-    const docRef = await addDoc(collection(db, COLLECTION), {
+    const docRef = await addDoc(collection(db, COLLECTION), clean({
       ...data,
       submittedAt: Timestamp.now(),
       status: 'new',
-    });
+    }));
     return docRef.id;
+  },
+
+  /**
+   * Signed-in parent: registrations created with their email. The email
+   * equality filter is required — the security rule only grants parents read
+   * access to docs whose email matches their own sign-in email.
+   */
+  getByEmail: async (email: string): Promise<TryoutApplicant[]> => {
+    const q = query(collection(db, COLLECTION), where('email', '==', email));
+    const snap = await getDocs(q);
+    return snap.docs
+      .map((d) => convertApplicant(d.id, d.data()))
+      .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+  },
+
+  /** Parent (own registration, enforced by rules) or coach: edit a registration. */
+  updateDetails: async (id: string, data: Partial<TryoutApplicantData>): Promise<void> => {
+    await updateDoc(doc(db, COLLECTION, id), clean({ ...data }));
   },
 
   /** Coach/admin: all applicants, newest first */
