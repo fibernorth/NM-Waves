@@ -6,6 +6,7 @@ export interface TemplateQuestion {
   options?: string[];
   required?: boolean;
   visibleToCoaches?: boolean;
+  maxSelections?: number;
 }
 
 export interface SurveyTemplate {
@@ -35,6 +36,7 @@ export const SURVEY_TEMPLATES: SurveyTemplate[] = [
         text: "What are your top priorities for your daughter's softball experience? (Select up to 3)",
         type: 'checkbox',
         visibleToCoaches: true,
+        maxSelections: 3,
         options: [
           'Skill development',
           'Pitching/catching development',
@@ -101,9 +103,51 @@ export const SURVEY_TEMPLATES: SurveyTemplate[] = [
       { text: 'What do you think our team does well right now?', type: 'text', visibleToCoaches: true },
       { text: 'What would you like to see change or improve next season?', type: 'text', visibleToCoaches: true },
       {
-        text: 'Rank these from most important (1) to least important (4): Development, Winning, Exposure, Team culture',
-        type: 'text',
+        text: 'Rank these from most important to least important',
+        type: 'ranking',
+        visibleToCoaches: true,
+        options: ['Development', 'Winning', 'Exposure', 'Team culture'],
       },
+    ],
+  },
+  {
+    key: 'post-tournament-feedback',
+    name: 'Post-Tournament Feedback',
+    title: 'Tournament Weekend Feedback',
+    description:
+      'Quick pulse check after this weekend — 2 minutes, anonymous. Your feedback helps us plan better tournament weekends.',
+    questions: [
+      {
+        text: 'Overall, how was the tournament weekend for your family? (1 = rough, 5 = great)',
+        type: 'rating',
+        required: true,
+        visibleToCoaches: true,
+      },
+      {
+        text: 'Was the travel distance manageable?',
+        type: 'yes_no',
+        required: true,
+        visibleToCoaches: true,
+      },
+      {
+        text: 'Did your daughter get the playing time you expected?',
+        type: 'yes_no',
+      },
+      {
+        text: 'What worked well this weekend? (Select up to 3)',
+        type: 'checkbox',
+        maxSelections: 3,
+        visibleToCoaches: true,
+        options: [
+          'Game schedule / pacing',
+          'Communication before & during',
+          'Team energy and effort',
+          'Coaching decisions',
+          'Facilities',
+          'Team bonding between games',
+        ],
+      },
+      { text: 'Anything we should do differently next tournament?', type: 'text', visibleToCoaches: true },
     ],
   },
 ];

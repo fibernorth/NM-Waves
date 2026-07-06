@@ -3,6 +3,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getCountFromServer,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -18,6 +19,17 @@ const SURVEYS = 'surveys';
 const RESPONSES = 'surveyResponses';
 const COACH_RESPONSES = 'surveyResponsesCoach';
 
+/**
+ * Multi-value answers (checkbox selections, ranking order) are stored as a
+ * single string joined with this separator. Ranking answers are joined in
+ * chosen order (first = rank 1).
+ */
+export const ANSWER_SEPARATOR = ' | ';
+
+/** Has this survey's deadline passed? (No deadline = never closes.) */
+export const surveyIsClosed = (s: Survey): boolean =>
+  !!s.closesAt && s.closesAt.getTime() < Date.now();
+
 const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) if (v !== undefined) out[k] = v;
@@ -31,6 +43,7 @@ const convertSurvey = (id: string, data: any): Survey => ({
   questions: (data.questions || []) as SurveyQuestion[],
   active: data.active ?? false,
   anonymous: data.anonymous ?? true,
+  closesAt: data.closesAt?.toDate?.() || null,
   assignedTeamIds: data.assignedTeamIds || [],
   assignedPlayerIds: data.assignedPlayerIds || [],
   createdBy: data.createdBy || '',
@@ -80,6 +93,7 @@ export const surveysApi = {
   create: async (data: Omit<Survey, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
     const ref = await addDoc(collection(db, SURVEYS), cleanData({
       ...data,
+      closesAt: data.closesAt ? Timestamp.fromDate(data.closesAt) : null,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     }));
@@ -87,7 +101,11 @@ export const surveysApi = {
   },
 
   update: async (id: string, data: Partial<Survey>): Promise<void> => {
-    await updateDoc(doc(db, SURVEYS, id), cleanData({ ...data, updatedAt: Timestamp.now() }));
+    const patch: Record<string, unknown> = { ...data, updatedAt: Timestamp.now() };
+    if ('closesAt' in data) {
+      patch.closesAt = data.closesAt ? Timestamp.fromDate(data.closesAt) : null;
+    }
+    await updateDoc(doc(db, SURVEYS, id), cleanData(patch as any));
   },
 
   remove: async (id: string): Promise<void> => {
@@ -132,12 +150,44 @@ export const surveyResponsesApi = {
       .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
   },
 
-  // Coach-visible projection (admin, or the survey's creator coach).
-  getCoachVisibleBySurvey: async (surveyId: string): Promise<SurveyResponse[]> => {
-    const q = query(collection(db, COACH_RESPONSES), where('surveyId', '==', surveyId));
+  /**
+   * Coach-visible projection. When called by a coach, coachUid MUST be passed:
+   * the security rule only allows reading docs where surveyCreatedBy == uid,
+   * and Firestore rejects list queries that don't provably satisfy the rule —
+   * so the query itself must carry the surveyCreatedBy filter.
+   */
+  getCoachVisibleBySurvey: async (surveyId: string, coachUid?: string): Promise<SurveyResponse[]> => {
+    const q = coachUid
+      ? query(
+          collection(db, COACH_RESPONSES),
+          where('surveyId', '==', surveyId),
+          where('surveyCreatedBy', '==', coachUid)
+        )
+      : query(collection(db, COACH_RESPONSES), where('surveyId', '==', surveyId));
     const snap = await getDocs(q);
     return snap.docs
       .map((d) => convertResponse(d.id, d.data()))
       .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+  },
+
+  /**
+   * Response count for a survey without downloading the responses. Admins
+   * count the full collection; coaches count their own coach-visible docs
+   * (the extra surveyCreatedBy filter is what the security rules allow).
+   */
+  countBySurvey: async (surveyId: string, isAdmin: boolean, coachUid?: string): Promise<number> => {
+    try {
+      const q = isAdmin
+        ? query(collection(db, RESPONSES), where('surveyId', '==', surveyId))
+        : query(
+            collection(db, COACH_RESPONSES),
+            where('surveyId', '==', surveyId),
+            where('surveyCreatedBy', '==', coachUid || '')
+          );
+      const snap = await getCountFromServer(q);
+      return snap.data().count;
+    } catch {
+      return 0;
+    }
   },
 };

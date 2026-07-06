@@ -1119,15 +1119,16 @@ export interface BankReconciliation {
 // SURVEYS (private parent surveys — results hidden from coaches)
 // ============================================================
 
-export type SurveyQuestionType = 'text' | 'multiple_choice' | 'rating' | 'checkbox';
+export type SurveyQuestionType = 'text' | 'multiple_choice' | 'rating' | 'checkbox' | 'yes_no' | 'ranking';
 
 export interface SurveyQuestion {
   id: string;
   text: string;
   type: SurveyQuestionType;
-  options?: string[]; // for multiple_choice
+  options?: string[]; // for multiple_choice / checkbox / ranking
   required?: boolean;
   visibleToCoaches?: boolean; // if true, the survey's creator (a coach) may see answers to this question
+  maxSelections?: number; // checkbox only: hard cap, e.g. "select up to 3"
 }
 
 export interface Survey {
@@ -1137,6 +1138,7 @@ export interface Survey {
   questions: SurveyQuestion[];
   active: boolean;
   anonymous: boolean; // if true, responses store no identifying info
+  closesAt?: Date | null; // optional deadline; survey auto-closes for parents after this
   // Audience: empty both = everyone; otherwise players on assignedTeamIds OR in assignedPlayerIds.
   assignedTeamIds: string[];
   assignedPlayerIds: string[];
