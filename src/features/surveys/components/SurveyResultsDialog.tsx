@@ -173,11 +173,30 @@ const SurveyResultsDialog = ({ survey, isAdmin, onClose }: Props) => {
     enabled: !!survey,
   });
 
-  // Coaches only ever see the questions marked visible to them.
-  const questions = useMemo(
-    () => (survey ? survey.questions.filter((q) => isAdmin || q.visibleToCoaches) : []),
-    [survey, isAdmin]
-  );
+  // Coaches only ever see the questions marked visible to them. Admins must be
+  // able to see EVERYTHING ever collected — including answers to questions
+  // later deleted or edited out of the survey — so synthesize entries for any
+  // answered question ids the survey no longer contains.
+  const questions = useMemo(() => {
+    if (!survey) return [];
+    const base = survey.questions.filter((q) => isAdmin || q.visibleToCoaches);
+    if (!isAdmin) return base;
+    const known = new Set(base.map((q) => q.id));
+    const orphans: SurveyQuestion[] = [];
+    for (const r of responses) {
+      for (const a of r.answers) {
+        if (!known.has(a.questionId)) {
+          known.add(a.questionId);
+          orphans.push({
+            id: a.questionId,
+            text: `${a.questionText} (question since removed)`,
+            type: 'text',
+          });
+        }
+      }
+    }
+    return [...base, ...orphans];
+  }, [survey, isAdmin, responses]);
 
   const exportCsv = () => {
     if (!survey) return;

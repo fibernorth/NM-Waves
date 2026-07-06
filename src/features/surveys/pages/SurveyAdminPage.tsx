@@ -343,7 +343,17 @@ const SurveyAdminPage = () => {
                 <Button size="small" onClick={() => toggleActive.mutate(s)} disabled={toggleActive.isPending}>
                   {s.active ? 'Deactivate' : 'Activate'}
                 </Button>
-                <IconButton size="small" color="error" onClick={() => { if (confirm('Delete this survey?')) removeMutation.mutate(s); }}>
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => {
+                    const count = counts[s.id] ?? 0;
+                    const warning = count > 0
+                      ? `Delete "${s.title}"? It has ${count} response${count === 1 ? '' : 's'} — export the CSV first if you need them, because results will no longer be viewable after deletion. Deactivating instead keeps the results.`
+                      : `Delete "${s.title}"?`;
+                    if (confirm(warning)) removeMutation.mutate(s);
+                  }}
+                >
                   <DeleteIcon fontSize="small" />
                 </IconButton>
               </Paper>

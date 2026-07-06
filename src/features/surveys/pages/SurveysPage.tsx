@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box,
   Typography,
@@ -86,6 +86,13 @@ const SurveysPage = () => {
   const [active, setActive] = useState<Survey | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [completedIds, setCompletedIds] = useState<Set<string>>(() => loadCompleted(uid));
+
+  // Re-read the completion list if the signed-in account changes (or auth
+  // finishes hydrating after first render) so one account's history never
+  // hides or re-shows surveys for another.
+  useEffect(() => {
+    setCompletedIds(loadCompleted(uid));
+  }, [uid]);
 
   const { data: surveys = [], isLoading } = useQuery({
     queryKey: ['activeSurveys'],

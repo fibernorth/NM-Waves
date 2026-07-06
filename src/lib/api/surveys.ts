@@ -121,23 +121,32 @@ export const surveyResponsesApi = {
    * creator so that creator (a coach) may read it.
    */
   submit: async (survey: Survey, answers: SurveyAnswer[]): Promise<void> => {
+    // The admin-visible document is the source of truth: once this write
+    // succeeds, the submission has succeeded.
     await addDoc(collection(db, RESPONSES), {
       surveyId: survey.id,
       answers,
       submittedAt: Timestamp.now(),
     });
 
-    const coachVisibleIds = new Set(
-      survey.questions.filter((q) => q.visibleToCoaches).map((q) => q.id)
-    );
-    if (coachVisibleIds.size > 0) {
-      const coachAnswers = answers.filter((a) => coachVisibleIds.has(a.questionId));
-      await addDoc(collection(db, COACH_RESPONSES), {
-        surveyId: survey.id,
-        surveyCreatedBy: survey.createdBy,
-        answers: coachAnswers,
-        submittedAt: Timestamp.now(),
-      });
+    // The coach projection is best-effort. If it fails we must NOT surface an
+    // error — the parent would resubmit and create a DUPLICATE response in the
+    // admin collection, silently skewing every admin-side aggregate.
+    try {
+      const coachVisibleIds = new Set(
+        survey.questions.filter((q) => q.visibleToCoaches).map((q) => q.id)
+      );
+      if (coachVisibleIds.size > 0) {
+        const coachAnswers = answers.filter((a) => coachVisibleIds.has(a.questionId));
+        await addDoc(collection(db, COACH_RESPONSES), {
+          surveyId: survey.id,
+          surveyCreatedBy: survey.createdBy,
+          answers: coachAnswers,
+          submittedAt: Timestamp.now(),
+        });
+      }
+    } catch (err) {
+      console.warn('[surveys] coach-visible projection write failed (admin copy saved):', err);
     }
   },
 
