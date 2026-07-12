@@ -191,15 +191,25 @@ const SurveyAdminPage = () => {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      // Build question objects WITHOUT undefined values — Firestore rejects
+      // undefined anywhere in a document, including inside array elements,
+      // and the top-level cleaner can't reach into the questions array.
       const cleanQuestions = questions
         .filter((q) => q.text.trim())
-        .map((q) => ({
-          ...q,
-          text: q.text.trim(),
-          options: HAS_OPTIONS.includes(q.type) ? (q.options || []).filter((o) => o.trim()) : [],
-          maxSelections:
-            q.type === 'checkbox' && q.maxSelections && q.maxSelections > 0 ? q.maxSelections : undefined,
-        }));
+        .map((q) => {
+          const base: SurveyQuestion = {
+            id: q.id,
+            text: q.text.trim(),
+            type: q.type,
+            options: HAS_OPTIONS.includes(q.type) ? (q.options || []).filter((o) => o.trim()) : [],
+            required: !!q.required,
+            visibleToCoaches: !!q.visibleToCoaches,
+          };
+          if (q.type === 'checkbox' && q.maxSelections && q.maxSelections > 0) {
+            base.maxSelections = q.maxSelections;
+          }
+          return base;
+        });
       const assignedTeamIds = audience === 'teams' ? selTeams.map((t) => t.id) : [];
       const assignedPlayerIds = audience === 'players' ? selPlayers.map((p) => p.id) : [];
       // Which coaches may see coach-visible answers: everyone-surveys → all

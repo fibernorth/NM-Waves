@@ -69,6 +69,13 @@ const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
   return out as T;
 };
 
+/**
+ * Deep-strip undefined from plain data (arrays/objects of JSON-safe values).
+ * Firestore rejects undefined ANYWHERE in a document — including inside array
+ * elements like survey questions — which the shallow cleaner can't reach.
+ */
+const deepClean = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+
 const convertSurvey = (id: string, data: any): Survey => ({
   id,
   title: data.title || '',
@@ -152,6 +159,7 @@ export const surveysApi = {
   create: async (data: Omit<Survey, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
     const ref = await addDoc(collection(db, SURVEYS), cleanData({
       ...data,
+      questions: deepClean(data.questions || []),
       closesAt: data.closesAt ? Timestamp.fromDate(data.closesAt) : null,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
@@ -161,6 +169,7 @@ export const surveysApi = {
 
   update: async (id: string, data: Partial<Survey>): Promise<void> => {
     const patch: Record<string, unknown> = { ...data, updatedAt: Timestamp.now() };
+    if (data.questions) patch.questions = deepClean(data.questions);
     if ('closesAt' in data) {
       patch.closesAt = data.closesAt ? Timestamp.fromDate(data.closesAt) : null;
     }
