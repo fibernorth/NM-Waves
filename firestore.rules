@@ -372,6 +372,16 @@ service cloud.firestore {
     // audience (denormalized onto each doc as audienceAllCoaches /
     // audienceTeamIds at submit time). Coaches never see the full/admin-only
     // answers, which live in surveyResponses.
+    // Legacy fallback for coach-response docs written before audience tagging:
+    // consult the survey's own assignment. Everyone-surveys open to all
+    // coaches; team surveys to coaches of the assigned teams.
+    function legacySurveyAllowsCoach(surveyId) {
+      let s = get(/databases/$(database)/documents/surveys/$(surveyId)).data;
+      let u = getUserData(request.auth.uid);
+      return (s.assignedTeamIds.size() == 0 && s.assignedPlayerIds.size() == 0) ||
+             ('teamIds' in u && s.assignedTeamIds.hasAny(u.teamIds));
+    }
+
     match /surveyResponsesCoach/{docId} {
       allow create: if isAuth();
       allow read: if isAdmin() || (isCoach() && (
@@ -379,7 +389,8 @@ service cloud.firestore {
         ('audienceAllCoaches' in resource.data && resource.data.audienceAllCoaches == true) ||
         ('audienceTeamIds' in resource.data &&
          'teamIds' in getUserData(request.auth.uid) &&
-         resource.data.audienceTeamIds.hasAny(getUserData(request.auth.uid).teamIds))
+         resource.data.audienceTeamIds.hasAny(getUserData(request.auth.uid).teamIds)) ||
+        (!('audienceTeamIds' in resource.data) && legacySurveyAllowsCoach(resource.data.surveyId))
       ));
       allow update: if false;
       allow delete: if isAdmin();

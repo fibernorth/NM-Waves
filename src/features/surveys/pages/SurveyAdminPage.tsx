@@ -110,13 +110,14 @@ const SurveyAdminPage = () => {
   const coachTeamIds = user?.teamIds || [];
   const surveys = admin
     ? allSurveys
-    : allSurveys.filter(
-        (s) =>
-          s.createdBy === user?.uid ||
-          s.audienceAllCoaches === true ||
-          ((s.assignedTeamIds?.length || 0) === 0 && (s.assignedPlayerIds?.length || 0) === 0) ||
-          (s.audienceTeamIds || s.assignedTeamIds || []).some((id) => coachTeamIds.includes(id))
-      );
+    : allSurveys.filter((s) => {
+        if (s.createdBy === user?.uid || s.audienceAllCoaches === true) return true;
+        if ((s.assignedTeamIds?.length || 0) === 0 && (s.assignedPlayerIds?.length || 0) === 0) return true;
+        // audienceTeamIds converts to [] when the survey predates the feature,
+        // and [] is truthy — so fall back to assignedTeamIds by LENGTH, never ||.
+        const audience = s.audienceTeamIds?.length ? s.audienceTeamIds : s.assignedTeamIds || [];
+        return audience.some((id) => coachTeamIds.includes(id));
+      });
   const canManage = (s: Survey) => admin || s.createdBy === user?.uid;
 
   // Response counts, shown on each card without opening results.
