@@ -5,6 +5,7 @@ import {
   getDocs,
   getCountFromServer,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -18,6 +19,16 @@ import type { Survey, SurveyResponse, SurveyQuestion, SurveyAnswer } from '@/typ
 const SURVEYS = 'surveys';
 const RESPONSES = 'surveyResponses';
 const COACH_RESPONSES = 'surveyResponsesCoach';
+const RESPONSE_IDENTITIES = 'surveyResponseIdentities';
+
+/** Who submitted a response — readable ONLY by master-admins (see rules). */
+export interface SurveyResponseIdentity {
+  responseId: string;
+  surveyId: string;
+  submittedBy: string;
+  submittedByName: string;
+  submittedByEmail: string;
+}
 
 /**
  * Multi-value answers (checkbox selections, ranking order) are stored as a
@@ -168,14 +179,37 @@ export const surveyResponsesApi = {
    * those answers to the coach-visible collection, tagged with the survey's
    * creator so that creator (a coach) may read it.
    */
-  submit: async (survey: Survey, answers: SurveyAnswer[]): Promise<void> => {
+  submit: async (
+    survey: Survey,
+    answers: SurveyAnswer[],
+    identity?: { uid: string; name: string; email: string }
+  ): Promise<void> => {
     // The admin-visible document is the source of truth: once this write
     // succeeds, the submission has succeeded.
-    await addDoc(collection(db, RESPONSES), {
+    const responseRef = await addDoc(collection(db, RESPONSES), {
       surveyId: survey.id,
       answers,
       submittedAt: Timestamp.now(),
     });
+
+    // Who submitted, stored in a SEPARATE master-admin-only collection: the
+    // response doc itself is readable by all admins and rules can't hide
+    // individual fields, so identity must never live on it. Best-effort —
+    // a failure here must not fail (or duplicate) the submission.
+    if (identity?.uid) {
+      try {
+        await setDoc(doc(db, RESPONSE_IDENTITIES, responseRef.id), {
+          responseId: responseRef.id,
+          surveyId: survey.id,
+          submittedBy: identity.uid,
+          submittedByName: identity.name || '',
+          submittedByEmail: identity.email || '',
+          submittedAt: Timestamp.now(),
+        });
+      } catch (err) {
+        console.warn('[surveys] identity record write failed (response saved):', err);
+      }
+    }
 
     // The coach projection is best-effort. If it fails we must NOT surface an
     // error — the parent would resubmit and create a DUPLICATE response in the
@@ -254,6 +288,31 @@ export const surveyResponsesApi = {
    * count the full collection; coaches count their own coach-visible docs
    * (the extra surveyCreatedBy filter is what the security rules allow).
    */
+  /**
+   * Master-admin only (enforced by rules): who submitted each response,
+   * keyed by response id. Returns an empty map for anyone else.
+   */
+  getIdentitiesBySurvey: async (surveyId: string): Promise<Record<string, SurveyResponseIdentity>> => {
+    try {
+      const q = query(collection(db, RESPONSE_IDENTITIES), where('surveyId', '==', surveyId));
+      const snap = await getDocs(q);
+      const out: Record<string, SurveyResponseIdentity> = {};
+      for (const d of snap.docs) {
+        const data = d.data();
+        out[data.responseId || d.id] = {
+          responseId: data.responseId || d.id,
+          surveyId: data.surveyId || surveyId,
+          submittedBy: data.submittedBy || '',
+          submittedByName: data.submittedByName || '',
+          submittedByEmail: data.submittedByEmail || '',
+        };
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  },
+
   countBySurvey: async (surveyId: string, isAdmin: boolean, coachUid?: string): Promise<number> => {
     try {
       if (isAdmin) {

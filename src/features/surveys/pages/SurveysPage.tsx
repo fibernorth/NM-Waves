@@ -107,7 +107,11 @@ const SurveysPage = () => {
             ? (answers[q.id] ?? (q.options || []).join(ANSWER_SEPARATOR))
             : (answers[q.id] ?? ''),
       }));
-      await surveyResponsesApi.submit(active, payload);
+      await surveyResponsesApi.submit(active, payload, {
+        uid: user?.uid || '',
+        name: user?.displayName || '',
+        email: user?.email || '',
+      });
     },
     onSuccess: () => {
       if (active) {
@@ -117,7 +121,7 @@ const SurveysPage = () => {
           return next;
         });
       }
-      toast.success('Thank you — your response was submitted anonymously.');
+      toast.success('Thank you — your response was submitted.');
       setActive(null);
       setAnswers({});
     },
@@ -285,7 +289,7 @@ const SurveysPage = () => {
         <Typography variant="h4">Surveys</Typography>
       </Box>
       <Alert icon={<LockIcon fontSize="inherit" />} severity="info" sx={{ mb: 3 }}>
-        Responses are anonymous and are not visible to coaches. Please be candid.
+        Responses are private. Coaches never see who said what — only the club administrator can. Please be candid.
       </Alert>
 
       {isLoading ? (

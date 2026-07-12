@@ -21,6 +21,8 @@ import DownloadIcon from '@mui/icons-material/Download';
 import { useQuery } from '@tanstack/react-query';
 import { surveyResponsesApi, ANSWER_SEPARATOR } from '@/lib/api/surveys';
 import { useAuthStore } from '@/stores/authStore';
+import { isMasterAdmin as checkIsMasterAdmin } from '@/lib/auth/roles';
+import PersonIcon from '@mui/icons-material/Person';
 import type { Survey, SurveyQuestion, SurveyResponse } from '@/types/models';
 import { format } from 'date-fns';
 
@@ -163,6 +165,7 @@ const csvEscape = (v: string) => `"${v.replace(/"/g, '""')}"`;
 const SurveyResultsDialog = ({ survey, isAdmin, onClose }: Props) => {
   const [tab, setTab] = useState(0);
   const { user } = useAuthStore();
+  const masterAdmin = checkIsMasterAdmin(user);
 
   const { data: responses = [], isLoading } = useQuery({
     queryKey: ['surveyResponses', survey?.id, isAdmin, user?.uid],
@@ -171,6 +174,14 @@ const SurveyResultsDialog = ({ survey, isAdmin, onClose }: Props) => {
         ? surveyResponsesApi.getBySurvey(survey!.id)
         : surveyResponsesApi.getCoachVisibleBySurvey(survey!.id, user?.uid),
     enabled: !!survey,
+  });
+
+  // Master-admin only: who submitted each response (rules deny everyone else,
+  // and the method quietly returns an empty map on denial).
+  const { data: identities = {} } = useQuery({
+    queryKey: ['surveyResponseIdentities', survey?.id],
+    queryFn: () => surveyResponsesApi.getIdentitiesBySurvey(survey!.id),
+    enabled: !!survey && masterAdmin,
   });
 
   // Coaches only ever see the questions marked visible to them. Admins must be
@@ -200,9 +211,17 @@ const SurveyResultsDialog = ({ survey, isAdmin, onClose }: Props) => {
 
   const exportCsv = () => {
     if (!survey) return;
-    const header = ['Submitted', ...questions.map((q) => q.text)];
+    const withIdentity = masterAdmin && Object.keys(identities).length > 0;
+    const header = [
+      'Submitted',
+      ...(withIdentity ? ['Submitted By', 'Email'] : []),
+      ...questions.map((q) => q.text),
+    ];
     const rows = responses.map((r) => [
       format(r.submittedAt, 'yyyy-MM-dd HH:mm'),
+      ...(withIdentity
+        ? [identities[r.id]?.submittedByName ?? '', identities[r.id]?.submittedByEmail ?? '']
+        : []),
       ...questions.map((q) => r.answers.find((a) => a.questionId === q.id)?.value ?? ''),
     ]);
     const csv = [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
@@ -257,9 +276,25 @@ const SurveyResultsDialog = ({ survey, isAdmin, onClose }: Props) => {
         ) : (
           responses.map((r, i) => (
             <Paper key={r.id} variant="outlined" sx={{ p: 2, mb: 2 }}>
-              <Typography variant="overline" color="text.secondary">
-                Response #{i + 1} · {format(r.submittedAt, 'MMM d, yyyy h:mm a')}
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography variant="overline" color="text.secondary">
+                  Response #{i + 1} · {format(r.submittedAt, 'MMM d, yyyy h:mm a')}
+                </Typography>
+                {masterAdmin && identities[r.id] && (
+                  <Chip
+                    icon={<PersonIcon />}
+                    size="small"
+                    variant="outlined"
+                    color="secondary"
+                    label={
+                      identities[r.id].submittedByName ||
+                      identities[r.id].submittedByEmail ||
+                      'Unknown'
+                    }
+                    title={identities[r.id].submittedByEmail}
+                  />
+                )}
+              </Box>
               <List dense disablePadding>
                 {r.answers
                   .filter((a) => isAdmin || questions.some((q) => q.id === a.questionId))
