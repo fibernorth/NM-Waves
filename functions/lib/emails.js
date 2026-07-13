@@ -39,6 +39,7 @@ exports.sendPaymentReceipt = sendPaymentReceipt;
 exports.sendInvoiceNotification = sendInvoiceNotification;
 exports.sendPlayerStatement = sendPlayerStatement;
 exports.sendParentInviteEmail = sendParentInviteEmail;
+exports.sendTryoutOfferEmail = sendTryoutOfferEmail;
 exports.sendPasswordResetCustomEmail = sendPasswordResetCustomEmail;
 exports.sendBatchInvoiceNotifications = sendBatchInvoiceNotifications;
 const admin = __importStar(require("firebase-admin"));
@@ -418,6 +419,46 @@ async function sendParentInviteEmail(data) {
             If it has expired or you have any issues, visit
             <a href="${SITE_URL}/login">${SITE_URL.replace('https://', '')}/login</a>
             and click "Forgot Password" to get a new link.
+          </p>
+        </div>
+      </div>
+      ${emailFooter}
+    </div>`;
+    await queueEmail(email, subject, html);
+}
+async function sendTryoutOfferEmail(data) {
+    const { email, parentName, playerName, ageGroup, sessionLabel } = data;
+    const subject = `${playerName} has been offered a spot - Northern Michigan Waves`;
+    const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      ${emailHeader}
+      <div style="padding: 30px; background-color: #f5f5f5;">
+        <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <h2 style="color: #333; margin-top: 0;">Congratulations!</h2>
+          <p>Hi ${esc(parentName || 'Parent/Guardian')},</p>
+          <p>
+            We're excited to let you know that <strong>${esc(playerName)}</strong> has been
+            offered a spot with the Northern Michigan Waves in our
+            <strong>${esc(ageGroup || 'travel')}</strong> division for next season!
+          </p>
+          ${sessionLabel ? `<p style="color: #666; font-size: 13px;">Tryout session: ${esc(sessionLabel)}</p>` : ''}
+          <p>
+            To accept the offer, log in to your parent account (or reply to this email
+            and we'll get you set up):
+          </p>
+
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${SITE_URL}" style="display: inline-block; background-color: #1565c0; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+              Accept &amp; Get Started
+            </a>
+          </div>
+
+          <p style="color: #555;">
+            <strong>Next steps:</strong> once you accept, we'll follow up with registration
+            paperwork, uniform sizing, and fee details for the season.
+          </p>
+          <p style="color: #666; font-size: 13px;">
+            Questions? Just reply to this email or contact us at ${ORG_EMAIL}.
           </p>
         </div>
       </div>

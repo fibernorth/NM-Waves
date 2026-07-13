@@ -9,7 +9,8 @@ import {
   orderBy,
   Timestamp,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '@/lib/firebase/config';
 
 const COLLECTION = 'tryout-applicants';
 
@@ -112,6 +113,19 @@ export const tryoutApplicantsApi = {
     const q = query(collection(db, COLLECTION), orderBy('submittedAt', 'desc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => convertApplicant(d.id, d.data()));
+  },
+
+  /**
+   * Coach/admin: send the branded offer email to the applicant's family and
+   * mark them invited (status is set server-side by the callable).
+   */
+  sendOffer: async (applicantId: string): Promise<{ sent: boolean; email: string }> => {
+    const callable = httpsCallable<{ applicantId: string }, { sent: boolean; email: string }>(
+      functions,
+      'sendTryoutOffer'
+    );
+    const res = await callable({ applicantId });
+    return res.data;
   },
 
   updateStatus: async (id: string, status: TryoutStatus, convertedPlayerId?: string): Promise<void> => {

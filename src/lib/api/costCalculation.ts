@@ -2,7 +2,7 @@ import { costItemsApi } from './costItems';
 import { playerFinancesApi } from './finances';
 import { playersApi } from './players';
 import { teamsApi } from './teams';
-import type { CostItem, CostFinanceField, PlayerFinance } from '@/types/models';
+import type { CostItem, CostFinanceField, Player, PlayerFinance } from '@/types/models';
 
 export interface PlayerCostBreakdown {
   playerId: string;
@@ -228,6 +228,120 @@ export const costCalculationApi = {
     }
 
     return { updated, errors };
+  },
+
+  /**
+   * Seed a finance record for a player who was just placed on a team
+   * (created with a team, or moved from unassigned to a team).
+   *
+   * Computes THIS player's share the same way redistributeAfterQuit does:
+   * - Org items split across all active players' finance records, +1 for this
+   *   new player (who has no finance record yet).
+   * - Team items for their team split across that team's active player count,
+   *   +1 for this new player.
+   * - Player-tier items assigned to this player added directly.
+   *
+   * Idempotent and conservative: if the player already has a finance record
+   * for the season, does NOTHING (never overwrites fees or payments). Never
+   * modifies other players' records — no redistribution.
+   */
+  seedFinancesForPlacement: async (
+    player: Player,
+    season: string
+  ): Promise<{ created: false } | { created: true; totals: Record<CostFinanceField, number> }> => {
+    const allFinances = await playerFinancesApi.getBySeason(season);
+
+    // Idempotency: never touch an existing record (fees, payments, anything).
+    const existing = allFinances.find((f) => f.playerId === player.id);
+    if (existing) {
+      return { created: false };
+    }
+
+    const teamId = player.teamId || '';
+
+    const [allCostItems, allActivePlayers, teamPlayers] = await Promise.all([
+      costItemsApi.getBySeason(season),
+      playersApi.getActive(),
+      teamId ? playersApi.getByTeam(teamId) : Promise.resolve([] as Player[]),
+    ]);
+
+    const activeCostItems = allCostItems.filter((c) => c.active);
+    const orgItems = activeCostItems.filter((c) => c.tier === 'organization');
+    const teamItems = activeCostItems.filter(
+      (c) => c.tier === 'team' && c.teamId === teamId
+    );
+    const playerItems = activeCostItems.filter(
+      (c) => c.tier === 'player' && c.playerId === player.id
+    );
+
+    // Org division: active (non-quit) players with finance records, +1 for
+    // this new player (they have no finance record yet — checked above).
+    const activePlayerIdsAll = new Set(
+      allActivePlayers.filter((p) => p.status !== 'quit').map((p) => p.id)
+    );
+    const totalActivePlayers =
+      allFinances.filter((f) => activePlayerIdsAll.has(f.playerId)).length + 1;
+
+    // Team division: active (non-quit) players on this team, +1 for this new
+    // player. Exclude the player themselves in case they're already stored on
+    // the team (avoids double counting).
+    const playersOnTeam =
+      teamPlayers.filter(
+        (p) => p.active && p.status !== 'quit' && p.id !== player.id
+      ).length + 1;
+
+    const totals: Record<CostFinanceField, number> = {
+      registrationFee: 0,
+      uniformCost: 0,
+      tournamentFees: 0,
+      facilityFees: 0,
+      equipmentFees: 0,
+      otherFees: 0,
+    };
+
+    for (const item of orgItems) {
+      totals[item.financeField] += item.amount / totalActivePlayers;
+    }
+    for (const item of teamItems) {
+      totals[item.financeField] += item.amount / playersOnTeam;
+    }
+    for (const item of playerItems) {
+      totals[item.financeField] += item.amount;
+    }
+
+    // Round to 2 decimal places (matches syncToBilling/redistributeAfterQuit)
+    for (const field of FINANCE_FIELDS) {
+      totals[field] = Math.round(totals[field] * 100) / 100;
+    }
+
+    const grandTotal = FINANCE_FIELDS.reduce(
+      (sum, field) => sum + totals[field],
+      0
+    );
+
+    // Create the record even when there are no active cost items (zeroed
+    // fees) so the player appears in Billing.
+    await playerFinancesApi.create({
+      playerId: player.id,
+      playerName: `${player.firstName} ${player.lastName}`,
+      teamId,
+      teamName: player.teamName || '',
+      season,
+      assumedCost: grandTotal,
+      actualCost: grandTotal,
+      scholarshipAmount: 0,
+      registrationFee: totals.registrationFee,
+      uniformCost: totals.uniformCost,
+      tournamentFees: totals.tournamentFees,
+      facilityFees: totals.facilityFees,
+      equipmentFees: totals.equipmentFees,
+      otherFees: totals.otherFees,
+      payments: [],
+      balanceDue: grandTotal,
+      status: 'current',
+    });
+
+    return { created: true, totals };
   },
 
   /**

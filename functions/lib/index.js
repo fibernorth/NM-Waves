@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.submitEvalScoreByToken = exports.getEvalEventByToken = exports.emailOutstandingInvoices = exports.emailPlayerBilling = exports.emailAllParents = exports.linkChild = exports.searchLinkablePlayers = exports.getPlayerFinanceSummary = exports.updateLinkedPlayerContact = exports.getInvoiceByToken = exports.getPublicRoster = exports.sendCustomPasswordReset = exports.setAccountPassword = exports.listDrivePhotos = exports.batchAnalyzeMedia = exports.analyzeMedia = exports.moderateMedia = exports.batchGenerateInvoices = exports.generateInvoiceToken = exports.stripeWebhook = exports.createCheckoutSession = exports.sendInvoiceEmails = exports.sendParentInvites = exports.cleanupExpiredTokens = exports.onUserDisabled = exports.scrapeGameChanger = void 0;
+exports.sendTryoutOffer = exports.submitEvalScoreByToken = exports.getEvalEventByToken = exports.emailOutstandingInvoices = exports.emailPlayerBilling = exports.emailAllParents = exports.linkChild = exports.searchLinkablePlayers = exports.getPlayerFinanceSummary = exports.updateLinkedPlayerContact = exports.getInvoiceByToken = exports.getPublicRoster = exports.sendCustomPasswordReset = exports.setAccountPassword = exports.listDrivePhotos = exports.batchAnalyzeMedia = exports.analyzeMedia = exports.moderateMedia = exports.batchGenerateInvoices = exports.generateInvoiceToken = exports.stripeWebhook = exports.createCheckoutSession = exports.sendInvoiceEmails = exports.sendParentInvites = exports.cleanupExpiredTokens = exports.onUserDisabled = exports.scrapeGameChanger = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const sendInvites_1 = require("./sendInvites");
@@ -130,4 +130,6 @@ Object.defineProperty(exports, "emailOutstandingInvoices", { enumerable: true, g
 var evalGuest_1 = require("./evalGuest");
 Object.defineProperty(exports, "getEvalEventByToken", { enumerable: true, get: function () { return evalGuest_1.getEvalEventByToken; } });
 Object.defineProperty(exports, "submitEvalScoreByToken", { enumerable: true, get: function () { return evalGuest_1.submitEvalScoreByToken; } });
+var tryoutOffer_1 = require("./tryoutOffer");
+Object.defineProperty(exports, "sendTryoutOffer", { enumerable: true, get: function () { return tryoutOffer_1.sendTryoutOffer; } });
 //# sourceMappingURL=index.js.map

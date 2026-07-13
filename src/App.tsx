@@ -125,6 +125,9 @@ import TryoutApplicantsPage from './features/tryouts/pages/TryoutApplicantsPage'
 import RegisterTryoutPage from './features/tryouts/pages/RegisterTryoutPage';
 import CoachApplicationPage from './features/public/pages/CoachApplicationPage';
 import CoachApplicationsPage from './features/admin/pages/CoachApplicationsPage';
+import EvaluationsPage from './features/evaluations/pages/EvaluationsPage';
+import EvaluationEventPage from './features/evaluations/pages/EvaluationEventPage';
+import GuestEvaluatePage from './features/evaluations/pages/GuestEvaluatePage';
 
 // Components
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -181,6 +184,8 @@ function App() {
 
             {/* Public Payment Routes (no layout wrapper needed) */}
             <Route path="/pay/:token" element={<PublicPaymentPage />} />
+            {/* Guest evaluator link (no account needed) */}
+            <Route path="/evaluate/:token" element={<GuestEvaluatePage />} />
             <Route path="/pay/success" element={<PaymentSuccessPage />} />
             <Route path="/pay/cancel" element={<PaymentCancelPage />} />
             <Route path="/become-sponsor" element={<BecomeSponsorPage />} />
@@ -227,6 +232,8 @@ function App() {
               <Route path="/metrics" element={<MetricsPage />} />
               <Route path="/manage-surveys" element={<SurveyAdminPage />} />
               <Route path="/tryout-signups" element={<TryoutApplicantsPage />} />
+              <Route path="/evaluations" element={<EvaluationsPage />} />
+              <Route path="/evaluations/:id" element={<EvaluationEventPage />} />
             </Route>
 
             {/* Protected Routes - Admin and above */}

@@ -88,3 +88,4 @@ export {
 export { emailAllParents } from './emailBroadcast';
 export { emailPlayerBilling, emailOutstandingInvoices } from './billingEmails';
 export { getEvalEventByToken, submitEvalScoreByToken } from './evalGuest';
+export { sendTryoutOffer } from './tryoutOffer';

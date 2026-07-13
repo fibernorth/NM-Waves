@@ -47,6 +47,7 @@ import { format } from 'date-fns';
 import LinkChildDialog from '@/features/players/components/LinkChildDialog';
 import ParentOnboardingDialog from '../components/ParentOnboardingDialog';
 import ParentAttentionCard from '../components/ParentAttentionCard';
+import UnassignedPlayersCard from '../components/UnassignedPlayersCard';
 import { googleCalendarUrl, downloadIcs, type CalendarEvent } from '@/lib/utils/calendarLinks';
 import { IconButton, Tooltip } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
@@ -282,6 +283,9 @@ const DashboardPage = () => {
 
       {/* Parent: surveys / tryout status that needs action */}
       {isParent && <ParentAttentionCard linkedChildren={linkedChildren} />}
+
+      {/* Coach/admin: active players not yet assigned to a team */}
+      {isCoachOrAbove && <UnassignedPlayersCard />}
 
       {/* Parent: Children Cards */}
       {isParent && (

@@ -173,6 +173,7 @@ interface DialogProps {
 
 const ApplicantDialog = ({ applicant, isAdmin, evaluatorId, evaluatorName, onClose, onChanged }: DialogProps) => {
   const queryClient = useQueryClient();
+  const [confirmInvite, setConfirmInvite] = useState(false);
   const [overall, setOverall] = useState<number | null>(0);
   const [hitting, setHitting] = useState<number | null>(0);
   const [fielding, setFielding] = useState<number | null>(0);
@@ -210,8 +211,18 @@ const ApplicantDialog = ({ applicant, isAdmin, evaluatorId, evaluatorName, onClo
 
   const setStatus = useMutation({
     mutationFn: (status: TryoutStatus) => tryoutApplicantsApi.updateStatus(applicant!.id, status),
-    onSuccess: () => { onChanged(); toast.success('Status updated'); },
+    onSuccess: () => { setConfirmInvite(false); onChanged(); toast.success('Status updated'); },
     onError: (err: any) => toast.error(err?.message || 'Failed to update status'),
+  });
+
+  const sendOffer = useMutation({
+    mutationFn: () => tryoutApplicantsApi.sendOffer(applicant!.id),
+    onSuccess: (res) => {
+      setConfirmInvite(false);
+      onChanged();
+      toast.success(`Offer email sent to ${res.email} — marked invited`);
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to send offer email'),
   });
 
   const convert = useMutation({
@@ -351,7 +362,7 @@ const ApplicantDialog = ({ applicant, isAdmin, evaluatorId, evaluatorName, onClo
         </Box>
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
-        <Button size="small" onClick={() => setStatus.mutate('invited')} disabled={setStatus.isPending}>Mark Invited</Button>
+        <Button size="small" onClick={() => setConfirmInvite(true)} disabled={setStatus.isPending || sendOffer.isPending}>Mark Invited</Button>
         <Button size="small" color="error" onClick={() => setStatus.mutate('declined')} disabled={setStatus.isPending}>Decline</Button>
         {isAdmin && applicant.status !== 'converted' && (
           <Button size="small" variant="contained" color="success" onClick={() => convert.mutate()} disabled={convert.isPending}>
@@ -361,6 +372,34 @@ const ApplicantDialog = ({ applicant, isAdmin, evaluatorId, evaluatorName, onClo
         <Box sx={{ flexGrow: 1 }} />
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
+
+      <Dialog open={confirmInvite} onClose={() => !sendOffer.isPending && setConfirmInvite(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Send offer email?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            Send offer email to {applicant.parentName || 'the parent/guardian'} ({applicant.email || 'no email on file'}) and mark invited?
+          </Typography>
+          <Button
+            size="small"
+            sx={{ mt: 2, textTransform: 'none' }}
+            onClick={() => setStatus.mutate('invited')}
+            disabled={setStatus.isPending || sendOffer.isPending}
+          >
+            {setStatus.isPending ? 'Marking…' : 'Mark invited without emailing'}
+          </Button>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmInvite(false)} disabled={sendOffer.isPending}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => sendOffer.mutate()}
+            disabled={sendOffer.isPending || setStatus.isPending || !applicant.email}
+            startIcon={sendOffer.isPending ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
+            {sendOffer.isPending ? 'Sending…' : 'Send Offer & Mark Invited'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 };

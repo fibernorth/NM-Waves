@@ -23,6 +23,8 @@ import { z } from 'zod';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { playersApi } from '@/lib/api/players';
 import { teamsApi } from '@/lib/api/teams';
+import { costCalculationApi } from '@/lib/api/costCalculation';
+import { computeFeeTotal } from '@/lib/api/finances';
 import { userProvisioningApi } from '@/lib/api/userProvisioning';
 import { auth } from '@/lib/firebase/config';
 import { Player } from '@/types/models';
@@ -241,6 +243,29 @@ const PlayerFormDialog = ({ open, onClose, player, defaultTeamId }: PlayerFormDi
     };
   };
 
+  /**
+   * Seed a playerFinances record after a player is placed on a team.
+   * Called only when a player is created WITH a team, or an existing player's
+   * teamId changes from empty to a team. Idempotent (never overwrites an
+   * existing record) and never allowed to fail the player save.
+   */
+  const seedBillingForPlacement = async (placedPlayer: Player) => {
+    if (!placedPlayer.teamId) return;
+    try {
+      const team = teams.find((t) => t.id === placedPlayer.teamId);
+      const season = team?.season || '2025-2026';
+      const result = await costCalculationApi.seedFinancesForPlacement(placedPlayer, season);
+      if (result.created) {
+        const total = computeFeeTotal(result.totals);
+        toast.success(`Billing set up for ${season}: $${total.toFixed(2)}`);
+        queryClient.invalidateQueries({ queryKey: ['playerFinances'] });
+      }
+    } catch (err) {
+      console.warn('Automatic billing setup failed:', err);
+      toast('Player saved — automatic billing setup failed, add charges manually');
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: PlayerFormData) => {
       const payload = buildPlayerPayload(data);
@@ -252,6 +277,11 @@ const PlayerFormDialog = ({ open, onClose, player, defaultTeamId }: PlayerFormDi
         await userProvisioningApi.provisionAllContacts(createdPlayer).catch(console.error);
         const emails = data.contacts.map(c => c.email).filter(Boolean);
         await sendProvisioningInvites(emails).catch(console.error);
+
+        // Player created WITH a team — seed their billing for the season.
+        if (data.teamId) {
+          await seedBillingForPlacement(createdPlayer);
+        }
       }
       return playerId;
     },
@@ -269,6 +299,9 @@ const PlayerFormDialog = ({ open, onClose, player, defaultTeamId }: PlayerFormDi
   const updateMutation = useMutation({
     mutationFn: async (data: PlayerFormData) => {
       const payload = buildPlayerPayload(data);
+      // Detect an unassigned -> assigned transition BEFORE saving (only this
+      // transition seeds billing — not team-to-team moves or other edits).
+      const becameAssigned = !player!.teamId && !!data.teamId;
       const contactEmails = data.contacts.map(c => c.email).filter(Boolean);
 
       // Check which emails already have accounts before provisioning
@@ -286,6 +319,11 @@ const PlayerFormDialog = ({ open, onClose, player, defaultTeamId }: PlayerFormDi
         // Send invites only for newly provisioned contacts
         if (newEmails.length > 0) {
           await sendProvisioningInvites(newEmails).catch(console.error);
+        }
+
+        // Player moved from unassigned to a team — seed their billing.
+        if (becameAssigned) {
+          await seedBillingForPlacement(updatedPlayer);
         }
       }
     },
