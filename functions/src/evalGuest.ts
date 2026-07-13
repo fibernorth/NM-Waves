@@ -66,6 +66,13 @@ export const submitEvalScoreByToken = functions.https.onCall(async (data) => {
   const score = Number(data?.score);
   const comment = String(data?.comment || '').slice(0, 2000);
   const stationId = data?.stationId ? String(data.stationId) : undefined;
+  // Guest-uploaded media: accept only Firebase Storage URLs, capped at 10.
+  const mediaUrls: string[] = Array.isArray(data?.mediaUrls)
+    ? data.mediaUrls
+        .map(String)
+        .filter((u: string) => u.startsWith('https://firebasestorage.googleapis.com/'))
+        .slice(0, 10)
+    : [];
 
   const participant = (event.participants || []).find((p: any) => p.id === participantId);
   if (!participant) {
@@ -99,6 +106,7 @@ export const submitEvalScoreByToken = functions.https.onCall(async (data) => {
     maxScore,
     weight: skill.weight || 1,
     ...(comment ? { comment } : {}),
+    ...(mediaUrls.length ? { mediaUrls } : {}),
     evaluatorName: invite.evaluatorName || 'Evaluator',
     createdAt: admin.firestore.Timestamp.now(),
   });

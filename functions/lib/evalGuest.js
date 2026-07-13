@@ -100,6 +100,13 @@ exports.submitEvalScoreByToken = functions.https.onCall(async (data) => {
     const score = Number(data === null || data === void 0 ? void 0 : data.score);
     const comment = String((data === null || data === void 0 ? void 0 : data.comment) || '').slice(0, 2000);
     const stationId = (data === null || data === void 0 ? void 0 : data.stationId) ? String(data.stationId) : undefined;
+    // Guest-uploaded media: accept only Firebase Storage URLs, capped at 10.
+    const mediaUrls = Array.isArray(data === null || data === void 0 ? void 0 : data.mediaUrls)
+        ? data.mediaUrls
+            .map(String)
+            .filter((u) => u.startsWith('https://firebasestorage.googleapis.com/'))
+            .slice(0, 10)
+        : [];
     const participant = (event.participants || []).find((p) => p.id === participantId);
     if (!participant) {
         throw new functions.https.HttpsError('invalid-argument', 'Unknown participant');
@@ -135,6 +142,7 @@ exports.submitEvalScoreByToken = functions.https.onCall(async (data) => {
         maxScore,
         weight: skill.weight || 1,
         ...(comment ? { comment } : {}),
+        ...(mediaUrls.length ? { mediaUrls } : {}),
         evaluatorName: invite.evaluatorName || 'Evaluator',
         createdAt: admin.firestore.Timestamp.now(),
     });

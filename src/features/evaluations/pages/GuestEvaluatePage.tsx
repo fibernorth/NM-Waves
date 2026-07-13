@@ -61,6 +61,7 @@ const GuestEvaluatePage = () => {
       stationId: s.stationId,
       score: s.score,
       comment: s.comment || '',
+      mediaUrls: s.mediaUrls || [],
     });
     setSaved((n) => n + 1);
   };
@@ -99,7 +100,7 @@ const GuestEvaluatePage = () => {
               categories={data.event.categories}
               stations={data.event.stations}
               participants={data.event.participants}
-              allowMedia={false}
+              mediaPathPrefix={`evalMedia/${token}`}
               onSubmit={submit}
             />
           </>

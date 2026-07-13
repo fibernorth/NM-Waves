@@ -416,17 +416,3 @@ export const computeRankings = (event: EvalEvent, scores: EvalScore[]): Particip
 
   return rankings.sort((a, b) => (b.overall ?? -1) - (a.overall ?? -1));
 };
-
-/**
- * SkillShark-style balanced team suggestion: snake-draft the ranked list into
- * N teams so talent spreads evenly. Unscored participants distribute last.
- */
-export const suggestBalancedTeams = (rankings: ParticipantRanking[], teamCount: number): ParticipantRanking[][] => {
-  const teams: ParticipantRanking[][] = Array.from({ length: Math.max(1, teamCount) }, () => []);
-  rankings.forEach((r, i) => {
-    const round = Math.floor(i / teams.length);
-    const idx = round % 2 === 0 ? i % teams.length : teams.length - 1 - (i % teams.length);
-    teams[idx].push(r);
-  });
-  return teams;
-};

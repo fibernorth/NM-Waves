@@ -24,8 +24,9 @@ import toast from 'react-hot-toast';
 /**
  * SkillShark-style scoring surface, shared by the signed-in coach page and the
  * guest evaluator page: pick a station → tap a player → slide/tap scores for
- * that station's skills → save & next. Media attach is only offered in direct
- * (signed-in) mode; guest submissions go through the tokened Cloud Function.
+ * that station's skills, add comments and photos/videos → save & next. Media
+ * uploads go to mediaPathPrefix (coaches use the authed media path; guests use
+ * the evalMedia/<token> path their invite token unlocks).
  */
 
 export interface ScoreSubmission {
@@ -44,13 +45,13 @@ interface Props {
   participants: EvalParticipant[];
   /** Persist one skill score. Throw to signal failure. */
   onSubmit: (s: ScoreSubmission) => Promise<void>;
-  /** Signed-in mode enables photo/video attachments. */
-  allowMedia: boolean;
+  /** Storage folder for photo/video attachments. */
+  mediaPathPrefix: string;
   /** participantId -> count of scores already recorded (for the done badges). */
   scoredCounts?: Record<string, number>;
 }
 
-const ScoringBoard = ({ eventId, categories, stations, participants, onSubmit, allowMedia, scoredCounts = {} }: Props) => {
+const ScoringBoard = ({ eventId, categories, stations, participants, onSubmit, mediaPathPrefix, scoredCounts = {} }: Props) => {
   const [stationId, setStationId] = useState<string>(stations[0]?.id || '');
   const [activeP, setActiveP] = useState<EvalParticipant | null>(null);
   const [values, setValues] = useState<Record<string, number>>({});
@@ -93,9 +94,9 @@ const ScoringBoard = ({ eventId, categories, stations, participants, onSubmit, a
     try {
       // Upload attachments once; attach to the first scored skill.
       const mediaUrls: string[] = [];
-      if (allowMedia && mediaFiles.length > 0) {
+      if (mediaFiles.length > 0) {
         for (const f of mediaFiles) {
-          const path = `media/evaluations/${eventId}/${activeP.id}-${Date.now()}-${f.name}`;
+          const path = `${mediaPathPrefix}/${eventId}-${activeP.id}-${Date.now()}-${f.name}`;
           const r = ref(storage, path);
           await uploadBytes(r, f);
           mediaUrls.push(await getDownloadURL(r));
@@ -237,20 +238,21 @@ const ScoringBoard = ({ eventId, categories, stations, participants, onSubmit, a
             placeholder="Quick note — swing looks long, great first step, works hard…"
           />
 
-          {allowMedia && (
-            <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <input
-                ref={fileInput} type="file" hidden multiple accept="image/*,video/*"
-                onChange={(e) => setMediaFiles(Array.from(e.target.files || []))}
-              />
-              <Tooltip title="Attach photos or videos of this player (max 50MB each)">
-                <IconButton onClick={() => fileInput.current?.click()}><AttachFileIcon /></IconButton>
-              </Tooltip>
-              {mediaFiles.map((f, i) => (
-                <Chip key={i} label={f.name} size="small" onDelete={() => setMediaFiles((m) => m.filter((_, j) => j !== i))} />
-              ))}
-            </Box>
-          )}
+          <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <input
+              ref={fileInput} type="file" hidden multiple accept="image/*,video/*"
+              onChange={(e) => setMediaFiles(Array.from(e.target.files || []))}
+            />
+            <Tooltip title="Attach photos or videos of this player">
+              <IconButton onClick={() => fileInput.current?.click()}><AttachFileIcon /></IconButton>
+            </Tooltip>
+            {mediaFiles.length === 0 && (
+              <Typography variant="caption" color="text.secondary">Add photo / video (optional)</Typography>
+            )}
+            {mediaFiles.map((f, i) => (
+              <Chip key={i} label={f.name} size="small" onDelete={() => setMediaFiles((m) => m.filter((_, j) => j !== i))} />
+            ))}
+          </Box>
 
           <Box sx={{ mt: 2, display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
             <Button onClick={() => save(false)} disabled={saving}>Save</Button>

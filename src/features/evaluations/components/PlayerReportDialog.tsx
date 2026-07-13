@@ -10,7 +10,10 @@ import {
   DialogActions,
   Link as MuiLink,
   CircularProgress,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
 import { useQuery } from '@tanstack/react-query';
 import {
   evalScoresApi,
@@ -40,14 +43,19 @@ interface Props {
   ranking: ParticipantRanking | null;
   scores: EvalScore[];
   onClose: () => void;
+  /** Called after a score entry is deleted so the caller can refetch. */
+  onScoresChanged?: () => void;
 }
+
+/** Video vs image, judged from the storage filename inside the URL. */
+const isVideoUrl = (url: string) => /\.(mp4|mov|webm|m4v|avi)(\?|%3F|$)/i.test(url);
 
 /**
  * SkillShark-style player report card: weighted overall, category breakdown,
  * per-skill averages with every evaluator's comment, attached media, and —
  * for rostered players — progress across previous evaluation events.
  */
-const PlayerReportDialog = ({ event, ranking, scores, onClose }: Props) => {
+const PlayerReportDialog = ({ event, ranking, scores, onClose, onScoresChanged }: Props) => {
   const p = ranking?.participant;
   const mine = scores.filter((s) => s.participantId === p?.id);
 
@@ -117,10 +125,30 @@ const PlayerReportDialog = ({ event, ranking, scores, onClose }: Props) => {
                 return (
                   <Box key={s.id} sx={{ mt: 1 }}>
                     <PctBar label={s.name} pct={Math.round(avg * 100)} extra={`${entries.length}×`} />
-                    {entries.filter((e) => e.comment).map((e) => (
-                      <Typography key={e.id} variant="caption" color="text.secondary" sx={{ display: 'block', ml: 1 }}>
-                        “{e.comment}” — {e.evaluatorName}
-                      </Typography>
+                    {entries.map((e) => (
+                      <Box key={e.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 1 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ flexGrow: 1 }}>
+                          {e.score}/{e.maxScore} — {e.evaluatorName}
+                          {e.comment ? ` · “${e.comment}”` : ''}
+                        </Typography>
+                        <Tooltip title="Delete this score entry">
+                          <IconButton
+                            size="small"
+                            onClick={async () => {
+                              if (!confirm(`Delete ${e.evaluatorName}'s ${e.score}/${e.maxScore} for ${s.name}?`)) return;
+                              try {
+                                await evalScoresApi.remove(e.id);
+                                onScoresChanged?.();
+                              } catch (err: any) {
+                                // eslint-disable-next-line no-alert
+                                alert(err?.message || 'Failed to delete');
+                              }
+                            }}
+                          >
+                            <CloseIcon sx={{ fontSize: 14 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
                     ))}
                   </Box>
                 );
@@ -133,11 +161,17 @@ const PlayerReportDialog = ({ event, ranking, scores, onClose }: Props) => {
           <>
             <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Photos & video</Typography>
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              {media.map((url, i) => (
-                <MuiLink key={i} href={url} target="_blank" rel="noopener">
-                  <Chip label={`Media ${i + 1}`} clickable size="small" />
-                </MuiLink>
-              ))}
+              {media.map((url, i) =>
+                isVideoUrl(url) ? (
+                  <video key={i} src={url} controls preload="metadata"
+                    style={{ maxHeight: 140, maxWidth: '100%', borderRadius: 8 }} />
+                ) : (
+                  <MuiLink key={i} href={url} target="_blank" rel="noopener">
+                    <Box component="img" src={url} alt={`Player media ${i + 1}`}
+                      sx={{ height: 100, borderRadius: 1, objectFit: 'cover' }} />
+                  </MuiLink>
+                )
+              )}
             </Box>
           </>
         )}

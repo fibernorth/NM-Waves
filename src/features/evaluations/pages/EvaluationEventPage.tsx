@@ -33,14 +33,12 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import GroupsIcon from '@mui/icons-material/Groups';
 import DownloadIcon from '@mui/icons-material/Download';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   evalEventsApi,
   evalInvitesApi,
   evalScoresApi,
   computeRankings,
-  suggestBalancedTeams,
   type EvalEvent,
   type EvalParticipant,
 } from '@/lib/api/evaluations';
@@ -65,8 +63,7 @@ const EvaluationEventPage = () => {
   const { user } = useAuthStore();
   const [tab, setTab] = useState(0);
   const [reportFor, setReportFor] = useState<string | null>(null);
-  const [teamsOpen, setTeamsOpen] = useState(false);
-  const [teamCount, setTeamCount] = useState(2);
+  const [divisionFilter, setDivisionFilter] = useState('all');
 
   const { data: event, isLoading } = useQuery({
     queryKey: ['evalEvent', id],
@@ -164,7 +161,7 @@ const EvaluationEventPage = () => {
             categories={event.categories}
             stations={event.stations}
             participants={event.participants}
-            allowMedia
+            mediaPathPrefix={`media/evaluations/${event.id}`}
             scoredCounts={scoredCounts}
             onSubmit={async (s) => {
               const cat = event.categories.find((c) => c.skills.some((x) => x.id === s.skillId))!;
@@ -200,9 +197,15 @@ const EvaluationEventPage = () => {
             <Button size="small" startIcon={<DownloadIcon />} onClick={exportCsv} disabled={rankings.length === 0}>
               Export CSV
             </Button>
-            <Button size="small" startIcon={<GroupsIcon />} onClick={() => setTeamsOpen(true)} disabled={rankings.length === 0}>
-              Suggest balanced teams
-            </Button>
+            <TextField
+              select size="small" label="Division" sx={{ width: 140 }}
+              value={divisionFilter} onChange={(e) => setDivisionFilter(e.target.value)}
+            >
+              <MenuItem value="all">All divisions</MenuItem>
+              {[...new Set(event.participants.map((p) => p.division).filter(Boolean))].sort().map((d) => (
+                <MenuItem key={d} value={d as string}>{d}</MenuItem>
+              ))}
+            </TextField>
             <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center', ml: 'auto' }}>
               Rankings refresh live while this tab is open. Click a row for the full report card.
             </Typography>
@@ -222,7 +225,7 @@ const EvaluationEventPage = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {rankings.map((r, i) => (
+                {rankings.filter((r) => divisionFilter === 'all' || r.participant.division === divisionFilter).map((r, i) => (
                   <TableRow key={r.participant.id} hover sx={{ cursor: 'pointer' }} onClick={() => setReportFor(r.participant.id)}>
                     <TableCell>{r.overall != null ? i + 1 : '—'}</TableCell>
                     <TableCell>
@@ -257,41 +260,10 @@ const EvaluationEventPage = () => {
           ranking={rankings.find((r) => r.participant.id === reportFor) || null}
           scores={scores}
           onClose={() => setReportFor(null)}
+          onScoresChanged={() => queryClient.invalidateQueries({ queryKey: ['evalScores', id] })}
         />
       )}
 
-      {/* Balanced teams */}
-      <Dialog open={teamsOpen} onClose={() => setTeamsOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <EmojiEventsIcon color="primary" /> Balanced team suggestion
-            <TextField
-              select size="small" sx={{ ml: 'auto', width: 120 }} label="Teams"
-              value={teamCount} onChange={(e) => setTeamCount(Number(e.target.value))}
-            >
-              {[2, 3, 4, 5, 6].map((n) => <MenuItem key={n} value={n}>{n} teams</MenuItem>)}
-            </TextField>
-          </Box>
-        </DialogTitle>
-        <DialogContent dividers>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-            Snake-drafted from the current rankings so talent spreads evenly. A suggestion — not saved anywhere.
-          </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: `repeat(${Math.min(teamCount, 3)}, 1fr)` }, gap: 2 }}>
-            {suggestBalancedTeams(rankings, teamCount).map((team, i) => (
-              <Paper key={i} variant="outlined" sx={{ p: 1.5 }}>
-                <Typography variant="subtitle2" gutterBottom>Team {String.fromCharCode(65 + i)}</Typography>
-                {team.map((r) => (
-                  <Typography key={r.participant.id} variant="body2">
-                    <b>{r.participant.number || '—'}</b> {r.participant.name} {r.overall != null ? `(${r.overall})` : ''}
-                  </Typography>
-                ))}
-              </Paper>
-            ))}
-          </Box>
-        </DialogContent>
-        <DialogActions><Button onClick={() => setTeamsOpen(false)}>Close</Button></DialogActions>
-      </Dialog>
     </Box>
   );
 };
