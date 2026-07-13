@@ -87,3 +87,4 @@ export {
 } from './parentActions';
 export { emailAllParents } from './emailBroadcast';
 export { emailPlayerBilling, emailOutstandingInvoices } from './billingEmails';
+export { getEvalEventByToken, submitEvalScoreByToken } from './evalGuest';

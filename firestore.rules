@@ -138,6 +138,23 @@ service cloud.firestore {
       allow write: if isCoach();
     }
 
+    // EVALUATIONS (templates, events, scores) — coach/admin tooling. Guest
+    // evaluators never touch these directly; they go through the tokened
+    // Cloud Functions (getEvalEventByToken / submitEvalScoreByToken).
+    match /evalTemplates/{docId} {
+      allow read, write: if isCoach();
+    }
+    match /evalEvents/{docId} {
+      allow read, write: if isCoach();
+    }
+    match /evalScores/{docId} {
+      allow read, write: if isCoach();
+    }
+    // Evaluator invite tokens — coach-managed; token lookup happens server-side.
+    match /evalInvites/{docId} {
+      allow read, write: if isCoach();
+    }
+
     // COMMUNICATIONS
     match /communications/{messageId} {
       allow create: if isAdmin();
