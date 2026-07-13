@@ -27,6 +27,7 @@ import { playersApi } from '@/lib/api/players';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import { computeLeagueAge, computeDivision } from '@/lib/utils/leagueAge';
+import { userProvisioningApi } from '@/lib/api/userProvisioning';
 import TryoutSessionsManager from '../components/TryoutSessionsManager';
 import type { Player } from '@/types/models';
 import toast from 'react-hot-toast';
@@ -216,25 +217,71 @@ const ApplicantDialog = ({ applicant, isAdmin, evaluatorId, evaluatorName, onClo
   const convert = useMutation({
     mutationFn: async () => {
       const a = applicant!;
+
+      // Returning player who registered through the parent portal: the player
+      // record already exists — link it instead of creating a duplicate.
+      if (a.playerId) {
+        await tryoutApplicantsApi.updateStatus(a.id, 'converted', a.playerId);
+        return { linked: true };
+      }
+
+      // Carry the tryout evaluations onto the player so they aren't stranded
+      // on the applicant record.
+      const evalSummary = evaluations.length
+        ? ` Tryout evals: ${evaluations
+            .map((e) => `${e.overallRating}/5 by ${e.evaluatorName}${e.notes ? ` (${e.notes})` : ''}`)
+            .join(' | ')}.`
+        : '';
+
       const player: Omit<Player, 'id' | 'createdAt' | 'updatedAt'> = {
         firstName: a.playerFirstName,
         lastName: a.playerLastName,
         dateOfBirth: a.dateOfBirth ? new Date(a.dateOfBirth) : undefined,
         positions: a.positionsInterested ? a.positionsInterested.split(/[,;/]/).map((s) => s.trim()).filter(Boolean) : [],
-        contacts: [],
+        // Populate contacts[] — parent provisioning and most contact flows key
+        // off this array, so leaving it empty orphaned the family downstream.
+        contacts: a.parentName || a.email || a.phone
+          ? [{
+              name: a.parentName || '',
+              relationship: 'Parent/Guardian',
+              email: a.email || '',
+              phone: a.phone || '',
+              isPrimaryContact: true,
+              isFinancialParty: true,
+            }]
+          : [],
         parentName: a.parentName,
         parentEmail: a.email,
         parentPhone: a.phone,
         emergencyContact: '',
         emergencyPhone: '',
-        notes: `From tryout signup. Age group: ${a.ageGroup}. Location: ${a.location}. Experience: ${a.priorExperience}`,
+        notes: `From tryout signup. Age group: ${a.ageGroup}. Location: ${a.location}. Experience: ${a.priorExperience}.${evalSummary}`,
         active: true,
         status: 'active',
       };
       const playerId = await playersApi.create(player);
       await tryoutApplicantsApi.updateStatus(a.id, 'converted', playerId);
+
+      // Stage the parent for an account (pendingUsers) so they show up in
+      // Account Provisioning ready to invite. Best-effort — the conversion
+      // itself already succeeded.
+      try {
+        const created = await playersApi.getById(playerId);
+        if (created) await userProvisioningApi.provisionAllContacts(created);
+      } catch (err) {
+        console.warn('Parent provisioning after convert failed (player created):', err);
+      }
+      return { linked: false };
     },
-    onSuccess: () => { onChanged(); toast.success('Player created from applicant'); onClose(); },
+    onSuccess: (res) => {
+      onChanged();
+      toast.success(
+        res?.linked
+          ? 'Linked to their existing player record'
+          : 'Player created — parent staged for an account invite'
+      );
+      onClose();
+    },
     onError: (err: any) => toast.error(err?.message || 'Failed to convert'),
   });
 
