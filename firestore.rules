@@ -348,7 +348,10 @@ service cloud.firestore {
 
     // APP SETTINGS
     match /appSettings/{docId} {
-      allow read: if isAuth();
+      // The season doc (just non-sensitive season labels) is public so the
+      // unauthenticated tryout registration page can file a signup under the
+      // current tryout season. Everything else requires sign-in.
+      allow read: if isAuth() || docId == 'season';
       allow write: if isAdmin();
     }
 

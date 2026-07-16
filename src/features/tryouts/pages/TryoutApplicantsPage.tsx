@@ -74,6 +74,18 @@ const TryoutApplicantsPage = () => {
     },
     { field: 'ageGroup', headerName: 'Requested', width: 110 },
     {
+      field: 'season',
+      headerName: 'Season',
+      width: 110,
+      valueGetter: (params) => params.row.season || '',
+      renderCell: (params) =>
+        params.value ? (
+          <span>{params.value}</span>
+        ) : (
+          <Chip size="small" label="—" variant="outlined" />
+        ),
+    },
+    {
       field: 'sessionLabel',
       headerName: 'Tryout Date',
       flex: 1,

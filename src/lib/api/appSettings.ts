@@ -37,6 +37,8 @@ export interface NotificationSettings {
 export interface SeasonSettings {
   currentSeason: string;
   seasons: string[];
+  /** Season new tryout registrations are filed under (and prospect matching). */
+  tryoutSeason: string;
 }
 
 /** Strip undefined values from an object before writing to Firestore */
@@ -118,7 +120,11 @@ export const appSettingsApi = {
   getSeason: async (): Promise<SeasonSettings> => {
     const docRef = doc(db, SEASON_DOC);
     const snap = await getDoc(docRef);
-    const defaults: SeasonSettings = { currentSeason: 'Spring 2026', seasons: ['Spring 2026'] };
+    const defaults: SeasonSettings = {
+      currentSeason: 'Spring 2026',
+      seasons: ['Spring 2026', '2026-2027'],
+      tryoutSeason: '2026-2027',
+    };
     return snap.exists() ? { ...defaults, ...(snap.data() as Partial<SeasonSettings>) } : defaults;
   },
 

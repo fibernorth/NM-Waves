@@ -50,6 +50,7 @@ import GCGamesPanel from '@/features/gamechanger/components/GCGamesPanel';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
 import TeamFormDialog from '../components/TeamFormDialog';
+import TeamProspectsSection from '../components/TeamProspectsSection';
 import type { Player } from '@/types/models';
 
 const TeamDetailsPage = () => {
@@ -897,6 +898,9 @@ const TeamDetailsPage = () => {
           </Box>
         )}
       </Paper>
+
+      {/* ===== Tryout Prospects Section ===== */}
+      <TeamProspectsSection team={team} isAdmin={isAdmin} />
 
       {/* ===== GameChanger Widget Section ===== */}
       {team.gcTeamId && (

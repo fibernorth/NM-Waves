@@ -4,6 +4,8 @@ import {
   addDoc,
   getDocs,
   updateDoc,
+  arrayUnion,
+  arrayRemove,
   query,
   where,
   orderBy,
@@ -30,6 +32,8 @@ export interface TryoutApplicantData {
   sessionId?: string; // chosen tryout date (tryoutSessions doc id)
   sessionLabel?: string; // denormalized "Sat, Aug 9 · 9:00 AM · Twin Birch"
   playerId?: string; // set when registered by a parent for an existing player
+  season?: string; // the season this tryout is for, e.g. "2026-2027"
+  prospectTeamIds?: string[]; // teams this applicant is a prospect for
 }
 
 export interface TryoutApplicant extends TryoutApplicantData {
@@ -67,6 +71,8 @@ const convertApplicant = (id: string, data: any): TryoutApplicant => ({
   sessionId: data.sessionId || undefined,
   sessionLabel: data.sessionLabel || undefined,
   playerId: data.playerId || undefined,
+  season: data.season || '',
+  prospectTeamIds: Array.isArray(data.prospectTeamIds) ? data.prospectTeamIds : [],
   status: data.status || 'new',
   submittedAt: data.submittedAt?.toDate?.() || new Date(),
   convertedPlayerId: data.convertedPlayerId,
@@ -113,6 +119,33 @@ export const tryoutApplicantsApi = {
     const q = query(collection(db, COLLECTION), orderBy('submittedAt', 'desc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => convertApplicant(d.id, d.data()));
+  },
+
+  /**
+   * Coach/admin: applicants who are prospects for a given team. Single-field
+   * array-contains query (no composite index needed); newest first.
+   */
+  getProspectsForTeam: async (teamId: string): Promise<TryoutApplicant[]> => {
+    const q = query(collection(db, COLLECTION), where('prospectTeamIds', 'array-contains', teamId));
+    const snap = await getDocs(q);
+    return snap.docs
+      .map((d) => convertApplicant(d.id, d.data()))
+      .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+  },
+
+  /** Replace the full set of prospect teams for an applicant. */
+  setProspectTeams: async (id: string, teamIds: string[]): Promise<void> => {
+    await updateDoc(doc(db, COLLECTION, id), { prospectTeamIds: teamIds });
+  },
+
+  /** Add a single team to an applicant's prospect list (idempotent). */
+  addProspectTeam: async (id: string, teamId: string): Promise<void> => {
+    await updateDoc(doc(db, COLLECTION, id), { prospectTeamIds: arrayUnion(teamId) });
+  },
+
+  /** Remove a single team from an applicant's prospect list. */
+  removeProspectTeam: async (id: string, teamId: string): Promise<void> => {
+    await updateDoc(doc(db, COLLECTION, id), { prospectTeamIds: arrayRemove(teamId) });
   },
 
   /**

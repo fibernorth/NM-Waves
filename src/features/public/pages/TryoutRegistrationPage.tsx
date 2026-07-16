@@ -17,7 +17,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQuery } from '@tanstack/react-query';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { tryoutApplicantsApi } from '@/lib/api/tryoutApplicants';
+import { createTryoutRegistration } from '@/lib/api/prospectAssignment';
 import { tryoutSessionsApi, sessionLabel } from '@/lib/api/tryoutSessions';
 import { format } from 'date-fns';
 
@@ -90,7 +90,7 @@ const TryoutRegistrationPage = () => {
 
     try {
       const chosen = sessions.find((s) => s.id === sessionId);
-      await tryoutApplicantsApi.create({
+      await createTryoutRegistration({
         playerFirstName: data.playerFirstName.trim(),
         playerLastName: data.playerLastName.trim(),
         dateOfBirth: data.dateOfBirth,

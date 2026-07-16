@@ -90,9 +90,24 @@ const TeamFormDialog = ({ open, onClose, team }: TeamFormDialogProps) => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: TeamFormData) => teamsApi.update(team!.id, data),
+    mutationFn: async (data: TeamFormData) => {
+      // If the division or season changed, the pool of eligible prospects
+      // changed too — re-run the additive sync so newly matching applicants
+      // attach. (Never fails the save.)
+      const matchChanged =
+        !!team && (team.ageGroup !== data.ageGroup || team.season !== data.season);
+      await teamsApi.update(team!.id, data);
+      if (matchChanged) {
+        try {
+          await teamsApi.syncProspects(team!.id);
+        } catch (err) {
+          console.warn('Prospect re-sync after team edit failed:', err);
+        }
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teams'] });
+      queryClient.invalidateQueries({ queryKey: ['teamProspects'] });
       toast.success('Team updated successfully');
       onClose();
     },

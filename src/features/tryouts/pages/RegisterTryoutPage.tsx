@@ -25,6 +25,7 @@ import PlaceIcon from '@mui/icons-material/Place';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { playersApi } from '@/lib/api/players';
 import { tryoutApplicantsApi, type TryoutApplicantData, type TryoutApplicant } from '@/lib/api/tryoutApplicants';
+import { createTryoutRegistration } from '@/lib/api/prospectAssignment';
 import { tryoutSessionsApi, sessionLabel, type TryoutSession } from '@/lib/api/tryoutSessions';
 import { computeDivision } from '@/lib/utils/leagueAge';
 import { useAuthStore } from '@/stores/authStore';
@@ -133,7 +134,7 @@ const RegisterTryoutPage = () => {
       if (editingId) {
         await tryoutApplicantsApi.updateDetails(editingId, form!);
       } else {
-        await tryoutApplicantsApi.create(form!);
+        await createTryoutRegistration(form!);
       }
     },
     onSuccess: () => {
