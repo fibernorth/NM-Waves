@@ -99,12 +99,19 @@ exports.updateLinkedPlayerContact = functions.https.onCall(async (data, context)
  * roster dump — no DOB, medical notes, contacts, or emails cross the wire.
  * Email matching is done server-side against the caller's own auth email.
  */
+/** Last-10-digits phone comparison, tolerant of formatting. */
+const phoneDigits = (v) => (v || '').replace(/\D/g, '').slice(-10);
+/** Does this player already have a parent/guardian attached? */
+const playerHasParent = (p) => !!(p.parentEmail && String(p.parentEmail).trim()) ||
+    (Array.isArray(p.contacts) && p.contacts.some((c) => (c.email || '').trim() || (c.phone || '').trim())) ||
+    (Array.isArray(p.linkedUserIds) && p.linkedUserIds.length > 0);
 exports.searchLinkablePlayers = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
     }
     const callerEmail = (context.auth.token.email || '').toLowerCase();
     const search = ((data === null || data === void 0 ? void 0 : data.search) || '').toLowerCase().trim();
+    const callerPhone = phoneDigits(data === null || data === void 0 ? void 0 : data.phone);
     const snapshot = await getDb()
         .collection('players')
         .where('active', '==', true)
@@ -115,18 +122,29 @@ exports.searchLinkablePlayers = functions.https.onCall(async (data, context) => 
         const emailMatch = !!callerEmail &&
             ((p.parentEmail || '').toLowerCase() === callerEmail ||
                 (p.contacts || []).some((c) => (c.email || '').toLowerCase() === callerEmail));
+        // Phone match against parent/contact phones (server-verified value the
+        // parent typed — only actioned for players with no parent yet).
+        const phoneMatch = callerPhone.length === 10 &&
+            (phoneDigits(p.parentPhone) === callerPhone ||
+                (p.contacts || []).some((c) => phoneDigits(c.phone) === callerPhone));
+        const hasParent = playerHasParent(p);
         return {
             id: doc.id,
             firstName: p.firstName || '',
             lastName: p.lastName || '',
             teamName: p.teamName || '',
             emailMatch,
+            phoneMatch: phoneMatch && !emailMatch,
+            // A player with no parent yet can be claimed (writes the parent on).
+            claimable: !hasParent,
             _name: `${p.firstName || ''} ${p.lastName || ''}`.toLowerCase(),
         };
     })
-        // Return email-matched players always; otherwise only when a search term
-        // is given, to avoid dumping the full roster to any authenticated user.
-        .filter((p) => p.emailMatch || (search.length >= 2 && p._name.includes(search)))
+        // Always surface email/phone matches. Otherwise only on a 2+ char name
+        // search, and unclaimed players are prioritized in the UI.
+        .filter((p) => p.emailMatch ||
+        p.phoneMatch ||
+        (search.length >= 2 && p._name.includes(search)))
         .map(({ _name, ...rest }) => rest);
     return { players: results };
 });
@@ -147,7 +165,9 @@ exports.linkChild = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('invalid-argument', 'playerId is required');
     }
     const callerEmail = (context.auth.token.email || '').toLowerCase();
-    const playerDoc = await getDb().collection('players').doc(playerId).get();
+    const callerPhone = phoneDigits(data === null || data === void 0 ? void 0 : data.phone);
+    const playerRef = getDb().collection('players').doc(playerId);
+    const playerDoc = await playerRef.get();
     if (!playerDoc.exists) {
         throw new functions.https.HttpsError('not-found', 'Player not found');
     }
@@ -155,8 +175,58 @@ exports.linkChild = functions.https.onCall(async (data, context) => {
     const emailMatch = !!callerEmail &&
         ((p.parentEmail || '').toLowerCase() === callerEmail ||
             (p.contacts || []).some((c) => (c.email || '').toLowerCase() === callerEmail));
-    if (!emailMatch) {
+    // Phone claim is only allowed for players with no parent attached yet, and
+    // only when the parent's typed phone matches a number already on the player
+    // record. This lets a family self-attach without an admin, while a player
+    // that already has a guardian can never be claimed by phone.
+    const hasParent = playerHasParent(p);
+    const phoneClaim = !emailMatch &&
+        !hasParent &&
+        callerPhone.length === 10 &&
+        (phoneDigits(p.parentPhone) === callerPhone ||
+            (p.contacts || []).some((c) => phoneDigits(c.phone) === callerPhone));
+    if (!emailMatch && !phoneClaim) {
         throw new functions.https.HttpsError('permission-denied', "We couldn't verify this player belongs to you. Please ask your club administrator to link your account.");
+    }
+    // On a phone claim, write the parent's contact details onto the player so
+    // the family is properly attached (name/email/phone), mirroring what an
+    // admin link would produce. Never overwrite an existing parent.
+    if (phoneClaim) {
+        const parentName = (data.parentName || context.auth.token.name || '').trim();
+        const parentEmail = (data.parentEmail || callerEmail || '').trim().toLowerCase();
+        const parentPhone = data.phone || '';
+        const playerUpdate = {
+            updatedAt: admin.firestore.Timestamp.now(),
+        };
+        if (!p.parentName && parentName)
+            playerUpdate.parentName = parentName;
+        if (!p.parentEmail && parentEmail)
+            playerUpdate.parentEmail = parentEmail;
+        if (!p.parentPhone && parentPhone)
+            playerUpdate.parentPhone = parentPhone;
+        const contacts = Array.isArray(p.contacts) ? [...p.contacts] : [];
+        const alreadyListed = contacts.some((c) => (parentEmail && (c.email || '').toLowerCase() === parentEmail) ||
+            (callerPhone && phoneDigits(c.phone) === callerPhone));
+        if (!alreadyListed && (parentName || parentEmail || parentPhone)) {
+            contacts.push({
+                name: parentName,
+                relationship: 'Parent/Guardian',
+                email: parentEmail,
+                phone: parentPhone,
+                isPrimaryContact: contacts.length === 0,
+                isFinancialParty: contacts.length === 0,
+            });
+        }
+        playerUpdate.contacts = contacts;
+        playerUpdate.linkedUserIds = admin.firestore.FieldValue.arrayUnion(context.auth.uid);
+        await playerRef.update(playerUpdate);
+    }
+    else {
+        // Email match: still record the link on the player side for consistency.
+        await playerRef.update({
+            linkedUserIds: admin.firestore.FieldValue.arrayUnion(context.auth.uid),
+            updatedAt: admin.firestore.Timestamp.now(),
+        });
     }
     await getDb()
         .collection('users')
@@ -165,7 +235,7 @@ exports.linkChild = functions.https.onCall(async (data, context) => {
         linkedPlayerIds: admin.firestore.FieldValue.arrayUnion(playerId),
         updatedAt: admin.firestore.Timestamp.now(),
     });
-    return { success: true };
+    return { success: true, method: phoneClaim ? 'phone' : 'email' };
 });
 /**
  * Returns a MINIMAL finance summary (name, team, season, balance due) for a

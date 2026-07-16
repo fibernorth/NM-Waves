@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -16,7 +16,7 @@ import {
   CircularProgress,
   Skeleton,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
@@ -75,6 +75,7 @@ const eventTypeIcons: Record<string, JSX.Element> = {
 
 const DashboardPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
   const isParent = checkIsParent(user);
@@ -84,6 +85,16 @@ const DashboardPage = () => {
 
   const [linkChildOpen, setLinkChildOpen] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+
+  // A fresh parent signup lands here with ?link=1 — auto-open the link dialog
+  // so they immediately attach their child by email or phone, then clean the URL.
+  useEffect(() => {
+    if (searchParams.get('link') === '1') {
+      setLinkChildOpen(true);
+      searchParams.delete('link');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const linkedPlayerIds = user?.linkedPlayerIds || [];
   const coachTeamIds = user?.teamIds || [];

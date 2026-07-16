@@ -54,7 +54,8 @@ const SignupPage = () => {
       if (returnTo && returnTo.startsWith('/')) {
         navigate(returnTo);
       } else {
-        navigate('/dashboard');
+        // Send new parents straight into linking their child (by email or phone).
+        navigate('/dashboard?link=1');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to create account');

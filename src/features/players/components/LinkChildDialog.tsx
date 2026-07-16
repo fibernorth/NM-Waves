@@ -16,9 +16,11 @@ import {
   CircularProgress,
   Divider,
   Alert,
+  InputAdornment,
 } from '@mui/material';
 import LinkIcon from '@mui/icons-material/Link';
 import SearchIcon from '@mui/icons-material/Search';
+import PhoneIcon from '@mui/icons-material/Phone';
 import { useQuery } from '@tanstack/react-query';
 import { searchLinkablePlayers, linkChild, type LinkablePlayer } from '@/lib/api/parentActions';
 import { useAuthStore } from '@/stores/authStore';
@@ -29,31 +31,54 @@ interface LinkChildDialogProps {
   onClose: () => void;
 }
 
+/** Keep only the last 10 digits — used to decide when a phone is "complete". */
+const phoneDigits = (v: string) => v.replace(/\D/g, '').slice(-10);
+
 const LinkChildDialog = ({ open, onClose }: LinkChildDialogProps) => {
   const { user, refreshUser } = useAuthStore();
   const [search, setSearch] = useState('');
+  const [phone, setPhone] = useState('');
   const [linking, setLinking] = useState(false);
 
+  const phoneComplete = phoneDigits(phone).length === 10;
+
   // Search via Cloud Function — returns only non-sensitive fields (no DOB,
-  // medical notes, contacts, or emails). Email-matched children are always
-  // returned; other players appear only when a 2+ char search is entered.
+  // medical notes, contacts, or emails). Email- and phone-matched children are
+  // always returned; other players appear only when a 2+ char search is entered.
   const { data: linkable = [], isLoading } = useQuery({
-    queryKey: ['linkablePlayers', search],
-    queryFn: () => searchLinkablePlayers(search),
+    queryKey: ['linkablePlayers', search, phoneComplete ? phoneDigits(phone) : ''],
+    queryFn: () => searchLinkablePlayers(search, phoneComplete ? phone : undefined),
     enabled: open,
   });
 
   const alreadyLinked = user?.linkedPlayerIds || [];
   const available = linkable.filter(p => !alreadyLinked.includes(p.id));
   const emailMatches = available.filter(p => p.emailMatch);
+  const phoneMatches = available.filter(p => p.phoneMatch && p.claimable);
   const searchLower = search.toLowerCase().trim();
-  const searchResults = available.filter(p => !p.emailMatch);
+  const searchResults = available.filter(p => !p.emailMatch && !(p.phoneMatch && p.claimable));
 
   const handleLink = async (player: LinkablePlayer) => {
     if (!user) return;
+    // A player with no parent yet + phone match → claim by phone (writes the
+    // parent's details onto the player). Email matches link straight through.
+    const claimByPhone = !player.emailMatch && player.phoneMatch && player.claimable;
+    if (claimByPhone && !phoneComplete) {
+      toast.error('Enter your full phone number to claim this player.');
+      return;
+    }
     setLinking(true);
     try {
-      await linkChild(player.id);
+      await linkChild(
+        claimByPhone
+          ? {
+              playerId: player.id,
+              phone,
+              parentName: user.displayName || '',
+              parentEmail: user.email || '',
+            }
+          : player.id
+      );
       await refreshUser();
       toast.success(`Linked ${player.firstName} ${player.lastName} to your account`);
       onClose();
@@ -66,18 +91,21 @@ const LinkChildDialog = ({ open, onClose }: LinkChildDialogProps) => {
     }
   };
 
-  const renderPlayerItem = (player: LinkablePlayer, showBadge?: boolean) => (
+  const renderPlayerItem = (
+    player: LinkablePlayer,
+    badge?: 'email' | 'phone'
+  ) => (
     <ListItem key={player.id} disablePadding>
-      <ListItemButton
-        onClick={() => handleLink(player)}
-        disabled={linking}
-      >
+      <ListItemButton onClick={() => handleLink(player)} disabled={linking}>
         <ListItemText
           primary={
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {player.firstName} {player.lastName}
-              {showBadge && (
+              {badge === 'email' && (
                 <Chip label="Email match" size="small" color="success" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />
+              )}
+              {badge === 'phone' && (
+                <Chip label="Phone match" size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />
               )}
             </Box>
           }
@@ -94,6 +122,32 @@ const LinkChildDialog = ({ open, onClose }: LinkChildDialogProps) => {
         Link a Child
       </DialogTitle>
       <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          We'll match your child automatically by the email on your account. If your
+          child was registered with your phone number, enter it below to find and claim them.
+        </Typography>
+
+        <TextField
+          label="Your phone number"
+          placeholder="(231) 555-0123"
+          variant="outlined"
+          size="small"
+          fullWidth
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          sx={{ mb: 2 }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <PhoneIcon color="action" fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+          helperText={
+            phone && !phoneComplete ? 'Enter a full 10-digit phone number' : ' '
+          }
+        />
+
         {isLoading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress />
@@ -106,7 +160,19 @@ const LinkChildDialog = ({ open, onClose }: LinkChildDialogProps) => {
                   Suggested (email matches your account)
                 </Typography>
                 <List dense disablePadding>
-                  {emailMatches.map(p => renderPlayerItem(p, true))}
+                  {emailMatches.map(p => renderPlayerItem(p, 'email'))}
+                </List>
+                <Divider sx={{ mt: 1 }} />
+              </Box>
+            )}
+
+            {phoneMatches.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                  Matches your phone number
+                </Typography>
+                <List dense disablePadding>
+                  {phoneMatches.map(p => renderPlayerItem(p, 'phone'))}
                 </List>
                 <Divider sx={{ mt: 1 }} />
               </Box>
@@ -121,13 +187,13 @@ const LinkChildDialog = ({ open, onClose }: LinkChildDialogProps) => {
                 fullWidth
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                autoFocus={emailMatches.length === 0}
               />
             </Box>
 
             {searchLower && searchResults.length === 0 && (
               <Alert severity="info" sx={{ mt: 1 }}>
-                No matching players found.
+                No matching players found. If you don't see your child, ask your club
+                administrator to link your account.
               </Alert>
             )}
 
