@@ -23,6 +23,7 @@ import { DataGrid, GridColDef, GridToolbar } from '@mui/x-data-grid';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tryoutApplicantsApi, type TryoutApplicant, type TryoutStatus } from '@/lib/api/tryoutApplicants';
+import ProspectSkillTracker from '../components/ProspectSkillTracker';
 import { playersApi } from '@/lib/api/players';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
@@ -331,7 +332,9 @@ const ApplicantDialog = ({ applicant, isAdmin, evaluatorId, evaluatorName, onClo
           <Info label="Experience" value={applicant.priorExperience || '—'} full />
         </Grid>
 
-        <Divider sx={{ my: 2 }}><Typography variant="overline">Evaluations</Typography></Divider>
+        <ProspectSkillTracker applicant={applicant} evaluatorId={evaluatorId} />
+
+        <Divider sx={{ my: 2 }}><Typography variant="overline">Quick tryout-day rating</Typography></Divider>
         {evalsLoading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={24} /></Box>
         ) : evaluations.length === 0 ? (

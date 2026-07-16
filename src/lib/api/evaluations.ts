@@ -82,6 +82,7 @@ export interface EvalEvent {
   categories: EvalCategory[]; // snapshot — template edits never corrupt history
   stations: EvalStation[];
   participants: EvalParticipant[];
+  season?: string; // tryout events are tied to a season for auto-linking
   createdBy: string;
   createdAt: Date;
 }
@@ -226,6 +227,7 @@ const convertEvent = (id: string, d: any): EvalEvent => ({
   categories: d.categories || [],
   stations: d.stations || [],
   participants: d.participants || [],
+  season: d.season || undefined,
   createdBy: d.createdBy || '',
   createdAt: d.createdAt?.toDate?.() || new Date(),
 });
@@ -295,6 +297,69 @@ export const evalEventsApi = {
     await updateDoc(doc(db, 'evalEvents', id), cleanData(patch as any));
   },
   remove: async (id: string): Promise<void> => deleteDoc(doc(db, 'evalEvents', id)),
+
+  /**
+   * The skill-tracker event that gathers a season's tryout ratings. Reuses an
+   * open/draft tryout event tagged with the season (or named for it); otherwise
+   * creates one from the default softball template so tryout day has a place to
+   * score. Report cards and progress accrue against this single event.
+   */
+  getOrCreateTryoutEvent: async (season: string, createdBy: string): Promise<EvalEvent> => {
+    const all = await evalEventsApi.getAll();
+    const match = all.find(
+      (e) =>
+        e.type === 'tryout' &&
+        e.status !== 'closed' &&
+        (e.season === season || (!e.season && e.name.includes(season)))
+    );
+    if (match) return match;
+
+    const { name: templateName, categories } = instantiateTemplate(SOFTBALL_TEMPLATE);
+    const stations = stationsFromCategories(categories);
+    const id = await evalEventsApi.create({
+      name: `Tryouts ${season}`,
+      date: new Date(),
+      type: 'tryout',
+      status: 'open',
+      templateName,
+      categories,
+      stations,
+      participants: [],
+      season,
+      createdBy,
+    });
+    const created = await evalEventsApi.getById(id);
+    if (!created) throw new Error('Failed to create tryout evaluation event');
+    return created;
+  },
+
+  /**
+   * Ensure a tryout applicant is a participant in an event (matched by
+   * applicantId), appending them with the next pinnie number if needed. Returns
+   * the event and the participant id to score against.
+   */
+  ensureApplicantParticipant: async (
+    event: EvalEvent,
+    applicant: { id: string; playerFirstName: string; playerLastName: string; playerId?: string; division?: string }
+  ): Promise<{ event: EvalEvent; participantId: string }> => {
+    const existing = event.participants.find((p) => p.applicantId === applicant.id);
+    if (existing) return { event, participantId: existing.id };
+
+    const next =
+      Math.max(0, ...event.participants.map((p) => parseInt(p.number, 10) || 0)) + 1;
+    const participant: EvalParticipant = {
+      id: uuid(),
+      name: `${applicant.playerFirstName} ${applicant.playerLastName}`.trim(),
+      number: String(next),
+      division: applicant.division,
+      checkedIn: false,
+      applicantId: applicant.id,
+      playerId: applicant.playerId,
+    };
+    const participants = [...event.participants, participant];
+    await evalEventsApi.update(event.id, { participants });
+    return { event: { ...event, participants }, participantId: participant.id };
+  },
 };
 
 export const evalInvitesApi = {
