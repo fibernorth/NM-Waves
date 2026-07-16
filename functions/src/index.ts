@@ -84,6 +84,7 @@ export {
   getPlayerFinanceSummary,
   searchLinkablePlayers,
   linkChild,
+  syncLinkedParentTeams,
 } from './parentActions';
 export { emailAllParents } from './emailBroadcast';
 export { emailPlayerBilling, emailOutstandingInvoices } from './billingEmails';

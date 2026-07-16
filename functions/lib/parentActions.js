@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPlayerFinanceSummary = exports.linkChild = exports.searchLinkablePlayers = exports.updateLinkedPlayerContact = void 0;
+exports.getPlayerFinanceSummary = exports.syncLinkedParentTeams = exports.linkChild = exports.searchLinkablePlayers = exports.updateLinkedPlayerContact = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const getDb = () => admin.firestore();
@@ -228,14 +228,63 @@ exports.linkChild = functions.https.onCall(async (data, context) => {
             updatedAt: admin.firestore.Timestamp.now(),
         });
     }
-    await getDb()
-        .collection('users')
-        .doc(context.auth.uid)
-        .update({
+    // Attach the parent to the child's team as well, so team-scoped surfaces
+    // (schedule, roster, team communications) include them. teamIds only grants
+    // access when paired with a coach/admin role, so this never escalates a
+    // parent — it just records the association.
+    const userUpdate = {
         linkedPlayerIds: admin.firestore.FieldValue.arrayUnion(playerId),
         updatedAt: admin.firestore.Timestamp.now(),
-    });
+    };
+    if (p.teamId) {
+        userUpdate.teamIds = admin.firestore.FieldValue.arrayUnion(p.teamId);
+    }
+    await getDb().collection('users').doc(context.auth.uid).update(userUpdate);
     return { success: true, method: phoneClaim ? 'phone' : 'email' };
+});
+/**
+ * Add a player's current team to every linked parent's teamIds, so a parent
+ * stays "on" their child's team even when the child is placed (or moved) AFTER
+ * the parent linked. Callable by coaches/admins from the placement flow. Uses
+ * the Admin SDK, so it can update the parents' user docs (which coaches cannot
+ * write directly), and is idempotent via arrayUnion. teamIds only confers
+ * access alongside a coach/admin role, so this never escalates a parent.
+ */
+exports.syncLinkedParentTeams = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+    }
+    const callerDoc = await getDb().collection('users').doc(context.auth.uid).get();
+    const callerRoles = callerDoc.exists
+        ? callerDoc.data().roles || (callerDoc.data().role ? [callerDoc.data().role] : [])
+        : [];
+    const isCoachOrAdmin = callerRoles.some((r) => ['coach', 'admin', 'master-admin'].includes(r));
+    if (!isCoachOrAdmin) {
+        throw new functions.https.HttpsError('permission-denied', 'Coach or admin only');
+    }
+    const { playerId } = data;
+    if (!playerId) {
+        throw new functions.https.HttpsError('invalid-argument', 'playerId is required');
+    }
+    const playerDoc = await getDb().collection('players').doc(playerId).get();
+    if (!playerDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'Player not found');
+    }
+    const p = playerDoc.data();
+    const teamId = p.teamId || '';
+    const linkedUserIds = Array.isArray(p.linkedUserIds) ? p.linkedUserIds : [];
+    if (!teamId || linkedUserIds.length === 0) {
+        return { updated: 0 };
+    }
+    const batch = getDb().batch();
+    for (const uid of linkedUserIds) {
+        batch.update(getDb().collection('users').doc(uid), {
+            teamIds: admin.firestore.FieldValue.arrayUnion(teamId),
+            updatedAt: admin.firestore.Timestamp.now(),
+        });
+    }
+    await batch.commit();
+    return { updated: linkedUserIds.length };
 });
 /**
  * Returns a MINIMAL finance summary (name, team, season, balance due) for a

@@ -81,3 +81,16 @@ export const linkChild = async (input: string | LinkChildInput): Promise<void> =
   );
   await callable(payload);
 };
+
+/**
+ * Add a player's current team to every linked parent's teamIds. Called from the
+ * placement flow so parents stay attached to their child's team even when the
+ * child is placed or moved after the parent linked. Coach/admin only; idempotent.
+ */
+export const syncLinkedParentTeams = async (playerId: string): Promise<void> => {
+  const callable = httpsCallable<{ playerId: string }, { updated: number }>(
+    functions,
+    'syncLinkedParentTeams'
+  );
+  await callable({ playerId });
+};
