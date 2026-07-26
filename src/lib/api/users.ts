@@ -13,7 +13,8 @@ import {
 } from 'firebase/firestore';
 import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
-import { db } from '@/lib/firebase/config';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '@/lib/firebase/config';
 import type { User, UserRole } from '@/types/models';
 
 const COLLECTION = 'users';
@@ -80,6 +81,24 @@ export const usersApi = {
       ...userData,
       updatedAt: Timestamp.now(),
     }));
+  },
+
+  /**
+   * Admin-only: change a user's login email and/or set a new password. Runs
+   * through a Cloud Function because these are Firebase Auth operations. The
+   * function keeps the Firestore `email` mirror in sync and refuses to reset an
+   * admin/master-admin password.
+   */
+  updateAuth: async (
+    uid: string,
+    changes: { email?: string; password?: string }
+  ): Promise<{ emailChanged: boolean; passwordChanged: boolean }> => {
+    const callable = httpsCallable<
+      { uid: string; email?: string; password?: string },
+      { success: boolean; emailChanged: boolean; passwordChanged: boolean }
+    >(functions, 'adminUpdateUserAuth');
+    const res = await callable({ uid, ...changes });
+    return { emailChanged: !!res.data?.emailChanged, passwordChanged: !!res.data?.passwordChanged };
   },
 
   // Create a new user (auth account + Firestore doc)
