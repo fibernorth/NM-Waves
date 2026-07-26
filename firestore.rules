@@ -91,7 +91,11 @@ service cloud.firestore {
     // via provisioning; it can never be self-assigned at signup. This closes the
     // escalation where anyone could register as 'coach' and gain roster/PII access.
     match /users/{userId} {
-      allow read: if isAuth();
+      // Adult PII (emails, phones, links). A signed-in user may read only their
+      // OWN doc; coaches/admins may read the directory (roster/provisioning/
+      // user management). This closes the leak where any account — including a
+      // fresh self-signup parent — could read every user's contact details.
+      allow read: if isAuth() && (isUser(userId) || isCoach());
       allow create: if isAdmin() || (
         isAuth() && request.auth.uid == userId &&
         (!('roles' in request.resource.data) || request.resource.data.roles == ['parent']) &&
@@ -181,7 +185,14 @@ service cloud.firestore {
 
     // SPONSORS
     match /sponsors/{docId} {
-      allow read: if true;
+      // Sponsor docs carry contact email + donation history. Only sponsors who
+      // opted into public display are anonymously readable; admins and the
+      // owning sponsor can always read. (Field-level projection for the public
+      // page — hiding email/contributions on displayed sponsors — is a
+      // follow-up via a sanitizing Cloud Function.)
+      allow read: if ('displayOnPublicSite' in resource.data && resource.data.displayOnPublicSite == true)
+                  || isAdmin()
+                  || (isSponsor() && resource.data.userId == request.auth.uid);
       // Only admins and sponsor-role users can create; webhook creates via Admin SDK
       allow create: if isAdmin() || isSponsor();
       allow update: if isAdmin() || (isSponsor() && resource.data.userId == request.auth.uid);

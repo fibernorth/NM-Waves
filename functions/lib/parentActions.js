@@ -297,6 +297,15 @@ exports.getPlayerFinanceSummary = functions.https.onCall(async (data, context) =
     if (!context.auth) {
         throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
     }
+    // Sponsor "pay a player" flow only — restrict to sponsors/coaches/admins so
+    // an arbitrary account can't enumerate every player's name + balance.
+    const callerDoc = await getDb().collection('users').doc(context.auth.uid).get();
+    const callerRoles = callerDoc.exists
+        ? callerDoc.data().roles || (callerDoc.data().role ? [callerDoc.data().role] : [])
+        : [];
+    if (!callerRoles.some((r) => ['sponsor', 'coach', 'admin', 'master-admin'].includes(r))) {
+        throw new functions.https.HttpsError('permission-denied', 'Not authorized');
+    }
     const { playerId } = data;
     if (!playerId) {
         throw new functions.https.HttpsError('invalid-argument', 'playerId is required');

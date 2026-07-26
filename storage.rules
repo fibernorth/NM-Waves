@@ -7,6 +7,17 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    // Block content types that execute inline when served from Storage
+    // (HTML / SVG / XML) to prevent stored-XSS via uploaded "documents".
+    function safeDocType(ct) {
+      return ct != null
+             && !ct.matches('(?i)text/html.*')
+             && ct != 'image/svg+xml'
+             && !ct.matches('(?i).*xhtml.*')
+             && !ct.matches('(?i)application/xml.*')
+             && !ct.matches('(?i)text/xml.*');
+    }
+
     // Media uploads - authenticated users can upload images/videos
     match /media/{allPaths=**} {
       allow read: if true;
@@ -15,18 +26,29 @@ service firebase.storage {
                    && request.resource.contentType.matches('image/.*|video/.*');
     }
 
-    // Player documents - coaches+ can upload
+    // Player documents. Two path prefixes are in use: the older `players/…`
+    // and `player-documents/…` written by the player-documents feature — the
+    // latter previously matched no rule and fell through to deny, so every
+    // birth-certificate / medical / waiver upload and download was blocked.
     match /players/{allPaths=**} {
       allow read: if isAuth();
       allow write: if isAuth()
-                   && request.resource.size < 20 * 1024 * 1024;
+                   && request.resource.size < 20 * 1024 * 1024
+                   && safeDocType(request.resource.contentType);
+    }
+    match /player-documents/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isAuth()
+                   && request.resource.size < 20 * 1024 * 1024
+                   && safeDocType(request.resource.contentType);
     }
 
     // Organization documents
     match /documents/{allPaths=**} {
       allow read: if isAuth();
       allow write: if isAuth()
-                   && request.resource.size < 20 * 1024 * 1024;
+                   && request.resource.size < 20 * 1024 * 1024
+                   && safeDocType(request.resource.contentType);
     }
 
     // Homepage post images
@@ -46,11 +68,14 @@ service firebase.storage {
     }
 
     // Guest evaluator media — evaluators upload via their invite link without
-    // an account, so the unguessable token UUID in the path is the credential.
-    // Size/type limited; reads are public (URLs surface in coach report cards).
+    // an account. Storage rules cannot read Firestore to validate the token,
+    // so this write is still open to anyone who knows/guesses the path shape;
+    // cap lowered to limit abuse. FOLLOW-UP: move guest uploads behind a
+    // token-validated signed upload URL (issued by a callable) and set this to
+    // `allow write: if false`. Reads stay public (URLs surface in report cards).
     match /evalMedia/{token}/{allPaths=**} {
       allow read: if true;
-      allow write: if request.resource.size < 100 * 1024 * 1024
+      allow write: if request.resource.size < 25 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*|video/.*');
     }
 

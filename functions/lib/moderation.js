@@ -77,7 +77,8 @@ async function runModeration(snap, mediaId) {
         };
         const FLAGGED_LEVELS = ['LIKELY', 'VERY_LIKELY'];
         const isRejected = FLAGGED_LEVELS.includes(labels.adult) ||
-            FLAGGED_LEVELS.includes(labels.violence);
+            FLAGGED_LEVELS.includes(labels.violence) ||
+            FLAGGED_LEVELS.includes(labels.racy);
         const moderationStatus = isRejected ? 'rejected' : 'approved';
         await snap.ref.update({
             moderationStatus,
@@ -102,10 +103,24 @@ async function runModeration(snap, mediaId) {
     }
     catch (error) {
         console.error(`Moderation error for ${mediaId}:`, error);
-        // On error, default to pending_review so admins are aware
+        // Fail SAFE: if we couldn't scan the image, mark it 'rejected' so it is
+        // hidden from the public gallery (which only excludes 'rejected'), and
+        // notify admins to review/approve. Previously this wrote 'pending_review',
+        // a value no UI handles, so un-scanned images were shown to everyone.
         await snap.ref.update({
-            moderationStatus: 'pending_review',
+            moderationStatus: 'rejected',
+            moderationError: true,
             moderationReviewedAt: admin.firestore.Timestamp.now(),
+        });
+        await getDb().collection('adminNotifications').add({
+            type: 'content_moderation',
+            mediaId,
+            fileName: data.fileName || '',
+            uploadedBy: data.uploadedBy || '',
+            uploadedByName: data.uploadedByName || '',
+            message: `Image "${data.fileName || mediaId}" could not be auto-scanned and was hidden pending your review.`,
+            read: false,
+            createdAt: admin.firestore.Timestamp.now(),
         });
     }
 }
