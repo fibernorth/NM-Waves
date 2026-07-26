@@ -126,16 +126,21 @@ export const searchLinkablePlayers = functions.https.onCall(
           (phoneDigits(p.parentPhone) === callerPhone ||
             (p.contacts || []).some((c: any) => phoneDigits(c.phone) === callerPhone));
         const hasParent = playerHasParent(p);
+        const isMine = emailMatch || phoneMatch;
+        const fullLast = p.lastName || '';
         return {
           id: doc.id,
           firstName: p.firstName || '',
-          lastName: p.lastName || '',
+          // Full last name is revealed ONLY for the caller's own email/phone
+          // matches; for everyone else it's reduced to an initial so the search
+          // can't be used to harvest a full roster of minors' names.
+          lastName: isMine ? fullLast : (fullLast ? `${fullLast[0]}.` : ''),
           teamName: p.teamName || '',
           emailMatch,
           phoneMatch: phoneMatch && !emailMatch,
           // A player with no parent yet can be claimed (writes the parent on).
           claimable: !hasParent,
-          _name: `${p.firstName || ''} ${p.lastName || ''}`.toLowerCase(),
+          _name: `${p.firstName || ''} ${fullLast}`.toLowerCase(),
         };
       })
       // Always surface email/phone matches. Otherwise only on a 2+ char name
@@ -148,7 +153,11 @@ export const searchLinkablePlayers = functions.https.onCall(
       )
       .map(({ _name, ...rest }) => rest);
 
-    return { players: results };
+    // Cap unrelated name-search results so the endpoint can't be paged through
+    // to enumerate the whole roster; own matches are always kept.
+    const mine = results.filter((p) => p.emailMatch || p.phoneMatch);
+    const others = results.filter((p) => !p.emailMatch && !p.phoneMatch).slice(0, 25);
+    return { players: [...mine, ...others] };
   }
 );
 
