@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -11,7 +11,11 @@ import {
   Box,
   Typography,
   Autocomplete,
+  InputAdornment,
+  IconButton,
 } from '@mui/material';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,6 +23,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { usersApi } from '@/lib/api/users';
 import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
+import { useAuthStore } from '@/stores/authStore';
 import type { User, UserRole } from '@/types/models';
 import toast from 'react-hot-toast';
 
@@ -55,6 +60,7 @@ interface UserEditDialogProps {
 
 const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuthStore();
 
   const { data: teams = [] } = useQuery({
     queryKey: ['teams'],
@@ -162,10 +168,15 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
   // master-admins reset their own passwords from the sign-in page, and the
   // backend refuses to change them here.
   const targetRoles = user?.roles || [];
-  const canManagePassword =
-    targetRoles.includes('parent') &&
-    !targetRoles.includes('admin') &&
-    !targetRoles.includes('master-admin');
+  const targetIsAdmin = targetRoles.includes('admin') || targetRoles.includes('master-admin');
+  const canManagePassword = targetRoles.includes('parent') && !targetIsAdmin;
+
+  // The backend only lets a master-admin change an admin's login email; lock the
+  // field (rather than let the save fail) when that isn't allowed.
+  const callerIsMaster = (currentUser?.roles || []).includes('master-admin');
+  const emailLocked = targetIsAdmin && !callerIsMaster;
+
+  const [showPassword, setShowPassword] = useState(false);
 
   const teamOptions = teams.map(t => ({ id: t.id, label: `${t.name} (${t.ageGroup})` }));
   const playerOptions = players.map(p => ({ id: p.id, label: `${p.firstName} ${p.lastName}${p.teamName ? ` (${p.teamName})` : ''}` }));
@@ -192,8 +203,13 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
                   label="Login Email"
                   type="email"
                   fullWidth
+                  disabled={emailLocked}
                   error={!!errors.email}
-                  helperText={errors.email?.message || 'Changing this updates the account they sign in with'}
+                  helperText={
+                    emailLocked
+                      ? "Only a master admin can change an admin account's login email"
+                      : errors.email?.message || 'Changing this updates the account they sign in with'
+                  }
                 />
               )}
             />
@@ -206,14 +222,28 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
                   <TextField
                     {...field}
                     label="Set New Password"
-                    type="text"
+                    type={showPassword ? 'text' : 'password'}
                     fullWidth
-                    autoComplete="off"
+                    autoComplete="new-password"
                     error={!!errors.newPassword}
                     helperText={
                       errors.newPassword?.message ||
                       'Optional — enter to set this parent a new password (leave blank to keep current)'
                     }
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            onClick={() => setShowPassword((s) => !s)}
+                            edge="end"
+                            tabIndex={-1}
+                          >
+                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
                   />
                 )}
               />

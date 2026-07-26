@@ -171,13 +171,23 @@ export const usersApi = {
     }));
   },
 
-  // Soft-delete user — marks as disabled. Auth account cleanup requires server-side.
+  // Disable a user — routed through a Cloud Function that disables the Firebase
+  // Auth account (so they truly can't sign in) and mirrors the flag onto the
+  // doc. Admin-gated; can't disable an admin/master-admin (unless master) or self.
   delete: async (uid: string): Promise<void> => {
-    const docRef = doc(db, COLLECTION, uid);
-    await updateDoc(docRef, cleanData({
-      disabled: true,
-      disabledAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-    }));
+    const callable = httpsCallable<{ uid: string; disabled: boolean }, { success: boolean }>(
+      functions,
+      'adminSetUserDisabled'
+    );
+    await callable({ uid, disabled: true });
+  },
+
+  // Re-enable a previously disabled user.
+  setDisabled: async (uid: string, disabled: boolean): Promise<void> => {
+    const callable = httpsCallable<{ uid: string; disabled: boolean }, { success: boolean }>(
+      functions,
+      'adminSetUserDisabled'
+    );
+    await callable({ uid, disabled });
   },
 };

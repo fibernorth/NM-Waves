@@ -38,6 +38,12 @@ service cloud.firestore {
       return isAuth() && hasRole('sponsor');
     }
 
+    // Roles as a list, tolerant of the legacy single `role` string and of docs
+    // missing the field entirely — used by the users update rule below.
+    function rolesList(data) {
+      return ('roles' in data) ? data.roles : (('role' in data) ? [data.role] : []);
+    }
+
     // SITE SETTINGS (org name, logo, etc.)
     match /siteSettings/{docId} {
       allow read: if true;
@@ -91,16 +97,27 @@ service cloud.firestore {
         (!('roles' in request.resource.data) || request.resource.data.roles == ['parent']) &&
         (!('role' in request.resource.data) || request.resource.data.role == 'parent')
       );
-      // Users can update their own profile, but ONLY admins can change roles,
-      // and linkedPlayerIds is frozen for non-admins — parents link children
-      // through the verified linkChild Cloud Function (Admin SDK), never by
-      // writing their own doc. This keeps linkedPlayerIds trustworthy as the
-      // gate for reading a child's sensitive data and finances.
-      allow update: if isAdmin() || (
+      // Update paths:
+      //  • master-admin: unrestricted.
+      //  • admin: may edit OTHER users, but cannot grant master-admin, cannot
+      //    edit an existing master-admin, and cannot change their OWN roles —
+      //    this closes the self-escalation where an admin promotes themselves.
+      //  • self: profile fields only. roles/role/linkedPlayerIds/teamIds are all
+      //    frozen — links and team membership are written only by the verified
+      //    Admin-SDK callables (linkChild / syncLinkedParentTeams), never by a
+      //    client writing its own doc, so a coach can't self-grant a team (which
+      //    would leak other teams' data) and linkedPlayerIds stays trustworthy.
+      allow update: if isMasterAdmin() || (
+        isAdmin() &&
+        !('master-admin' in rolesList(request.resource.data)) &&
+        !('master-admin' in rolesList(resource.data)) &&
+        (request.auth.uid != userId || rolesList(request.resource.data) == rolesList(resource.data))
+      ) || (
         isUser(userId) &&
         (!('roles' in request.resource.data) || request.resource.data.roles == resource.data.roles) &&
         (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
-        (!('linkedPlayerIds' in request.resource.data) || request.resource.data.linkedPlayerIds == resource.data.linkedPlayerIds)
+        (!('linkedPlayerIds' in request.resource.data) || request.resource.data.linkedPlayerIds == resource.data.linkedPlayerIds) &&
+        (!('teamIds' in request.resource.data) || request.resource.data.teamIds == resource.data.teamIds)
       );
       allow delete: if isMasterAdmin();
     }

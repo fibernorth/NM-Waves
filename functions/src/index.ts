@@ -87,7 +87,7 @@ export {
   syncLinkedParentTeams,
 } from './parentActions';
 export { emailAllParents } from './emailBroadcast';
-export { adminUpdateUserAuth } from './adminUsers';
+export { adminUpdateUserAuth, adminSetUserDisabled } from './adminUsers';
 export { emailPlayerBilling, emailOutstandingInvoices } from './billingEmails';
 export { getEvalEventByToken, submitEvalScoreByToken } from './evalGuest';
 export { sendTryoutOffer } from './tryoutOffer';

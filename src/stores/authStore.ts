@@ -36,6 +36,13 @@ async function loadUserProfile(uid: string, email: string, firebaseUser: Firebas
   const userDoc = await getDoc(doc(db, 'users', uid));
   if (userDoc.exists()) {
     const userData = userDoc.data();
+    // A disabled account must never load a session. The Auth account is also
+    // disabled server-side, but this guards the client immediately (and covers
+    // any doc flagged before the Auth change propagates).
+    if (userData.disabled === true) {
+      await firebaseSignOut(auth);
+      throw new Error('This account has been disabled. Please contact your club administrator.');
+    }
     return {
       user: {
         uid,

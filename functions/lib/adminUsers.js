@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminUpdateUserAuth = void 0;
+exports.adminSetUserDisabled = exports.adminUpdateUserAuth = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const getDb = () => admin.firestore();
@@ -125,5 +125,54 @@ exports.adminUpdateUserAuth = functions.https.onCall(async (data, context) => {
         emailChanged: email !== undefined,
         passwordChanged: password !== undefined && password !== '',
     };
+});
+/**
+ * Admin-only: enable/disable a user's ACCOUNT. Disabling here disables the
+ * Firebase Auth record (so the user can no longer sign in at all) and mirrors
+ * the flag onto the Firestore doc. Previously "delete" only flagged the doc,
+ * so a "deleted" user could still log in with full access.
+ *
+ * Same guardrail as email/password: an admin cannot disable an admin/
+ * master-admin (only a master-admin can), and no one can disable themselves.
+ */
+exports.adminSetUserDisabled = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+    }
+    const callerSnap = await getDb().collection('users').doc(context.auth.uid).get();
+    const callerRoles = rolesOf(callerSnap.data());
+    if (!isAdminRoles(callerRoles)) {
+        throw new functions.https.HttpsError('permission-denied', 'Admins only');
+    }
+    const callerIsMaster = callerRoles.includes('master-admin');
+    const uid = String((data === null || data === void 0 ? void 0 : data.uid) || '').trim();
+    const disabled = (data === null || data === void 0 ? void 0 : data.disabled) === true;
+    if (!uid) {
+        throw new functions.https.HttpsError('invalid-argument', 'uid is required');
+    }
+    if (uid === context.auth.uid) {
+        throw new functions.https.HttpsError('permission-denied', 'You cannot disable your own account');
+    }
+    const targetDoc = await getDb().collection('users').doc(uid).get();
+    if (!targetDoc.exists) {
+        throw new functions.https.HttpsError('not-found', 'User not found');
+    }
+    if (isAdminRoles(rolesOf(targetDoc.data())) && !callerIsMaster) {
+        throw new functions.https.HttpsError('permission-denied', "Only a master admin can disable an admin account.");
+    }
+    try {
+        await admin.auth().updateUser(uid, { disabled });
+    }
+    catch (err) {
+        if ((err === null || err === void 0 ? void 0 : err.code) !== 'auth/user-not-found') {
+            throw new functions.https.HttpsError('internal', (err === null || err === void 0 ? void 0 : err.message) || 'Failed to update the account');
+        }
+    }
+    await getDb().collection('users').doc(uid).update({
+        disabled,
+        disabledAt: disabled ? admin.firestore.Timestamp.now() : admin.firestore.FieldValue.delete(),
+        updatedAt: admin.firestore.Timestamp.now(),
+    });
+    return { success: true, disabled };
 });
 //# sourceMappingURL=adminUsers.js.map
