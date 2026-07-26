@@ -12,6 +12,7 @@ import { Tournament, TournamentWorkflowStatus } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format, isBefore, addDays } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { isAdmin as checkIsAdmin, isCoach as checkIsCoach } from '@/lib/auth/roles';
 import TournamentFormDialog from '../components/TournamentFormDialog';
 import TournamentViewDialog from '../components/TournamentViewDialog';
@@ -51,6 +52,7 @@ const workflowColorMap: Record<TournamentWorkflowStatus, 'default' | 'info' | 'w
 const TournamentsPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const confirm = useConfirm();
   const isAdmin = checkIsAdmin(user);
   const isCoach = checkIsCoach(user);
   const isParent = !isCoach; // not coach/admin/master-admin
@@ -90,8 +92,8 @@ const TournamentsPage = () => {
     setViewDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this tournament?')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ title: 'Delete tournament?', message: 'This removes the tournament.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

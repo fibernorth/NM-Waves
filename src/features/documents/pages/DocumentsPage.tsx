@@ -23,6 +23,7 @@ import { AppDocument } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import DocumentFormDialog from '../components/DocumentFormDialog';
 
@@ -44,6 +45,7 @@ const visibilityColorMap: Record<string, 'success' | 'info' | 'warning' | 'secon
 const DocumentsPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const confirm = useConfirm();
   const isAdmin = checkIsAdmin(user);
 
   const [openDialog, setOpenDialog] = useState(false);
@@ -104,8 +106,8 @@ const DocumentsPage = () => {
     setOpenDialog(true);
   };
 
-  const handleDelete = (doc: AppDocument) => {
-    if (window.confirm('Are you sure you want to delete this document?')) {
+  const handleDelete = async (doc: AppDocument) => {
+    if (await confirm({ title: 'Delete document?', message: 'This permanently removes the document.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(doc);
     }
   };

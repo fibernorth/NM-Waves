@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, CssBaseline } from '@mui/material';
+import { ConfirmProvider } from '@/components/common/ConfirmProvider';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './stores/authStore';
 import { theme } from './theme';
@@ -160,6 +161,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
+        <ConfirmProvider>
         <BrowserRouter>
           <Routes>
             {/* Public Routes */}
@@ -279,6 +281,7 @@ function App() {
           </Routes>
         </BrowserRouter>
         <Toaster position="top-right" />
+        </ConfirmProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

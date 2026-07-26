@@ -20,6 +20,7 @@ import type { User, UserRole } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { isMasterAdmin } from '@/lib/auth/roles';
 import UserEditDialog from '../components/UserEditDialog';
 import UserAddDialog from '../components/UserAddDialog';
@@ -54,6 +55,7 @@ const ROLE_FILTER_OPTIONS: { value: string; label: string }[] = [
 const UsersPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const confirm = useConfirm();
   const isSuperAdmin = isMasterAdmin(user);
   const [openDialog, setOpenDialog] = useState(false);
   const [openAddDialog, setOpenAddDialog] = useState(false);
@@ -82,8 +84,8 @@ const UsersPage = () => {
     setOpenDialog(true);
   };
 
-  const handleDelete = (uid: string) => {
-    if (window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+  const handleDelete = async (uid: string) => {
+    if (await confirm({ title: 'Disable this account?', message: "The user won't be able to sign in. You can re-enable them later.", confirmText: 'Disable', destructive: true })) {
       deleteMutation.mutate(uid);
     }
   };
@@ -91,7 +93,7 @@ const UsersPage = () => {
   const [resettingPassword, setResettingPassword] = useState<string | null>(null);
 
   const handleResetPassword = async (email: string) => {
-    if (!window.confirm(`Send password reset email to ${email}?`)) return;
+    if (!(await confirm({ title: 'Send password reset?', message: `Send a password reset email to ${email}?`, confirmText: 'Send' }))) return;
     setResettingPassword(email);
     try {
       const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;

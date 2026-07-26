@@ -20,6 +20,7 @@ import { Player } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { isAdmin as checkIsAdmin, isCoach as checkIsCoach } from '@/lib/auth/roles';
 import PlayerFormDialog from '../components/PlayerFormDialog';
 
@@ -27,6 +28,7 @@ const PlayersPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const confirm = useConfirm();
   const isAdmin = checkIsAdmin(user);
   const isCoach = checkIsCoach(user);
   const [openDialog, setOpenDialog] = useState(false);
@@ -95,7 +97,7 @@ const PlayersPage = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this player?')) {
+    if (await confirm({ title: 'Delete player?', message: 'This permanently removes the player record. This cannot be undone.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

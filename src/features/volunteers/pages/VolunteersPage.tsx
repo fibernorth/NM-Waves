@@ -19,6 +19,7 @@ import { volunteersApi } from '@/lib/api/volunteers';
 import { schedulesApi } from '@/lib/api/schedules';
 import { teamsApi } from '@/lib/api/teams';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { isCoach as checkIsCoach } from '@/lib/auth/roles';
 import type { Volunteer } from '@/types/models';
 import toast from 'react-hot-toast';
@@ -36,6 +37,7 @@ const STATUS_CONFIG: Record<
 const VolunteersPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const confirm = useConfirm();
   const isCoach = checkIsCoach(user);
 
   const [teamFilter, setTeamFilter] = useState('all');
@@ -99,8 +101,8 @@ const VolunteersPage = () => {
     setOpenForm(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this assignment?')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ title: 'Delete assignment?', message: 'This removes the volunteer assignment.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

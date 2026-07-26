@@ -39,6 +39,7 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { schedulesApi } from '@/lib/api/schedules';
 import { teamsApi } from '@/lib/api/teams';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { isCoach as checkIsCoach } from '@/lib/auth/roles';
 import type { ScheduleEvent } from '@/types/models';
 import toast from 'react-hot-toast';
@@ -82,6 +83,7 @@ const EVENT_TYPE_OPTIONS = [
 const SchedulesPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const confirm = useConfirm();
   const isCoach = checkIsCoach(user);
 
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -158,8 +160,8 @@ const SchedulesPage = () => {
     setDetailEvent(null);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this event?')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ title: 'Delete event?', message: 'This removes the event from the schedule.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

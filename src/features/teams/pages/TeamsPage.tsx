@@ -13,6 +13,7 @@ import { Team } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import TeamFormDialog from '../components/TeamFormDialog';
 
@@ -57,8 +58,9 @@ const TeamsPage = () => {
     setOpenDialog(true);
   };
 
+  const confirm = useConfirm();
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this team?')) {
+    if (await confirm({ title: 'Delete team?', message: 'This archives the team and unassigns its players. This cannot be undone.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };
