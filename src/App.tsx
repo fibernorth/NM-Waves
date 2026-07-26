@@ -217,6 +217,9 @@ function App() {
               <Route path="/stats" element={<TeamStatsPage />} />
               <Route path="/surveys" element={<SurveysPage />} />
               <Route path="/register-tryouts" element={<RegisterTryoutPage />} />
+              {/* Schedule is read-only for parents (all write controls are
+                  gated to coaches inside the page). */}
+              <Route path="/schedules" element={<SchedulesPage />} />
             </Route>
 
             {/* Protected Routes - Coach and above */}
@@ -224,7 +227,6 @@ function App() {
               <Route path="/teams" element={<TeamsPage />} />
               <Route path="/teams/:id" element={<TeamDetailsPage />} />
               <Route path="/players" element={<PlayersPage />} />
-              <Route path="/schedules" element={<SchedulesPage />} />
               <Route path="/volunteers" element={<VolunteersPage />} />
               <Route path="/equipment" element={<EquipmentPage />} />
               <Route path="/documents" element={<DocumentsPage />} />

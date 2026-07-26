@@ -534,7 +534,7 @@ const DashboardPage = () => {
                       </Button>
                     </Tooltip>
                   )}
-                  <Button size="small" onClick={() => navigate(isCoachOrAbove ? '/schedules' : '/schedule')}>View All</Button>
+                  <Button size="small" onClick={() => navigate('/schedules')}>View All</Button>
                 </Box>
               </Box>
               {eventsLoading ? (
@@ -610,7 +610,7 @@ const DashboardPage = () => {
                 <Button
                   variant="outlined"
                   fullWidth
-                  onClick={() => navigate(isCoachOrAbove ? '/schedules' : '/schedule')}
+                  onClick={() => navigate('/schedules')}
                 >
                   View Schedule
                 </Button>

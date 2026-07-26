@@ -55,7 +55,10 @@ import toast from 'react-hot-toast';
 
 /** Is this question answered well enough to count toward progress/required? */
 const isAnswered = (q: SurveyQuestion, value: string | undefined): boolean => {
-  if (q.type === 'ranking') return true; // the current order IS an answer
+  // A ranking counts only once the parent has actually ordered it (a value is
+  // set on first arrow move). An untouched ranking is NOT the default order
+  // submitted as a real preference — that biased every ranking aggregate.
+  if (q.type === 'ranking') return !!(value && value.trim());
   if (!value || !value.trim()) return false;
   if (q.type === 'rating') return Number(value) > 0;
   return true;
@@ -102,10 +105,8 @@ const SurveysPage = () => {
       const payload: SurveyAnswer[] = active.questions.map((q) => ({
         questionId: q.id,
         questionText: q.text,
-        value:
-          q.type === 'ranking'
-            ? (answers[q.id] ?? (q.options || []).join(ANSWER_SEPARATOR))
-            : (answers[q.id] ?? ''),
+        // Untouched rankings submit '' (skipped) instead of the default order.
+        value: answers[q.id] ?? '',
       }));
       await surveyResponsesApi.submit(active, payload, {
         uid: user?.uid || '',
@@ -130,12 +131,10 @@ const SurveysPage = () => {
 
   const openSurvey = (s: Survey) => {
     setActive(s);
-    // Ranking questions start with the options in their given order.
-    const initial: Record<string, string> = {};
-    for (const q of s.questions) {
-      if (q.type === 'ranking') initial[q.id] = (q.options || []).join(ANSWER_SEPARATOR);
-    }
-    setAnswers(initial);
+    // Start with no answers. Rankings show their given order (render fallback)
+    // but only register once the parent moves an item, so an untouched ranking
+    // is treated as unanswered rather than submitting the default order.
+    setAnswers({});
   };
 
   const visible = surveys
@@ -289,7 +288,8 @@ const SurveysPage = () => {
         <Typography variant="h4">Surveys</Typography>
       </Box>
       <Alert icon={<LockIcon fontSize="inherit" />} severity="info" sx={{ mb: 3 }}>
-        Responses are private. Coaches never see who said what — only the club administrator can. Please be candid.
+        Your answers are anonymous to coaches. Coaches may see responses to questions marked coach-visible, but
+        never who submitted them. Only the club&rsquo;s lead administrator can see who submitted. Please be candid.
       </Alert>
 
       {isLoading ? (

@@ -115,7 +115,7 @@ export const SURVEY_TEMPLATES: SurveyTemplate[] = [
     name: 'Post-Tournament Feedback',
     title: 'Tournament Weekend Feedback',
     description:
-      'Quick pulse check after this weekend — 2 minutes, anonymous. Your feedback helps us plan better tournament weekends.',
+      'Quick pulse check after this weekend — 2 minutes, anonymous to coaches. Your feedback helps us plan better tournament weekends.',
     questions: [
       {
         text: 'Overall, how was the tournament weekend for your family? (1 = rough, 5 = great)',

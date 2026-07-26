@@ -292,7 +292,7 @@ const SurveyAdminPage = () => {
       const closes = s.closesAt ? `\n\nPlease respond by ${format(s.closesAt, 'MMMM d, yyyy')}.` : '';
       return emailAllParents(
         `Quick survey: ${s.title}`,
-        `Hi Waves families,\n\nWe'd love your input! Please take a few minutes to complete the "${s.title}" survey.${s.description ? `\n\n${s.description}` : ''}${closes}\n\nLog in and go to Surveys, or tap here: ${link}\n\nResponses are anonymous. Thank you!\n\n— Northern Michigan Waves`,
+        `Hi Waves families,\n\nWe'd love your input! Please take a few minutes to complete the "${s.title}" survey.${s.description ? `\n\n${s.description}` : ''}${closes}\n\nLog in and go to Surveys, or tap here: ${link}\n\nYour responses are anonymous to coaches — only the club's lead administrator can see who submitted. Please be candid. Thank you!\n\n— Northern Michigan Waves`,
         {
           teamIds: s.assignedTeamIds || [],
           playerIds: s.assignedPlayerIds || [],
@@ -351,8 +351,9 @@ const SurveyAdminPage = () => {
         </Box>
       </Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Responses are anonymous. Admins see all answers. Coaches whose players received a survey see only the
-        answers to questions marked &ldquo;coaches can see&rdquo; — never the rest.
+        Responses are anonymous to coaches. Any coach whose players received a survey can see the answers to
+        questions marked &ldquo;coaches can see&rdquo; (never the rest), but never who submitted them. Only the
+        club&rsquo;s lead administrator can see who submitted each response.
       </Typography>
 
       {isLoading ? (
