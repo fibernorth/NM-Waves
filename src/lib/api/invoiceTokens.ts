@@ -165,6 +165,7 @@ export const invoiceTokensApi = {
       used: inv.used || false,
       usedAt: inv.usedAt ? new Date(inv.usedAt) : undefined,
       usedBy: inv.usedBy || undefined,
+      liveBalanceDue: inv.liveBalanceDue ?? null,
     };
   },
 

@@ -237,7 +237,7 @@ exports.createCheckoutSession = functions
 exports.stripeWebhook = functions
     .runWith({ secrets: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'] })
     .https.onRequest(async (req, res) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
     if (req.method !== 'POST') {
         res.status(405).send('Method Not Allowed');
         return;
@@ -269,9 +269,23 @@ exports.stripeWebhook = functions
                 res.status(400).send('Invalid payload');
                 return;
             }
-            // Fetch the event directly from Stripe to confirm it's real
+            // Fetch the event directly from Stripe to confirm it's real. This
+            // authenticates the event (an attacker can't forge Stripe's own API
+            // response), and idempotency guards below protect against replay of a
+            // real event id — but it does mean signature verification is degraded.
             event = await stripe.events.retrieve(body.id);
             console.log(`Webhook verified via API retrieval: ${event.id} (${event.type})`);
+            // Surface the degraded state so the signing secret gets fixed.
+            try {
+                await getDb().collection('adminNotifications').add({
+                    type: 'webhook_signature_degraded',
+                    severity: 'medium',
+                    message: `A Stripe webhook (${event.type}) was accepted via API re-fetch because signature verification failed. Check that STRIPE_WEBHOOK_SECRET matches this endpoint's signing secret.`,
+                    read: false,
+                    createdAt: admin.firestore.Timestamp.now(),
+                });
+            }
+            catch (_) { /* notification is best-effort */ }
         }
         catch (err) {
             console.error('Webhook verification failed (both methods):', err.message);
@@ -373,7 +387,7 @@ exports.stripeWebhook = functions
                     paymentMethod: 'other',
                     isPaid: true,
                     paidDate: paymentDate,
-                    notes: `Stripe fee (2.9% + $0.30) on session ${session.id}`,
+                    notes: `Stripe processing fee (actual) on session ${session.id}`,
                     recordedBy: 'stripe_webhook',
                     createdAt: paymentDate,
                     updatedAt: paymentDate,
@@ -430,6 +444,19 @@ exports.stripeWebhook = functions
             if (!financeId || !playerId) {
                 console.error('Missing financeId or playerId in session metadata — skipping (not retryable)');
                 res.status(200).json({ received: true, skipped: 'missing metadata' });
+                return;
+            }
+            // Session-level idempotency. The per-finance-doc guard below only runs
+            // when the finance doc exists; if it was deleted/renamed, a Stripe retry
+            // would otherwise re-post income + fee + GL. Keying on the session id in
+            // the income collection covers both cases (mirrors the sponsor branch).
+            const existingPlayerIncome = await getDb().collection('income')
+                .where('referenceNumber', '==', session.id)
+                .limit(1)
+                .get();
+            if (!existingPlayerIncome.empty) {
+                console.log(`Player payment already processed for session ${session.id}, skipping`);
+                res.status(200).json({ received: true });
                 return;
             }
             // 1. Record payment on player's finance record
@@ -518,7 +545,7 @@ exports.stripeWebhook = functions
                 season: season || '',
                 isPaid: true,
                 paidDate: paymentDate,
-                notes: `Stripe fee (2.9% + $0.30) on session ${session.id}`,
+                notes: `Stripe processing fee (actual) on session ${session.id}`,
                 recordedBy: 'stripe_webhook',
                 createdAt: paymentDate,
                 updatedAt: paymentDate,
@@ -723,7 +750,6 @@ exports.stripeWebhook = functions
     if (event.type === 'charge.refunded') {
         try {
             const charge = event.data.object;
-            const refundAmount = (charge.amount_refunded || 0) / 100;
             const refundDate = admin.firestore.Timestamp.now();
             // Income records store referenceNumber = the Checkout Session id (cs_...),
             // but the charge only carries the PaymentIntent id (pi_...). Recover the
@@ -757,90 +783,121 @@ exports.stripeWebhook = functions
                 return;
             }
             const incomeData = incomeDoc.data();
-            // Idempotency: check if we already processed this refund
-            const existingRefund = await getDb().collection('income')
-                .where('referenceNumber', '==', `refund_${charge.id}`)
-                .limit(1)
-                .get();
-            if (!existingRefund.empty) {
-                console.log(`Refund already processed for charge ${charge.id}, skipping`);
+            const revenueAccount = incomeData.category === 'sponsorships' ? '4100' : '4000';
+            // Process each INDIVIDUAL refund on this charge. Idempotency is keyed on
+            // the refund id (not the charge), so a second/partial refund is recorded
+            // for its own delta instead of being skipped as a "duplicate charge".
+            let refunds = ((_o = charge.refunds) === null || _o === void 0 ? void 0 : _o.data) || [];
+            if (refunds.length === 0 && charge.id) {
+                try {
+                    const list = await stripe.refunds.list({ charge: charge.id, limit: 100 });
+                    refunds = list.data;
+                }
+                catch (listErr) {
+                    console.warn(`Refund: could not list refunds for charge ${charge.id}:`, listErr);
+                }
+            }
+            let processedAny = false;
+            let newlyRefunded = 0;
+            for (const refund of refunds) {
+                const existingRefund = await getDb().collection('income')
+                    .where('referenceNumber', '==', `refund_${refund.id}`)
+                    .limit(1)
+                    .get();
+                if (!existingRefund.empty)
+                    continue; // this refund already recorded
+                const amt = (refund.amount || 0) / 100;
+                processedAny = true;
+                newlyRefunded += amt;
+                // 1. Negative income record for THIS refund
+                const refundIncomeRef = await getDb().collection('income').add({
+                    date: refundDate,
+                    category: incomeData.category || 'player_payments',
+                    amount: -amt,
+                    source: incomeData.source || 'Stripe Refund',
+                    description: `Refund: ${incomeData.description || 'Stripe payment'}`,
+                    payerName: incomeData.payerName || '',
+                    paymentMethod: 'credit_card',
+                    referenceNumber: `refund_${refund.id}`,
+                    playerId: incomeData.playerId || '',
+                    teamId: incomeData.teamId || '',
+                    season: incomeData.season || '',
+                    notes: `Stripe refund ${refund.id} on charge ${charge.id}. Original income: ${incomeDoc.id}`,
+                    sourcePaymentId: incomeData.sourcePaymentId || '',
+                    sourceFinanceId: incomeData.sourceFinanceId || '',
+                    reconciled: false,
+                    recordedBy: 'stripe_webhook',
+                    createdAt: refundDate,
+                    updatedAt: refundDate,
+                });
+                // 2. Reversing GL entries (debit Revenue, credit Cash) for THIS refund
+                try {
+                    const glBatch = getDb().batch();
+                    glBatch.set(getDb().collection('generalLedger').doc(), {
+                        date: refundDate,
+                        accountNumber: revenueAccount,
+                        accountName: revenueAccount === '4100' ? 'Sponsorship Revenue' : 'Player Payment Revenue',
+                        type: 'debit',
+                        amount: amt,
+                        description: `Refund reversal: ${incomeData.description || 'payment'}`,
+                        sourceType: 'income',
+                        sourceId: refundIncomeRef.id,
+                        createdBy: 'stripe_webhook',
+                        createdAt: refundDate,
+                    });
+                    glBatch.set(getDb().collection('generalLedger').doc(), {
+                        date: refundDate,
+                        accountNumber: '1000',
+                        accountName: 'Cash - Checking',
+                        type: 'credit',
+                        amount: amt,
+                        description: `Refund reversal: ${incomeData.description || 'payment'}`,
+                        sourceType: 'income',
+                        sourceId: refundIncomeRef.id,
+                        createdBy: 'stripe_webhook',
+                        createdAt: refundDate,
+                    });
+                    await glBatch.commit();
+                }
+                catch (glErr) {
+                    console.error('GL posting failed for refund:', glErr);
+                    await getDb().collection('adminNotifications').add({
+                        type: 'gl_posting_failure',
+                        severity: 'high',
+                        message: `GL posting failed for refund of $${amt.toFixed(2)}. Charge: ${charge.id}, Refund: ${refund.id}`,
+                        sourceType: 'income',
+                        sourceId: refundIncomeRef.id,
+                        error: String(glErr),
+                        createdAt: refundDate,
+                        read: false,
+                    });
+                }
+            }
+            if (!processedAny) {
+                console.log(`All refunds already processed for charge ${charge.id}, skipping`);
                 res.status(200).json({ received: true });
                 return;
             }
-            // 1. Create a negative income record (refund)
-            const refundIncomeRef = await getDb().collection('income').add({
-                date: refundDate,
-                category: incomeData.category || 'player_payments',
-                amount: -refundAmount,
-                source: incomeData.source || 'Stripe Refund',
-                description: `Refund: ${incomeData.description || 'Stripe payment'}`,
-                payerName: incomeData.payerName || '',
-                paymentMethod: 'credit_card',
-                referenceNumber: `refund_${charge.id}`,
-                playerId: incomeData.playerId || '',
-                teamId: incomeData.teamId || '',
-                season: incomeData.season || '',
-                notes: `Stripe refund on charge ${charge.id}. Original income: ${incomeDoc.id}`,
-                sourcePaymentId: incomeData.sourcePaymentId || '',
-                sourceFinanceId: incomeData.sourceFinanceId || '',
-                reconciled: false,
-                recordedBy: 'stripe_webhook',
-                createdAt: refundDate,
-                updatedAt: refundDate,
-            });
-            // 2. Post reversing GL entries (debit Revenue, credit Cash)
-            try {
-                const revenueAccount = incomeData.category === 'sponsorships' ? '4100' : '4000';
-                const glBatch = getDb().batch();
-                glBatch.set(getDb().collection('generalLedger').doc(), {
-                    date: refundDate,
-                    accountNumber: revenueAccount,
-                    accountName: revenueAccount === '4100' ? 'Sponsorship Revenue' : 'Player Payment Revenue',
-                    type: 'debit',
-                    amount: refundAmount,
-                    description: `Refund reversal: ${incomeData.description || 'payment'}`,
-                    sourceType: 'income',
-                    sourceId: refundIncomeRef.id,
-                    createdBy: 'stripe_webhook',
-                    createdAt: refundDate,
-                });
-                glBatch.set(getDb().collection('generalLedger').doc(), {
-                    date: refundDate,
-                    accountNumber: '1000',
-                    accountName: 'Cash - Checking',
-                    type: 'credit',
-                    amount: refundAmount,
-                    description: `Refund reversal: ${incomeData.description || 'payment'}`,
-                    sourceType: 'income',
-                    sourceId: refundIncomeRef.id,
-                    createdBy: 'stripe_webhook',
-                    createdAt: refundDate,
-                });
-                await glBatch.commit();
-            }
-            catch (glErr) {
-                console.error('GL posting failed for refund:', glErr);
-                await getDb().collection('adminNotifications').add({
-                    type: 'gl_posting_failure',
-                    severity: 'high',
-                    message: `GL posting failed for refund of $${refundAmount.toFixed(2)}. Charge: ${charge.id}`,
-                    sourceType: 'income',
-                    sourceId: refundIncomeRef.id,
-                    error: String(glErr),
-                    createdAt: refundDate,
-                    read: false,
-                });
-            }
-            // 3. Update the player finance record if applicable
+            // 3. Update the player finance record: record the CUMULATIVE amount
+            // refunded on this charge, and only flag the payment fully 'refunded'
+            // when the entire charge has been returned (a partial refund is not).
+            const cumulativeRefunded = (charge.amount_refunded || 0) / 100;
+            const fullyRefunded = (charge.amount_refunded || 0) >= (charge.amount || 0) && (charge.amount || 0) > 0;
             if (incomeData.sourceFinanceId) {
                 const financeRef = getDb().collection('playerFinances').doc(incomeData.sourceFinanceId);
                 const financeDoc = await financeRef.get();
                 if (financeDoc.exists) {
                     const payments = financeDoc.data().payments || [];
-                    // Mark the original payment as refunded
                     const updatedPayments = payments.map((p) => {
                         if (p.stripeSessionId === sessionId || p.reference === sessionId) {
-                            return { ...p, refunded: true, refundAmount, refundDate, refundChargeId: charge.id };
+                            return {
+                                ...p,
+                                refunded: fullyRefunded,
+                                partialRefund: !fullyRefunded,
+                                refundAmount: cumulativeRefunded,
+                                refundDate,
+                                refundChargeId: charge.id,
+                            };
                         }
                         return p;
                     });
@@ -851,11 +908,11 @@ exports.stripeWebhook = functions
             await getDb().collection('adminNotifications').add({
                 type: 'payment_refunded',
                 severity: 'medium',
-                message: `Refund of $${refundAmount.toFixed(2)} processed for ${incomeData.payerName || 'unknown payer'}. Charge: ${charge.id}`,
+                message: `Refund of $${newlyRefunded.toFixed(2)} processed for ${incomeData.payerName || 'unknown payer'} ($${cumulativeRefunded.toFixed(2)} total on this charge${fullyRefunded ? ', fully refunded' : ', partial'}). Charge: ${charge.id}`,
                 createdAt: refundDate,
                 read: false,
             });
-            console.log(`Refund processed: $${refundAmount} for charge ${charge.id}`);
+            console.log(`Refund processed: $${newlyRefunded} (cumulative $${cumulativeRefunded}) for charge ${charge.id}`);
         }
         catch (error) {
             console.error('Error processing refund webhook:', error);
@@ -872,7 +929,7 @@ exports.stripeWebhook = functions
             await getDb().collection('adminNotifications').add({
                 type: 'payment_dispute',
                 severity: 'critical',
-                message: `Chargeback dispute opened for $${disputeAmount.toFixed(2)}. Charge: ${dispute.charge}. Reason: ${dispute.reason}. Respond by ${new Date((((_o = dispute.evidence_details) === null || _o === void 0 ? void 0 : _o.due_by) || 0) * 1000).toLocaleDateString()}.`,
+                message: `Chargeback dispute opened for $${disputeAmount.toFixed(2)}. Charge: ${dispute.charge}. Reason: ${dispute.reason}. Respond by ${new Date((((_p = dispute.evidence_details) === null || _p === void 0 ? void 0 : _p.due_by) || 0) * 1000).toLocaleDateString()}.`,
                 disputeId: dispute.id,
                 chargeId: dispute.charge,
                 amount: disputeAmount,

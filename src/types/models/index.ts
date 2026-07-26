@@ -209,6 +209,8 @@ export interface InvoiceToken {
   usedAt?: Date;
   usedBy?: string;
   paidByUserId?: string;
+  /** Live remaining balance computed server-side (null if no finance record). */
+  liveBalanceDue?: number | null;
 }
 
 // Announcement Model
