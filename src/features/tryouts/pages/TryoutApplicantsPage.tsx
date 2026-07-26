@@ -90,13 +90,13 @@ const TryoutApplicantsPage = () => {
       headerName: 'Age (Sept 1)',
       width: 100,
       type: 'number',
-      valueGetter: (params) => computeLeagueAge(params.row.dateOfBirth),
+      valueGetter: (params) => computeLeagueAge(params.row.dateOfBirth, params.row.season),
     },
     {
       field: 'division',
       headerName: 'Division',
       width: 100,
-      valueGetter: (params) => computeDivision(params.row.dateOfBirth),
+      valueGetter: (params) => computeDivision(params.row.dateOfBirth, params.row.season),
     },
     { field: 'ageGroup', headerName: 'Requested', width: 110 },
     {
@@ -356,8 +356,8 @@ const ApplicantDialog = ({ applicant, isAdmin, evaluatorId, evaluatorName, onClo
   });
 
   if (!applicant) return null;
-  const age = computeLeagueAge(applicant.dateOfBirth);
-  const division = computeDivision(applicant.dateOfBirth);
+  const age = computeLeagueAge(applicant.dateOfBirth, applicant.season);
+  const division = computeDivision(applicant.dateOfBirth, applicant.season);
 
   return (
     <Dialog open onClose={onClose} maxWidth="md" fullWidth>

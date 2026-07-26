@@ -42,14 +42,23 @@ const bandFromLabel = (label) => {
 };
 const normSeason = (s) => (s || '').trim().toLowerCase();
 
-// League age as of the upcoming Sept 1 cutoff (Aug 31 of the season year).
-const computeLeagueAge = (dobStr) => {
+const seasonCutoffYear = (season) => {
+  const m = String(season || '').match(/\b(20\d{2})\b/);
+  return m ? parseInt(m[1], 10) : null;
+};
+
+// League age as of Sept 1 of the season's start year (Aug 31 cutoff). Uses the
+// season year, not "today", so a band doesn't drift once the clock passes Sept 1.
+const computeLeagueAge = (dobStr, season) => {
   if (!dobStr) return null;
   const d = new Date(dobStr);
   if (isNaN(d.getTime())) return null;
-  const now = new Date();
-  let seasonYear = now.getFullYear();
-  if (now > new Date(seasonYear, 8, 1)) seasonYear += 1;
+  let seasonYear = seasonCutoffYear(season);
+  if (seasonYear == null) {
+    const now = new Date();
+    seasonYear = now.getFullYear();
+    if (now > new Date(seasonYear, 8, 1)) seasonYear += 1;
+  }
   const cutoff = new Date(seasonYear, 7, 31);
   let age = cutoff.getFullYear() - d.getFullYear();
   const m = cutoff.getMonth() - d.getMonth();
@@ -57,8 +66,8 @@ const computeLeagueAge = (dobStr) => {
   return age;
 };
 
-const eligibleBands = (a) => {
-  const age = computeLeagueAge(a.dateOfBirth);
+const eligibleBands = (a, season) => {
+  const age = computeLeagueAge(a.dateOfBirth, season);
   const own = age != null ? bandForAge(age <= 8 ? 8 : age) : bandFromLabel(a.ageGroup);
   if (own == null) return [];
   const up = nextBand(own);
@@ -87,7 +96,7 @@ async function main() {
   for (const doc of appsSnap.docs) {
     const a = doc.data();
     const effectiveSeason = a.season && a.season.trim() ? a.season : SEASON;
-    const bands = eligibleBands(a);
+    const bands = eligibleBands(a, effectiveSeason);
     const matchTeams = teams.filter(
       (t) => normSeason(t.season) === normSeason(effectiveSeason) && bands.includes(bandFromLabel(t.ageGroup))
     );

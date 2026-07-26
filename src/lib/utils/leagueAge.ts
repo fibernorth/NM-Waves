@@ -4,13 +4,38 @@
  * turns 9 on Sept 1 is age 8 → 8U). Implemented as age as of Aug 31 of the
  * upcoming season year. Accepts a date string (YYYY-MM-DD) or a Date.
  */
-export const computeLeagueAge = (dob: string | Date | undefined | null): number | null => {
+/**
+ * Pull the cutoff year out of a season label. Softball league age is set as of
+ * Sept 1 of the season's START year, so "2026-2027" and "Fall 2026" → 2026.
+ * Returns null when no 4-digit year is present.
+ */
+export const seasonCutoffYear = (season: string | undefined | null): number | null => {
+  const m = String(season || '').match(/\b(20\d{2})\b/);
+  return m ? parseInt(m[1], 10) : null;
+};
+
+/**
+ * League age. By default it's computed as of the UPCOMING Sept 1 (relative to
+ * today). Pass a season year (or a season label) to pin the cutoff to that
+ * season instead — needed for prospect matching so a player's band doesn't
+ * drift a year once the clock passes Sept 1.
+ */
+export const computeLeagueAge = (
+  dob: string | Date | undefined | null,
+  season?: number | string
+): number | null => {
   if (!dob) return null;
   const d = dob instanceof Date ? dob : new Date(dob);
   if (isNaN(d.getTime())) return null;
-  const now = new Date();
-  let seasonYear = now.getFullYear();
-  if (now > new Date(seasonYear, 8, 1)) seasonYear += 1; // Sept = month index 8
+  let seasonYear: number;
+  const fromSeason = typeof season === 'number' ? season : seasonCutoffYear(season);
+  if (fromSeason != null) {
+    seasonYear = fromSeason;
+  } else {
+    const now = new Date();
+    seasonYear = now.getFullYear();
+    if (now > new Date(seasonYear, 8, 1)) seasonYear += 1; // Sept = month index 8
+  }
   const cutoff = new Date(seasonYear, 7, 31); // Aug 31
   let age = cutoff.getFullYear() - d.getFullYear();
   const m = cutoff.getMonth() - d.getMonth();
@@ -64,8 +89,11 @@ export const bandFromLabel = (label: string | undefined | null): number | null =
  * Division band label from date of birth, e.g. "12U". Two-year bands per the
  * club's structure (see DIVISION_BANDS). Returns "" if the DOB is unknown.
  */
-export const computeDivision = (dob: string | Date | undefined | null): string => {
-  const age = computeLeagueAge(dob);
+export const computeDivision = (
+  dob: string | Date | undefined | null,
+  season?: number | string
+): string => {
+  const age = computeLeagueAge(dob, season);
   if (age == null) return '';
   const band = bandForAge(age <= 8 ? 8 : age);
   return `${band}U`;

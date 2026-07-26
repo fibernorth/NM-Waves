@@ -70,7 +70,7 @@ const ProspectSkillTracker = ({ applicant, evaluatorId }: Props) => {
         playerFirstName: applicant.playerFirstName,
         playerLastName: applicant.playerLastName,
         playerId: applicant.playerId,
-        division: computeDivision(applicant.dateOfBirth) || applicant.ageGroup,
+        division: computeDivision(applicant.dateOfBirth, applicant.season) || applicant.ageGroup,
       });
       navigate(`/evaluations/${event.id}`);
     } catch (e: any) {

@@ -24,8 +24,11 @@ export const normalizeSeason = (s: string | undefined | null): string =>
 export const eligibleBandsForApplicant = (a: {
   dateOfBirth?: string;
   ageGroup?: string;
+  season?: string;
 }): number[] => {
-  const age = computeLeagueAge(a.dateOfBirth);
+  // Age is computed relative to the applicant's SEASON (not today) so a band
+  // doesn't drift a year once the clock passes Sept 1.
+  const age = computeLeagueAge(a.dateOfBirth, a.season);
   const ownBand = age != null ? bandForAge(age <= 8 ? 8 : age) : bandFromLabel(a.ageGroup);
   if (ownBand == null) return [];
   const up = nextBand(ownBand);
