@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  MenuItem,
   Grid,
   Divider,
   Rating,
@@ -29,6 +30,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import { computeLeagueAge, computeDivision } from '@/lib/utils/leagueAge';
 import { userProvisioningApi } from '@/lib/api/userProvisioning';
+import { appSettingsApi } from '@/lib/api/appSettings';
 import TryoutSessionsManager from '../components/TryoutSessionsManager';
 import type { Player } from '@/types/models';
 import toast from 'react-hot-toast';
@@ -50,6 +52,29 @@ const TryoutApplicantsPage = () => {
   const { data: applicants = [], isLoading, isError } = useQuery({
     queryKey: ['tryoutApplicants'],
     queryFn: () => tryoutApplicantsApi.getAll(),
+  });
+
+  // Default the view to the current tryout season so next-season coaches land
+  // on the relevant signups; they can switch to another season or "All".
+  const { data: seasonSettings } = useQuery({
+    queryKey: ['appSettings', 'season'],
+    queryFn: () => appSettingsApi.getSeason(),
+  });
+  const tryoutSeason = seasonSettings?.tryoutSeason || '';
+  const [seasonFilter, setSeasonFilter] = useState<string>('');
+  // Once settings load, adopt the tryout season as the default filter (once).
+  if (!seasonFilter && tryoutSeason) setSeasonFilter(tryoutSeason);
+
+  // Season options: every season present on a signup, plus the tryout season.
+  const seasonOptions = Array.from(
+    new Set([tryoutSeason, ...applicants.map((a) => a.season).filter(Boolean)] as string[])
+  ).sort();
+
+  const visibleApplicants = applicants.filter((a) => {
+    if (seasonFilter === 'all' || !seasonFilter) return true;
+    // Legacy signups with no season show under the current tryout season so
+    // they aren't hidden before the backfill stamps a season on them.
+    return a.season === seasonFilter || (!a.season && seasonFilter === tryoutSeason);
   });
 
   const columns: GridColDef<TryoutApplicant>[] = [
@@ -143,12 +168,33 @@ const TryoutApplicantsPage = () => {
 
       <TryoutSessionsManager />
 
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+        <TextField
+          select
+          size="small"
+          label="Season"
+          value={seasonFilter || 'all'}
+          onChange={(e) => setSeasonFilter(e.target.value)}
+          sx={{ minWidth: 200 }}
+        >
+          {seasonOptions.map((s) => (
+            <MenuItem key={s} value={s}>
+              {s}{s === tryoutSeason ? ' (current tryouts)' : ''}
+            </MenuItem>
+          ))}
+          <MenuItem value="all">All seasons</MenuItem>
+        </TextField>
+        <Typography variant="body2" color="text.secondary">
+          Showing {visibleApplicants.length} of {applicants.length} signups
+        </Typography>
+      </Box>
+
       {isError ? (
         <Alert severity="error">Failed to load tryout signups.</Alert>
       ) : (
         <Paper sx={{ height: 640, width: '100%' }}>
           <DataGrid
-            rows={applicants}
+            rows={visibleApplicants}
             columns={columns}
             loading={isLoading}
             slots={{ toolbar: GridToolbar }}
