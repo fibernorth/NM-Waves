@@ -22,6 +22,8 @@ import {
   type ParticipantRanking,
 } from '@/lib/api/evaluations';
 import { format } from 'date-fns';
+import toast from 'react-hot-toast';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 
 /** Percentage bar reused for category/skill visuals. */
 const PctBar = ({ label, pct, extra }: { label: string; pct: number | null; extra?: string }) => (
@@ -56,6 +58,7 @@ const isVideoUrl = (url: string) => /\.(mp4|mov|webm|m4v|avi)(\?|%3F|$)/i.test(u
  * for rostered players — progress across previous evaluation events.
  */
 const PlayerReportDialog = ({ event, ranking, scores, onClose, onScoresChanged }: Props) => {
+  const confirm = useConfirm();
   const p = ranking?.participant;
   const mine = scores.filter((s) => s.participantId === p?.id);
 
@@ -135,13 +138,12 @@ const PlayerReportDialog = ({ event, ranking, scores, onClose, onScoresChanged }
                           <IconButton
                             size="small"
                             onClick={async () => {
-                              if (!confirm(`Delete ${e.evaluatorName}'s ${e.score}/${e.maxScore} for ${s.name}?`)) return;
+                              if (!(await confirm({ title: 'Delete score?', message: `Delete ${e.evaluatorName}'s ${e.score}/${e.maxScore} for ${s.name}?`, confirmText: 'Delete', destructive: true }))) return;
                               try {
                                 await evalScoresApi.remove(e.id);
                                 onScoresChanged?.();
                               } catch (err: any) {
-                                // eslint-disable-next-line no-alert
-                                alert(err?.message || 'Failed to delete');
+                                toast.error(err?.message || 'Failed to delete');
                               }
                             }}
                           >

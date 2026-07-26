@@ -21,6 +21,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -39,6 +40,7 @@ import DonationDialog from '../components/DonationDialog';
 
 const FundraisersPage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
   const [openFormDialog, setOpenFormDialog] = useState(false);
@@ -84,8 +86,8 @@ const FundraisersPage = () => {
     setOpenFormDialog(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this fundraiser?')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this fundraiser?', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

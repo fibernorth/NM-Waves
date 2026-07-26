@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Box, Typography, Button, Paper, Chip, Link, Grid, Card, CardContent } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -38,6 +39,7 @@ const STATUS_CHIP: Record<string, { label: string; color: 'success' | 'error' | 
 
 const SponsorsPage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
@@ -73,8 +75,8 @@ const SponsorsPage = () => {
     setOpenDialog(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this sponsor?')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this sponsor?', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

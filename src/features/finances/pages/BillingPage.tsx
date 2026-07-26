@@ -30,6 +30,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { playerFinancesApi } from '@/lib/api/finances';
 import { invoiceTokensApi } from '@/lib/api/invoiceTokens';
 import { playersApi } from '@/lib/api/players';
@@ -956,6 +957,7 @@ const PaymentHistoryDialog = ({ open, onClose, finance, isAdmin, onPlayerQuit, q
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
 
   const deletePaymentMutation = useMutation({
     mutationFn: (paymentId: string) => playerFinancesApi.removePayment(finance!.id, paymentId),
@@ -1111,8 +1113,8 @@ const PaymentHistoryDialog = ({ open, onClose, finance, isAdmin, onPlayerQuit, q
                             <IconButton
                               size="small"
                               color="error"
-                              onClick={() => {
-                                if (window.confirm(`Delete $${p.amount.toFixed(2)} payment?`)) {
+                              onClick={async () => {
+                                if (await confirm({ message: `Delete $${p.amount.toFixed(2)} payment?`, confirmText: 'Delete', destructive: true })) {
                                   setDeletingPaymentId(p.id);
                                   deletePaymentMutation.mutate(p.id);
                                 }

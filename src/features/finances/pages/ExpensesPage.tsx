@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { expensesApi } from '@/lib/api/accounting';
 import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
@@ -104,6 +105,7 @@ const PAYMENT_METHODS = [
 
 const ExpensesPage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
 
@@ -283,7 +285,7 @@ const ExpensesPage = () => {
   // ---------------------------------------------------------------------------
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this expense?')) {
+    if (await confirm({ title: 'Delete expense?', message: 'This removes the expense record.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

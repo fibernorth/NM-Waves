@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -25,6 +26,7 @@ interface OrgCostsTabProps {
 
 const OrgCostsTab = ({ season }: OrgCostsTabProps) => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selected, setSelected] = useState<CostItem | null>(null);
 
@@ -110,8 +112,8 @@ const OrgCostsTab = ({ season }: OrgCostsTabProps) => {
             <IconButton
               size="small"
               color="error"
-              onClick={() => {
-                if (window.confirm('Delete this cost item?')) {
+              onClick={async () => {
+                if (await confirm({ message: 'Delete this cost item?', confirmText: 'Delete', destructive: true })) {
                   deleteMutation.mutate(params.row.id);
                 }
               }}

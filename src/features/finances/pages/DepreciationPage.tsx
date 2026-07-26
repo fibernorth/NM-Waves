@@ -25,6 +25,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { fixedAssetsApi, calculateMonthlyDepreciation, getDepreciationSchedule } from '@/lib/api/fixedAssets';
 import { chartOfAccountsApi } from '@/lib/api/chartOfAccounts';
 import { useAuthStore } from '@/stores/authStore';
@@ -80,6 +81,7 @@ const defaultAssetForm: AssetFormState = {
 
 const DepreciationPage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
 
@@ -291,8 +293,8 @@ const DepreciationPage = () => {
     }
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to dispose of this asset?')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to dispose of this asset?', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };
@@ -313,13 +315,13 @@ const DepreciationPage = () => {
     recordDepreciationMutation.mutate({ assetId: asset.id, amount, date: new Date() });
   };
 
-  const handleRecordAllDepreciation = () => {
+  const handleRecordAllDepreciation = async () => {
     const activeCount = assets.filter((a: FixedAsset) => a.status === 'active').length;
     if (activeCount === 0) {
       toast.error('No active assets to depreciate');
       return;
     }
-    if (window.confirm(`Record monthly depreciation for all ${activeCount} active asset(s)?`)) {
+    if (await confirm({ title: 'Record depreciation?', message: `Record monthly depreciation for all ${activeCount} active asset(s)?`, confirmText: 'Record' })) {
       recordAllDepreciationMutation.mutate();
     }
   };

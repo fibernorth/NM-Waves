@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import toast from 'react-hot-toast';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -88,6 +89,7 @@ const emptyDonationForm: DonationFormState = {
 
 const DonorManagementPage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
 
@@ -264,8 +266,8 @@ const DonorManagementPage = () => {
     }
   };
 
-  const handleDeleteDonor = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this donor?')) {
+  const handleDeleteDonor = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this donor?', confirmText: 'Delete', destructive: true })) {
       deleteDonorMutation.mutate(id);
     }
   };
@@ -318,8 +320,8 @@ const DonorManagementPage = () => {
     }
   };
 
-  const handleDeleteReceipt = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this receipt?')) {
+  const handleDeleteReceipt = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this receipt?', confirmText: 'Delete', destructive: true })) {
       deleteReceiptMutation.mutate(id);
     }
   };

@@ -24,6 +24,7 @@ import PushPinIcon from '@mui/icons-material/PushPin';
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import WebIcon from '@mui/icons-material/Web';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { homepagePostsApi } from '@/lib/api/homepagePosts';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin, isMasterAdmin as checkIsMasterAdmin } from '@/lib/auth/roles';
@@ -62,6 +63,7 @@ const FILTER_OPTIONS: { value: string; label: string }[] = [
 
 const HomepageManagerPage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
   const isMasterAdminUser = checkIsMasterAdmin(user);
@@ -119,8 +121,8 @@ const HomepageManagerPage = () => {
     setOpenDialog(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this post?')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this post?', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };
