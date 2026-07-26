@@ -17,7 +17,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase/config';
+import { httpsCallable } from 'firebase/functions';
+import { storage, functions } from '@/lib/firebase/config';
 import type { EvalCategory, EvalParticipant, EvalStation } from '@/lib/api/evaluations';
 import toast from 'react-hot-toast';
 
@@ -45,13 +46,19 @@ interface Props {
   participants: EvalParticipant[];
   /** Persist one skill score. Throw to signal failure. */
   onSubmit: (s: ScoreSubmission) => Promise<void>;
-  /** Storage folder for photo/video attachments. */
+  /** Storage folder for photo/video attachments (authed coach uploads). */
   mediaPathPrefix: string;
+  /**
+   * Guest evaluator invite token. When set, attachments upload through a
+   * token-validated signed URL (getEvalUploadUrl) instead of a direct Storage
+   * write — guests have no account and direct evalMedia writes are denied.
+   */
+  uploadToken?: string;
   /** participantId -> count of scores already recorded (for the done badges). */
   scoredCounts?: Record<string, number>;
 }
 
-const ScoringBoard = ({ eventId, categories, stations, participants, onSubmit, mediaPathPrefix, scoredCounts = {} }: Props) => {
+const ScoringBoard = ({ eventId, categories, stations, participants, onSubmit, mediaPathPrefix, uploadToken, scoredCounts = {} }: Props) => {
   const [stationId, setStationId] = useState<string>(stations[0]?.id || '');
   const [activeP, setActiveP] = useState<EvalParticipant | null>(null);
   const [values, setValues] = useState<Record<string, number>>({});
@@ -96,10 +103,26 @@ const ScoringBoard = ({ eventId, categories, stations, participants, onSubmit, m
       const mediaUrls: string[] = [];
       if (mediaFiles.length > 0) {
         for (const f of mediaFiles) {
-          const path = `${mediaPathPrefix}/${eventId}-${activeP.id}-${Date.now()}-${f.name}`;
-          const r = ref(storage, path);
-          await uploadBytes(r, f);
-          mediaUrls.push(await getDownloadURL(r));
+          if (uploadToken) {
+            // Guest: get a token-validated signed URL, then PUT the file to it.
+            const getUrl = httpsCallable<
+              { token: string; filename: string; contentType: string },
+              { uploadUrl: string; downloadUrl: string }
+            >(functions, 'getEvalUploadUrl');
+            const { data } = await getUrl({ token: uploadToken, filename: f.name, contentType: f.type });
+            const put = await fetch(data.uploadUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': f.type },
+              body: f,
+            });
+            if (!put.ok) throw new Error('Upload failed');
+            mediaUrls.push(data.downloadUrl);
+          } else {
+            const path = `${mediaPathPrefix}/${eventId}-${activeP.id}-${Date.now()}-${f.name}`;
+            const r = ref(storage, path);
+            await uploadBytes(r, f);
+            mediaUrls.push(await getDownloadURL(r));
+          }
         }
       }
       let first = true;

@@ -113,3 +113,34 @@ export const submitEvalScoreByToken = functions.https.onCall(async (data) => {
 
   return { ok: true };
 });
+
+/**
+ * Public: issue a short-lived, single-object signed upload URL for guest media.
+ * The invite token is validated here (active invite + open event) BEFORE any
+ * upload is possible, so Storage no longer needs an open write rule — the
+ * evalMedia path is set to deny direct client writes and all guest uploads
+ * flow through a URL minted here. Reads stay public so URLs work in report cards.
+ */
+export const getEvalUploadUrl = functions.https.onCall(
+  async (data: { token?: string; filename?: string; contentType?: string }) => {
+    const { eventId } = await resolveInvite(String(data?.token || ''));
+    const contentType = String(data?.contentType || '');
+    if (!/^(image|video)\//.test(contentType)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Only image or video uploads are allowed');
+    }
+    const safeName = String(data?.filename || 'file').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-60);
+    const path = `evalMedia/${data!.token}/${eventId}-${Date.now()}-${safeName}`;
+
+    const bucket = admin.storage().bucket();
+    const [uploadUrl] = await bucket.file(path).getSignedUrl({
+      version: 'v4',
+      action: 'write',
+      expires: Date.now() + 15 * 60 * 1000,
+      contentType,
+    });
+    // evalMedia read is public, so the Firebase download endpoint serves it
+    // without a token.
+    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media`;
+    return { uploadUrl, downloadUrl, path, contentType };
+  }
+);

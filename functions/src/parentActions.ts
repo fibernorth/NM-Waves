@@ -173,6 +173,15 @@ export const linkChild = functions.https.onCall(
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
     }
+    // Linking grants access to a minor's PII/finances, so the account's email
+    // must be verified — otherwise anyone could register under a family's known
+    // email and claim their child.
+    if (context.auth.token.email_verified !== true) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Please verify your email address first — check your inbox for the verification link, then try again.'
+      );
+    }
     const { playerId } = data;
     if (!playerId) {
       throw new functions.https.HttpsError('invalid-argument', 'playerId is required');

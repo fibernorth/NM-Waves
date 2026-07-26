@@ -89,5 +89,5 @@ export {
 export { emailAllParents } from './emailBroadcast';
 export { adminUpdateUserAuth, adminSetUserDisabled } from './adminUsers';
 export { emailPlayerBilling, emailOutstandingInvoices } from './billingEmails';
-export { getEvalEventByToken, submitEvalScoreByToken } from './evalGuest';
+export { getEvalEventByToken, submitEvalScoreByToken, getEvalUploadUrl } from './evalGuest';
 export { sendTryoutOffer } from './tryoutOffer';

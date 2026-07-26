@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.submitEvalScoreByToken = exports.getEvalEventByToken = void 0;
+exports.getEvalUploadUrl = exports.submitEvalScoreByToken = exports.getEvalEventByToken = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const getDb = () => admin.firestore();
@@ -147,5 +147,32 @@ exports.submitEvalScoreByToken = functions.https.onCall(async (data) => {
         createdAt: admin.firestore.Timestamp.now(),
     });
     return { ok: true };
+});
+/**
+ * Public: issue a short-lived, single-object signed upload URL for guest media.
+ * The invite token is validated here (active invite + open event) BEFORE any
+ * upload is possible, so Storage no longer needs an open write rule — the
+ * evalMedia path is set to deny direct client writes and all guest uploads
+ * flow through a URL minted here. Reads stay public so URLs work in report cards.
+ */
+exports.getEvalUploadUrl = functions.https.onCall(async (data) => {
+    const { eventId } = await resolveInvite(String((data === null || data === void 0 ? void 0 : data.token) || ''));
+    const contentType = String((data === null || data === void 0 ? void 0 : data.contentType) || '');
+    if (!/^(image|video)\//.test(contentType)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Only image or video uploads are allowed');
+    }
+    const safeName = String((data === null || data === void 0 ? void 0 : data.filename) || 'file').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-60);
+    const path = `evalMedia/${data.token}/${eventId}-${Date.now()}-${safeName}`;
+    const bucket = admin.storage().bucket();
+    const [uploadUrl] = await bucket.file(path).getSignedUrl({
+        version: 'v4',
+        action: 'write',
+        expires: Date.now() + 15 * 60 * 1000,
+        contentType,
+    });
+    // evalMedia read is public, so the Firebase download endpoint serves it
+    // without a token.
+    const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media`;
+    return { uploadUrl, downloadUrl, path, contentType };
 });
 //# sourceMappingURL=evalGuest.js.map

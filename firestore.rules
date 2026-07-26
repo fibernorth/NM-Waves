@@ -136,12 +136,17 @@ service cloud.firestore {
     // registrations they submitted, matched on their verified sign-in email
     // (list queries must filter email == their own). Public may create.
     match /tryout-applicants/{applicantId} {
+      // Email match requires a VERIFIED email — otherwise anyone who registers
+      // an (unverified) account under a family's known email could read/edit
+      // their tryout application.
       allow read: if isCoach() || (
-        isAuth() && resource.data.email == request.auth.token.email
+        isAuth() && request.auth.token.email_verified == true &&
+        resource.data.email == request.auth.token.email
       );
       allow create: if true;
       allow update: if isCoach() || (
-        isAuth() && resource.data.email == request.auth.token.email &&
+        isAuth() && request.auth.token.email_verified == true &&
+        resource.data.email == request.auth.token.email &&
         // Parents may edit details but never the review pipeline fields.
         request.resource.data.status == resource.data.status &&
         request.resource.data.email == resource.data.email

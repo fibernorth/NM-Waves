@@ -67,16 +67,13 @@ service firebase.storage {
                    && request.resource.contentType.matches('image/.*');
     }
 
-    // Guest evaluator media — evaluators upload via their invite link without
-    // an account. Storage rules cannot read Firestore to validate the token,
-    // so this write is still open to anyone who knows/guesses the path shape;
-    // cap lowered to limit abuse. FOLLOW-UP: move guest uploads behind a
-    // token-validated signed upload URL (issued by a callable) and set this to
-    // `allow write: if false`. Reads stay public (URLs surface in report cards).
+    // Guest evaluator media. Direct client writes are DENIED — guests upload
+    // through a short-lived signed URL minted by the getEvalUploadUrl callable
+    // only after their invite token is validated (Admin SDK signed URLs bypass
+    // these rules). Reads stay public so URLs surface in coach report cards.
     match /evalMedia/{token}/{allPaths=**} {
       allow read: if true;
-      allow write: if request.resource.size < 25 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*|video/.*');
+      allow write: if false;
     }
 
     // Default deny

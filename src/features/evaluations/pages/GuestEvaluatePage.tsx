@@ -101,6 +101,7 @@ const GuestEvaluatePage = () => {
               stations={data.event.stations}
               participants={data.event.participants}
               mediaPathPrefix={`evalMedia/${token}`}
+              uploadToken={token}
               onSubmit={submit}
             />
           </>

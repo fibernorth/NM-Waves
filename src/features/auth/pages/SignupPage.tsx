@@ -50,7 +50,7 @@ const SignupPage = () => {
 
     try {
       await signUp(formData.email, formData.password, formData.displayName, 'parent');
-      toast.success('Account created successfully');
+      toast.success('Account created — check your email to verify it, then you can link your child.');
       if (returnTo && returnTo.startsWith('/')) {
         navigate(returnTo);
       } else {

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User as FirebaseUser
@@ -20,6 +21,8 @@ interface AuthState {
   signOut: () => Promise<void>;
   initialize: () => void;
   refreshUser: () => Promise<void>;
+  /** Re-send the email-verification link to the current user. */
+  resendVerification: () => Promise<void>;
 }
 
 const defaultPermissions = {
@@ -159,6 +162,13 @@ export const useAuthStore = create<AuthState>((set) => ({
         updatedAt: new Date(),
       });
 
+      // Send the verification email — linking a child requires a verified email.
+      try {
+        await sendEmailVerification(userCredential.user);
+      } catch (e) {
+        console.warn('Failed to send verification email:', e);
+      }
+
       set({
         user: newUser,
         firebaseUser: userCredential.user,
@@ -176,6 +186,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     await firebaseSignOut(auth);
     set({ user: null, firebaseUser: null });
+  },
+
+  resendVerification: async () => {
+    const current = auth.currentUser;
+    if (!current) throw new Error('You need to be signed in to resend the verification email.');
+    await sendEmailVerification(current);
   },
 
   refreshUser: async () => {

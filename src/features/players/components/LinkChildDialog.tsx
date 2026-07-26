@@ -35,10 +35,27 @@ interface LinkChildDialogProps {
 const phoneDigits = (v: string) => v.replace(/\D/g, '').slice(-10);
 
 const LinkChildDialog = ({ open, onClose }: LinkChildDialogProps) => {
-  const { user, refreshUser } = useAuthStore();
+  const { user, firebaseUser, refreshUser, resendVerification } = useAuthStore();
   const [search, setSearch] = useState('');
   const [phone, setPhone] = useState('');
   const [linking, setLinking] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  // Linking requires a verified email (enforced server-side). Surface it up
+  // front with a resend option rather than only failing on the link attempt.
+  const emailVerified = firebaseUser?.emailVerified !== false;
+
+  const handleResend = async () => {
+    setResending(true);
+    try {
+      await resendVerification();
+      toast.success('Verification email sent — check your inbox, then reload this page.');
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not send the verification email.');
+    } finally {
+      setResending(false);
+    }
+  };
 
   const phoneComplete = phoneDigits(phone).length === 10;
 
@@ -122,6 +139,19 @@ const LinkChildDialog = ({ open, onClose }: LinkChildDialogProps) => {
         Link a Child
       </DialogTitle>
       <DialogContent>
+        {!emailVerified && (
+          <Alert
+            severity="warning"
+            sx={{ mb: 2 }}
+            action={
+              <Button color="inherit" size="small" onClick={handleResend} disabled={resending}>
+                {resending ? 'Sending…' : 'Resend'}
+              </Button>
+            }
+          >
+            Verify your email to link your child. Check your inbox for the link, then reload this page.
+          </Alert>
+        )}
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           We'll match your child automatically by the email on your account. If your
           child was registered with your phone number, enter it below to find and claim them.
