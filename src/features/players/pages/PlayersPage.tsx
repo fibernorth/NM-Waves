@@ -102,8 +102,11 @@ const PlayersPage = () => {
 
   const chargeMutation = useMutation({
     mutationFn: async ({ playerId, feeField, amount }: { playerId: string; feeField: string; amount: number }) => {
-      // Find existing finance record for this player/season
-      const existing = allFinances.find(f => f.playerId === playerId);
+      // Fetch the player's finance record directly — `allFinances` is only
+      // loaded for admins, so relying on it made every coach charge create a
+      // duplicate record instead of updating the existing one.
+      const existingList = await playerFinancesApi.getByPlayer(playerId);
+      const existing = existingList[0];
       if (existing) {
         const currentVal = (existing as any)[feeField] || 0;
         await playerFinancesApi.update(existing.id, { [feeField]: currentVal + amount });

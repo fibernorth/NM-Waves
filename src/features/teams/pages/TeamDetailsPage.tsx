@@ -40,6 +40,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
+import { syncLinkedParentTeams } from '@/lib/api/parentActions';
 import { playerFinancesApi } from '@/lib/api/finances';
 import { costCalculationApi } from '@/lib/api/costCalculation';
 import { teamStatsApi, type PlayerStats } from '@/lib/api/teamStats';
@@ -181,12 +182,29 @@ const TeamDetailsPage = () => {
   // ---- Mutations ----
 
   const assignPlayerMutation = useMutation({
-    mutationFn: ({ playerId, teamId, teamName }: { playerId: string; teamId: string; teamName: string }) =>
-      playersApi.assignToTeam(playerId, teamId, teamName),
+    mutationFn: async ({ playerId, teamId, teamName }: { playerId: string; teamId: string; teamName: string }) => {
+      await playersApi.assignToTeam(playerId, teamId, teamName);
+      // Seed billing for the placement (idempotent) and attach linked parents
+      // to the team — same as the player form, so a player placed from the team
+      // page isn't left with no finance record. Never fail the placement.
+      try {
+        const player = await playersApi.getById(playerId);
+        if (player) {
+          await costCalculationApi.seedFinancesForPlacement(
+            { ...player, teamId, teamName },
+            team?.season || '2025-2026'
+          );
+        }
+        await syncLinkedParentTeams(playerId);
+      } catch (e) {
+        console.warn('Billing/parent-team sync after placement failed:', e);
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['players', 'team', id] });
       queryClient.invalidateQueries({ queryKey: ['players', 'all'] });
       queryClient.invalidateQueries({ queryKey: ['team', id] });
+      queryClient.invalidateQueries({ queryKey: ['playerFinances'] });
       toast.success('Player added to team');
       setAddPlayerDialogOpen(false);
       setSelectedPlayerToAdd(null);
