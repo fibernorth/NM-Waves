@@ -4,6 +4,7 @@ import {
   getDoc,
   getDocs,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -385,6 +386,24 @@ export const evalInvitesApi = {
   remove: async (id: string): Promise<void> => deleteDoc(doc(db, 'evalInvites', id)),
 };
 
+/**
+ * Deterministic doc id for a score: one per (event, participant, skill,
+ * evaluator). Same evaluator re-scoring the same skill lands on the same id and
+ * overwrites, so duplicates can't accumulate.
+ */
+export const scoreDocId = (d: {
+  eventId: string;
+  participantId: string;
+  skillId: string;
+  evaluatorUid?: string;
+  evaluatorName?: string;
+}): string => {
+  const who = (d.evaluatorUid || d.evaluatorName || 'unknown')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .slice(0, 40) || 'unknown';
+  return `${d.eventId}_${d.participantId}_${d.skillId}_${who}`;
+};
+
 export const evalScoresApi = {
   getByEvent: async (eventId: string): Promise<EvalScore[]> => {
     const snap = await getDocs(query(collection(db, 'evalScores'), where('eventId', '==', eventId)));
@@ -398,11 +417,15 @@ export const evalScoresApi = {
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   },
   create: async (data: Omit<EvalScore, 'id' | 'createdAt'>): Promise<string> => {
-    const ref = await addDoc(collection(db, 'evalScores'), cleanData({
+    // Upsert on a deterministic id so one evaluator re-scoring the same
+    // participant+skill OVERWRITES their prior score instead of appending a
+    // duplicate that would skew the average.
+    const id = scoreDocId(data);
+    await setDoc(doc(db, 'evalScores', id), cleanData({
       ...deepClean(data),
       createdAt: Timestamp.now(),
     } as any));
-    return ref.id;
+    return id;
   },
   remove: async (id: string): Promise<void> => deleteDoc(doc(db, 'evalScores', id)),
 };
@@ -450,7 +473,19 @@ export const computeRankings = (event: EvalEvent, scores: EvalScore[]): Particip
     const catAgg = new Map<string, { w: number; c: number; n: number }>();
     for (const [, skillScores] of bySkill) {
       const first = skillScores[0];
-      const avg = skillScores.reduce((s, x) => s + x.score / x.maxScore, 0) / skillScores.length;
+      // Average WITHIN each evaluator first, then across evaluators, so a
+      // single evaluator submitting the same skill multiple times can't get
+      // extra weight (matches the docstring's promise).
+      const byEvaluator = new Map<string, number[]>();
+      for (const x of skillScores) {
+        const who = x.evaluatorUid || x.evaluatorName || 'unknown';
+        if (!byEvaluator.has(who)) byEvaluator.set(who, []);
+        byEvaluator.get(who)!.push(x.score / x.maxScore);
+      }
+      const evaluatorMeans = [...byEvaluator.values()].map(
+        (arr) => arr.reduce((a, b) => a + b, 0) / arr.length
+      );
+      const avg = evaluatorMeans.reduce((a, b) => a + b, 0) / evaluatorMeans.length;
       const w = first.weight || 1;
       weightSum += w;
       contrib += avg * w;

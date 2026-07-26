@@ -15,7 +15,13 @@ export interface CalendarEvent {
   description?: string;
 }
 
+/** The club's local timezone — events are entered as Traverse City wall time. */
+const TIMEZONE = 'America/Detroit';
+
 const fmt = (d: Date) => format(d, "yyyyMMdd'T'HHmmss");
+
+/** UTC timestamp for RFC-5545 DTSTAMP (e.g. 20260726T123456Z). */
+const fmtUtc = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
 /** Best-effort "9:00 AM" → Date on the given day; falls back to a default hour. */
 export const timeOnDate = (day: Date, time: string, fallbackHour: number): Date => {
@@ -37,6 +43,9 @@ export const googleCalendarUrl = (e: CalendarEvent): string => {
     action: 'TEMPLATE',
     text: e.title,
     dates: `${fmt(e.start)}/${fmt(e.end)}`,
+    // Without ctz, Google interprets the timezone-less times as UTC, shifting
+    // a 9:00 AM ET event to ~5:00 AM. Pin it to the club's timezone.
+    ctz: TIMEZONE,
   });
   if (e.location) params.set('location', e.location);
   if (e.description) params.set('details', e.description);
@@ -54,12 +63,13 @@ export const buildIcs = (events: CalendarEvent[]): string => {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
   ];
-  const stamp = fmt(new Date());
+  const stamp = fmtUtc(new Date());
   events.forEach((e, i) => {
     lines.push(
       'BEGIN:VEVENT',
       `UID:nmwaves-${stamp}-${i}@nmwaves`,
       `DTSTAMP:${stamp}`,
+      // DTSTART/DTEND are intentionally floating local times (see file header).
       `DTSTART:${fmt(e.start)}`,
       `DTEND:${fmt(e.end)}`,
       `SUMMARY:${icsEscape(e.title)}`,

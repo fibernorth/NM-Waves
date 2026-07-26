@@ -128,7 +128,13 @@ exports.submitEvalScoreByToken = functions.https.onCall(async (data) => {
     if (!Number.isFinite(score) || score < 0 || score > maxScore) {
         throw new functions.https.HttpsError('invalid-argument', `Score must be between 0 and ${maxScore}`);
     }
-    await getDb().collection('evalScores').add({
+    // Upsert on a deterministic id (event/participant/skill/evaluator) so a guest
+    // re-scoring the same skill overwrites their prior score rather than adding a
+    // duplicate — matches the client evalScoresApi.scoreDocId scheme.
+    const evaluatorName = invite.evaluatorName || 'Evaluator';
+    const who = evaluatorName.replace(/[^A-Za-z0-9]/g, '').slice(0, 40) || 'unknown';
+    const scoreId = `${eventId}_${participantId}_${skillId}_${who}`;
+    await getDb().collection('evalScores').doc(scoreId).set({
         eventId,
         participantId,
         participantName: participant.name || '',
@@ -143,7 +149,7 @@ exports.submitEvalScoreByToken = functions.https.onCall(async (data) => {
         weight: skill.weight || 1,
         ...(comment ? { comment } : {}),
         ...(mediaUrls.length ? { mediaUrls } : {}),
-        evaluatorName: invite.evaluatorName || 'Evaluator',
+        evaluatorName,
         createdAt: admin.firestore.Timestamp.now(),
     });
     return { ok: true };
