@@ -30,10 +30,12 @@ export const adminUpdateUserAuth = functions.https.onCall(
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
     }
-    const callerDoc = await getDb().collection('users').doc(context.auth.uid).get();
-    if (!isAdminRoles(rolesOf(callerDoc.data()))) {
+    const callerSnap = await getDb().collection('users').doc(context.auth.uid).get();
+    const callerRoles = rolesOf(callerSnap.data());
+    if (!isAdminRoles(callerRoles)) {
       throw new functions.https.HttpsError('permission-denied', 'Admins only');
     }
+    const callerIsMaster = callerRoles.includes('master-admin');
 
     const uid = String(data?.uid || '').trim();
     if (!uid) {
@@ -56,6 +58,16 @@ export const adminUpdateUserAuth = functions.https.onCall(
     const authUpdate: admin.auth.UpdateRequest = {};
 
     if (email !== undefined) {
+      // Same guardrail as password: an admin cannot change the login email of
+      // another admin/master-admin (which, via the reset flow, would let them
+      // seize that account). Only a master-admin may touch a privileged
+      // account's email.
+      if (isAdminRoles(targetRoles) && !callerIsMaster) {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          "Only a master admin can change an admin account's login email."
+        );
+      }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         throw new functions.https.HttpsError('invalid-argument', 'Enter a valid email address');
       }
