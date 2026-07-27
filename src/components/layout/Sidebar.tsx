@@ -105,7 +105,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Email Parents', icon: <EmailIcon />, path: '/admin/email-parents', roles: ['admin', 'master-admin'] },
     { text: 'Surveys', icon: <PollIcon />, path: '/surveys', roles: ['parent'] },
     { text: 'Register for Tryouts', icon: <HowToRegIcon />, path: '/register-tryouts', roles: ['parent'] },
-    { text: 'Surveys', icon: <PollIcon />, path: '/manage-surveys', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Manage Surveys', icon: <PollIcon />, path: '/manage-surveys', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Tryout Signups', icon: <HowToRegIcon />, path: '/tryout-signups', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Evaluations', icon: <AssessmentIcon />, path: '/evaluations', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Coach Applications', icon: <SportsIcon />, path: '/coach-applications', roles: ['admin', 'master-admin'] },
@@ -191,7 +191,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
             />
           </ListItem>
           {visibleItems.map((item) => (
-            <ListItem key={item.text} disablePadding>
+            <ListItem key={item.path} disablePadding>
               <ListItemButton
                 selected={isSelected(item.path)}
                 onClick={() => {
@@ -224,7 +224,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
 
       <List>
         {menuItems.filter(item => hasAccess(item.roles)).map((item) => (
-          <ListItem key={item.text} disablePadding>
+          <ListItem key={item.path} disablePadding>
             <ListItemButton
               selected={isSelected(item.path)}
               onClick={() => {

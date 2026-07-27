@@ -27,6 +27,7 @@ const NAV_LINKS = [
   { label: 'Teams', path: '/teams-roster' },
   { label: 'Schedule', path: '/schedule' },
   { label: 'Gallery', path: '/gallery' },
+  { label: 'Fees', path: '/pricing' },
   { label: 'Sponsors', path: '/sponsors' },
   { label: 'Tryouts', path: '/tryouts' },
   { label: 'Coach With Us', path: '/coach-application' },
@@ -213,6 +214,8 @@ const PublicLayout = () => {
           <Divider sx={{ my: 2, borderColor: 'rgba(255,255,255,0.2)' }} />
           <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, flexWrap: 'wrap', mb: 2 }}>
             {[
+              { label: 'Coaching Staff', path: '/staff' },
+              { label: 'Parent Resources', path: '/parent-resources' },
               { label: 'Privacy Policy', path: '/privacy' },
               { label: 'Terms of Service', path: '/terms' },
               { label: 'Sponsorship Packages', path: '/sponsorship-packages' },

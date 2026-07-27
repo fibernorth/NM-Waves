@@ -357,7 +357,9 @@ const HomePage = () => {
       {/* Hero Section */}
       <Box
         sx={{
-          background: 'linear-gradient(135deg, #001240 0%, #001f5b 50%, #9bcbeb 100%)',
+          // End on a mid navy (not the very light #9bcbeb) so white hero text
+          // keeps sufficient contrast (WCAG AA) across the whole gradient.
+          background: 'linear-gradient(135deg, #001240 0%, #001f5b 55%, #2f6fb0 100%)',
           color: 'white',
           py: { xs: 6, md: 10 },
           textAlign: 'center',

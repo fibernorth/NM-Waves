@@ -94,7 +94,7 @@ const SchedulesPage = () => {
   const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
   const [detailEvent, setDetailEvent] = useState<ScheduleEvent | null>(null);
 
-  const { data: events = [], isLoading } = useQuery({
+  const { data: events = [], isLoading, isError } = useQuery({
     queryKey: ['schedules'],
     queryFn: () => schedulesApi.getAll(),
   });
@@ -257,8 +257,20 @@ const SchedulesPage = () => {
         </Paper>
       )}
 
+      {/* Error state — distinguish a failed load from a genuinely empty schedule */}
+      {isError && !isLoading && (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h6" color="error" gutterBottom>
+            Couldn't load the schedule
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Please check your connection and try again.
+          </Typography>
+        </Paper>
+      )}
+
       {/* Empty state */}
-      {!isLoading && filteredEvents.length === 0 && (
+      {!isLoading && !isError && filteredEvents.length === 0 && (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <CalendarMonthIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
           <Typography variant="h6" color="text.secondary">

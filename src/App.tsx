@@ -182,6 +182,9 @@ function App() {
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/staff" element={<StaffDirectoryPage />} />
               <Route path="/parent-resources" element={<ParentResourcesPage />} />
+              {/* Conversion page — render inside the public layout so visitors
+                  have the header/nav/footer to navigate from. */}
+              <Route path="/become-sponsor" element={<BecomeSponsorPage />} />
             </Route>
 
             {/* Public Payment Routes (no layout wrapper needed) */}
@@ -190,7 +193,6 @@ function App() {
             <Route path="/evaluate/:token" element={<GuestEvaluatePage />} />
             <Route path="/pay/success" element={<PaymentSuccessPage />} />
             <Route path="/pay/cancel" element={<PaymentCancelPage />} />
-            <Route path="/become-sponsor" element={<BecomeSponsorPage />} />
 
             {/* Auth Routes */}
             <Route element={<AuthLayout />}>
