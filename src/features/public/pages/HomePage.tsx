@@ -143,6 +143,7 @@ const MediaCard = ({ post }: { post: HomepagePost }) => {
             component="iframe"
             src={embedUrl}
             title={post.title}
+            loading="lazy"
             sx={{
               position: 'absolute',
               top: 0,
@@ -690,7 +691,9 @@ const HomePage = () => {
                   height="200"
                   image={photo.src}
                   alt={photo.label}
-                  sx={{ objectFit: 'cover' }}
+                  loading="lazy"
+                  onError={(e: any) => { e.currentTarget.style.display = 'none'; }}
+                  sx={{ objectFit: 'cover', bgcolor: 'grey.100' }}
                 />
                 <CardContent sx={{ py: 1, px: 2 }}>
                   <Typography variant="body2" color="text.secondary" align="center">

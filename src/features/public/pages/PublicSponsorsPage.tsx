@@ -1,3 +1,4 @@
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -174,7 +175,7 @@ const PublicSponsorsPage = () => {
               Contact us to learn about sponsorship opportunities and how your business can
               support youth athletics in Traverse City.
             </Typography>
-            <Button variant="contained" href="/become-sponsor">
+            <Button variant="contained" component={RouterLink} to="/become-sponsor">
               Become a Sponsor
             </Button>
           </Box>
