@@ -35,12 +35,11 @@ export const listDrivePhotos = functions.https.onCall(async (_data, context) => 
   const folderId = settings.googleDrive.folderId;
 
   try {
-    // Get service account credentials from Firebase Functions config
-    const config = functions.config();
-    const serviceAccountStr = config.google_drive?.service_account;
+    // Prefer env var (functions/.env); fall back to legacy functions.config().
+    const serviceAccountStr = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT || functions.config().google_drive?.service_account;
 
     if (!serviceAccountStr) {
-      console.error('Google Drive service account not configured');
+      console.error('Google Drive service account not configured (set GOOGLE_DRIVE_SERVICE_ACCOUNT)');
       return { photos: [] };
     }
 

@@ -34,9 +34,9 @@ const quickLinks = [
 
 const faqItems = [
   {
-    question: 'What age groups does TC Waves serve?',
+    question: 'What age groups does Northern Michigan Waves serve?',
     answer:
-      'TC Waves fields teams across multiple age divisions, typically ranging from 10U through 18U. Age groups may vary by season based on player interest and registration numbers.',
+      'Northern Michigan Waves fields teams across multiple age divisions, typically ranging from 10U through 18U. Age groups may vary by season based on player interest and registration numbers.',
   },
   {
     question: 'When does the season start?',
@@ -56,7 +56,7 @@ const faqItems = [
   {
     question: 'What equipment do players need to provide?',
     answer:
-      'Players should have their own glove, cleats, and batting gloves. TC Waves provides helmets, equipment bags, and team uniforms. Some players may want their own bat, though team bats are available.',
+      'Players should have their own glove, cleats, and batting gloves. Northern Michigan Waves provides helmets, equipment bags, and team uniforms. Some players may want their own bat, though team bats are available.',
   },
   {
     question: 'How are teams formed?',
@@ -128,7 +128,7 @@ const ParentResourcesPage = () => {
             Parent Resources
           </Typography>
           <Typography variant="h6" sx={{ mt: 1, opacity: 0.9, fontWeight: 300 }}>
-            Everything you need to know about TC Waves
+            Everything you need to know about Northern Michigan Waves
           </Typography>
         </Container>
       </Box>

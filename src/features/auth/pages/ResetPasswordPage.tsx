@@ -96,7 +96,7 @@ const ResetPasswordPage = () => {
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
           <SportsBaseballIcon sx={{ fontSize: 60, color: 'primary.main', mb: 1 }} />
           <Typography variant="h4" component="h1" gutterBottom>
-            TC Waves
+            Northern Michigan Waves
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Reset your password

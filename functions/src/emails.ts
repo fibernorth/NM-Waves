@@ -5,7 +5,9 @@ import * as nodemailer from 'nodemailer';
 const getDb = () => admin.firestore();
 
 const ORG_EMAIL = 'tcwavessoftball@gmail.com';
-const SITE_URL = functions.config().app?.site_url || 'https://nmwaves.com';
+// Prefer env vars (functions/.env); fall back to legacy functions.config()
+// so existing deployments keep working until secrets are moved to .env.
+const SITE_URL = process.env.SITE_URL || functions.config().app?.site_url || 'https://nmwaves.com';
 
 /** Escape HTML special characters to prevent XSS in email templates */
 function esc(str: string): string {
@@ -19,27 +21,25 @@ function esc(str: string): string {
 // Shared email header/footer for brand consistency
 const emailHeader = `
   <div style="background-color: #1565c0; color: white; padding: 20px; text-align: center;">
-    <h1 style="margin: 0;">TC Waves Ball Club</h1>
+    <h1 style="margin: 0;">Northern Michigan Waves</h1>
   </div>`;
 
 const emailFooter = `
   <div style="padding: 20px; text-align: center; color: #999; font-size: 12px;">
-    <p>TC Waves Ball Club, Inc. &bull; Traverse City, Michigan</p>
+    <p>Northern Michigan Waves, Inc. &bull; Traverse City, Michigan</p>
     <p>${ORG_EMAIL}</p>
   </div>`;
 
 /**
  * Creates a Nodemailer transporter using Gmail SMTP.
- * Requires firebase functions config: smtp.user and smtp.pass
- * Set via: firebase functions:config:set smtp.user="tcwavessoftball@gmail.com" smtp.pass="YOUR_APP_PASSWORD"
+ * Requires environment variables SMTP_USER and SMTP_PASS (set in functions/.env).
  */
 function getTransporter() {
-  const config = functions.config();
-  const user = config.smtp?.user || ORG_EMAIL;
-  const pass = config.smtp?.pass;
+  const user = process.env.SMTP_USER || functions.config().smtp?.user || ORG_EMAIL;
+  const pass = process.env.SMTP_PASS || functions.config().smtp?.pass;
 
   if (!pass) {
-    console.warn('[email] SMTP password not configured. Set via: firebase functions:config:set smtp.pass="YOUR_APP_PASSWORD"');
+    console.warn('[email] SMTP password not configured. Set SMTP_PASS in functions/.env');
     return null;
   }
 
@@ -60,7 +60,7 @@ async function queueEmail(to: string, subject: string, html: string): Promise<vo
   if (transporter) {
     try {
       await transporter.sendMail({
-        from: `"TC Waves Ball Club" <${ORG_EMAIL}>`,
+        from: `"Northern Michigan Waves" <${ORG_EMAIL}>`,
         to,
         cc: to !== ORG_EMAIL ? ORG_EMAIL : undefined,
         subject,
@@ -93,6 +93,59 @@ async function queueEmail(to: string, subject: string, html: string): Promise<vo
   });
 }
 
+/**
+ * Send one message to many parent recipients via BCC (chunked). Powers the
+ * "Email all parents" admin broadcast. The admin's plain-text message is
+ * escaped and wrapped in the club's branded email template.
+ */
+export async function sendBroadcastEmail(
+  recipients: string[],
+  subject: string,
+  plainMessage: string
+): Promise<{ sent: number; queued: boolean }> {
+  const bodyHtml = esc(plainMessage).replace(/\n/g, '<br>');
+  const html = `${emailHeader}<div style="padding: 20px; color: #333; font-size: 15px; line-height: 1.6;">${bodyHtml}</div>${emailFooter}`;
+
+  const transporter = getTransporter();
+  if (!transporter) {
+    await getDb().collection('mail').add({
+      to: ORG_EMAIL,
+      bccCount: recipients.length,
+      message: { subject, html },
+      sent: false,
+      broadcast: true,
+      createdAt: admin.firestore.Timestamp.now(),
+    });
+    return { sent: 0, queued: true };
+  }
+
+  // Chunk the BCC list so no single message has an unwieldy recipient count.
+  const CHUNK = 90;
+  let sent = 0;
+  for (let i = 0; i < recipients.length; i += CHUNK) {
+    const batch = recipients.slice(i, i + CHUNK);
+    await transporter.sendMail({
+      from: `"Northern Michigan Waves" <${ORG_EMAIL}>`,
+      to: ORG_EMAIL,
+      bcc: batch,
+      subject,
+      html,
+    });
+    sent += batch.length;
+  }
+
+  await getDb().collection('mail').add({
+    to: ORG_EMAIL,
+    bccCount: sent,
+    subject,
+    sent: true,
+    broadcast: true,
+    sentAt: admin.firestore.Timestamp.now(),
+    createdAt: admin.firestore.Timestamp.now(),
+  });
+  return { sent, queued: false };
+}
+
 // ============================================================
 // PAYMENT RECEIPT
 // ============================================================
@@ -107,12 +160,16 @@ interface ReceiptData {
   sponsorBusinessName?: string;
   isAnonymous?: boolean;
   stripeSessionId?: string;
+  // Post-payment account balance. When provided, the receipt shows the
+  // remaining balance (and, if still owed, a Pay Remaining Balance button).
+  balanceDue?: number;
+  paymentUrl?: string;
 }
 
 export async function sendPaymentReceipt(receiptData: ReceiptData): Promise<void> {
   const {
     email, amount, playerName, teamName, season, date,
-    sponsorBusinessName, stripeSessionId,
+    sponsorBusinessName, stripeSessionId, balanceDue, paymentUrl,
   } = receiptData;
 
   const formattedAmount = `$${amount.toFixed(2)}`;
@@ -120,7 +177,10 @@ export async function sendPaymentReceipt(receiptData: ReceiptData): Promise<void
     year: 'numeric', month: 'long', day: 'numeric',
   });
 
-  const subject = `Payment Receipt - TC Waves Ball Club`;
+  const hasBalance = typeof balanceDue === 'number';
+  const owes = hasBalance && (balanceDue as number) > 0.005;
+
+  const subject = `Payment Receipt - Northern Michigan Waves`;
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       ${emailHeader}
@@ -130,13 +190,28 @@ export async function sendPaymentReceipt(receiptData: ReceiptData): Promise<void
           <p>Thank you for your payment! Here are the details:</p>
           <table style="width: 100%; border-collapse: collapse;">
             <tr><td style="padding: 8px 0; color: #666;">Date:</td><td style="padding: 8px 0; font-weight: bold;">${formattedDate}</td></tr>
-            <tr><td style="padding: 8px 0; color: #666;">Amount:</td><td style="padding: 8px 0; font-weight: bold; color: #2e7d32;">${formattedAmount}</td></tr>
+            <tr><td style="padding: 8px 0; color: #666;">Amount Paid:</td><td style="padding: 8px 0; font-weight: bold; color: #2e7d32;">${formattedAmount}</td></tr>
             <tr><td style="padding: 8px 0; color: #666;">Player:</td><td style="padding: 8px 0; font-weight: bold;">${esc(playerName)}</td></tr>
             <tr><td style="padding: 8px 0; color: #666;">Team:</td><td style="padding: 8px 0;">${esc(teamName)}</td></tr>
             <tr><td style="padding: 8px 0; color: #666;">Season:</td><td style="padding: 8px 0;">${esc(season)}</td></tr>
             ${sponsorBusinessName ? `<tr><td style="padding: 8px 0; color: #666;">Sponsor:</td><td style="padding: 8px 0;">${esc(sponsorBusinessName)}</td></tr>` : ''}
             ${stripeSessionId ? `<tr><td style="padding: 8px 0; color: #666;">Reference:</td><td style="padding: 8px 0; font-size: 12px;">${esc(stripeSessionId)}</td></tr>` : ''}
+            ${hasBalance ? `
+            <tr style="border-top: 2px solid #ddd; background-color: ${owes ? '#fff3e0' : '#e8f5e9'};">
+              <td style="padding: 10px 0; font-weight: bold; font-size: 16px;">Remaining Balance:</td>
+              <td style="padding: 10px 0; font-weight: bold; font-size: 16px; color: ${owes ? '#e65100' : '#2e7d32'};">$${(balanceDue as number).toFixed(2)}</td>
+            </tr>` : ''}
           </table>
+          ${!hasBalance ? '' : owes ? `
+          ${paymentUrl ? `
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${paymentUrl}" style="display: inline-block; background-color: #1565c0; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+              Pay Remaining Balance
+            </a>
+          </div>` : ''}
+          <p style="text-align: center; color: #666; font-size: 13px;">Log in to your parent account at <a href="${SITE_URL}">${SITE_URL.replace('https://', '')}</a> to view details and pay the balance.</p>
+          ` : `
+          <p style="text-align: center; color: #2e7d32; font-weight: bold; margin: 16px 0 0;">Your account is paid in full — thank you! 🎉</p>`}
         </div>
         <div style="background-color: white; padding: 15px; border-radius: 8px; text-align: center;">
           <p style="margin: 0; color: #666; font-size: 14px;">
@@ -192,7 +267,7 @@ export async function sendInvoiceNotification(data: InvoiceNotificationData): Pr
     feeBreakdown.otherFees ? `<tr><td style="padding: 6px 0; color: #666;">Other Fees</td><td style="padding: 6px 0; text-align: right;">$${feeBreakdown.otherFees.toFixed(2)}</td></tr>` : '',
   ].filter(Boolean).join('');
 
-  const subject = `Invoice Notice: ${playerName} - TC Waves Ball Club`;
+  const subject = `Invoice Notice: ${playerName} - Northern Michigan Waves`;
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       ${emailHeader}
@@ -252,6 +327,149 @@ export async function sendInvoiceNotification(data: InvoiceNotificationData): Pr
 }
 
 // ============================================================
+// ACCOUNT STATEMENT (itemized ledger)
+// ============================================================
+
+interface StatementPaymentRow {
+  date: string; // pre-formatted (e.g. "Jul 5, 2026")
+  method: string;
+  reference?: string;
+  amount: number;
+}
+
+interface StatementData {
+  email: string;
+  parentName: string;
+  playerName: string;
+  teamName: string;
+  season: string;
+  feeBreakdown: {
+    registrationFee?: number;
+    uniformCost?: number;
+    tournamentFees?: number;
+    facilityFees?: number;
+    equipmentFees?: number;
+    otherFees?: number;
+  };
+  totalOwed: number;
+  scholarshipAmount: number;
+  payments: StatementPaymentRow[];
+  totalPaid: number;
+  balanceDue: number;
+  paymentUrl?: string;
+  statementDate: string; // pre-formatted
+}
+
+/**
+ * Sends a full account STATEMENT: every charge line, every payment received
+ * (with date and method), and the running balance — a transaction-history
+ * document, distinct from the invoice notice (which shows only the balance and
+ * a pay button). Used by the per-player "Email Statement" action.
+ */
+export async function sendPlayerStatement(data: StatementData): Promise<void> {
+  const {
+    email, parentName, playerName, teamName, season,
+    feeBreakdown, totalOwed, scholarshipAmount,
+    payments, totalPaid, balanceDue, paymentUrl, statementDate,
+  } = data;
+
+  const feeItems: Array<[string, number]> = [
+    ['Registration Fee', feeBreakdown.registrationFee || 0],
+    ['Uniform Cost', feeBreakdown.uniformCost || 0],
+    ['Tournament Fees', feeBreakdown.tournamentFees || 0],
+    ['Facility Fees', feeBreakdown.facilityFees || 0],
+    ['Equipment Fees', feeBreakdown.equipmentFees || 0],
+    ['Other Fees', feeBreakdown.otherFees || 0],
+  ];
+  const feeRows = feeItems
+    .filter(([, amt]) => amt > 0)
+    .map(
+      ([label, amt]) =>
+        `<tr><td style="padding: 6px 0; color: #666;">${esc(label)}</td><td style="padding: 6px 0; text-align: right;">$${amt.toFixed(2)}</td></tr>`
+    )
+    .join('');
+
+  const paymentRows = payments.length
+    ? payments
+        .map(
+          (p) =>
+            `<tr>
+              <td style="padding: 6px 0; color: #666;">${esc(p.date)}</td>
+              <td style="padding: 6px 0; color: #666;">${esc(p.method)}${p.reference ? ` <span style="color:#999;">(${esc(p.reference)})</span>` : ''}</td>
+              <td style="padding: 6px 0; text-align: right; color: #2e7d32;">-$${p.amount.toFixed(2)}</td>
+            </tr>`
+        )
+        .join('')
+    : `<tr><td colspan="3" style="padding: 8px 0; color: #999; text-align: center;">No payments recorded yet</td></tr>`;
+
+  const subject = `Account Statement: ${playerName} - Northern Michigan Waves`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      ${emailHeader}
+      <div style="padding: 30px; background-color: #f5f5f5;">
+        <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <h2 style="color: #333; margin-top: 0;">Account Statement</h2>
+            <div style="text-align:right; color:#999; font-size:13px;">As of ${esc(statementDate)}</div>
+          </div>
+          <p>Hi ${esc(parentName || 'Parent/Guardian')},</p>
+          <p>Here is the account statement for <strong>${esc(playerName)}</strong> on the <strong>${esc(teamName)}</strong> team for the <strong>${esc(season)}</strong> season.</p>
+
+          <h3 style="color:#555; font-size:15px; margin: 20px 0 4px;">Charges</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            ${feeRows || '<tr><td style="padding:6px 0;color:#999;">No charges on file</td></tr>'}
+            <tr style="border-top: 2px solid #ddd;">
+              <td style="padding: 8px 0; font-weight: bold;">Total Charges</td>
+              <td style="padding: 8px 0; text-align: right; font-weight: bold;">$${totalOwed.toFixed(2)}</td>
+            </tr>
+            ${scholarshipAmount ? `<tr><td style="padding: 6px 0; color: #1976d2;">Scholarship / Financial Aid</td><td style="padding: 6px 0; text-align: right; color: #1976d2;">-$${scholarshipAmount.toFixed(2)}</td></tr>` : ''}
+          </table>
+
+          <h3 style="color:#555; font-size:15px; margin: 24px 0 4px;">Payments</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr style="border-bottom:1px solid #eee;">
+              <td style="padding: 4px 0; color:#999; font-size:12px;">Date</td>
+              <td style="padding: 4px 0; color:#999; font-size:12px;">Method</td>
+              <td style="padding: 4px 0; color:#999; font-size:12px; text-align:right;">Amount</td>
+            </tr>
+            ${paymentRows}
+            <tr style="border-top: 2px solid #ddd;">
+              <td style="padding: 8px 0; font-weight: bold;" colspan="2">Total Paid</td>
+              <td style="padding: 8px 0; text-align: right; font-weight: bold; color:#2e7d32;">-$${totalPaid.toFixed(2)}</td>
+            </tr>
+          </table>
+
+          <table style="width: 100%; border-collapse: collapse; margin-top: 12px;">
+            <tr style="border-top: 2px solid #ddd; background-color: ${balanceDue > 0 ? '#fff3e0' : '#e8f5e9'};">
+              <td style="padding: 10px 0; font-weight: bold; font-size: 16px;">Balance Due</td>
+              <td style="padding: 10px 0; text-align: right; font-weight: bold; font-size: 16px; color: ${balanceDue > 0 ? '#e65100' : '#2e7d32'};">$${balanceDue.toFixed(2)}</td>
+            </tr>
+          </table>
+
+          ${balanceDue > 0 && paymentUrl ? `
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${paymentUrl}" style="display: inline-block; background-color: #1565c0; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+              Pay Balance
+            </a>
+          </div>` : ''}
+          <p style="text-align: center; color: #666; font-size: 13px;">
+            Log in to your parent account at <a href="${SITE_URL}">${SITE_URL.replace('https://', '')}</a> to view details and make a payment.
+          </p>
+        </div>
+
+        <div style="background-color: white; padding: 15px; border-radius: 8px; text-align: center;">
+          <p style="margin: 0; color: #666; font-size: 13px;">
+            Questions? Reply to this email or contact us at ${ORG_EMAIL}
+          </p>
+        </div>
+      </div>
+      ${emailFooter}
+    </div>`;
+
+  await queueEmail(email, subject, html);
+}
+
+// ============================================================
 // PARENT INVITE EMAIL
 // ============================================================
 
@@ -269,15 +487,15 @@ export async function sendParentInviteEmail(data: InviteData): Promise<void> {
     ? playerNames.map(n => `<li><strong>${esc(n)}</strong></li>`).join('')
     : '<li>Your child</li>';
 
-  const subject = `You're Invited - TC Waves Ball Club Parent Portal`;
+  const subject = `You're Invited - Northern Michigan Waves Parent Portal`;
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       ${emailHeader}
       <div style="padding: 30px; background-color: #f5f5f5;">
         <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-          <h2 style="color: #333; margin-top: 0;">Welcome to TC Waves!</h2>
+          <h2 style="color: #333; margin-top: 0;">Welcome to Northern Michigan Waves!</h2>
           <p>Hi ${esc(parentName || 'Parent/Guardian')},</p>
-          <p>An account has been created for you on the TC Waves Ball Club parent portal. You can use it to:</p>
+          <p>An account has been created for you on the Northern Michigan Waves parent portal. You can use it to:</p>
           <ul style="color: #555;">
             <li>View invoices and payment history</li>
             <li>Make payments online</li>
@@ -295,10 +513,65 @@ export async function sendParentInviteEmail(data: InviteData): Promise<void> {
           </div>
 
           <p style="color: #666; font-size: 13px;">
-            This link does not expire. You can use it any time to set your password.
-            If you have any issues, visit
+            This link is valid for 30 days and can be used once to set your password.
+            If it has expired or you have any issues, visit
             <a href="${SITE_URL}/login">${SITE_URL.replace('https://', '')}/login</a>
             and click "Forgot Password" to get a new link.
+          </p>
+        </div>
+      </div>
+      ${emailFooter}
+    </div>`;
+
+  await queueEmail(email, subject, html);
+}
+
+// ============================================================
+// TRYOUT OFFER EMAIL (player offered a roster spot)
+// ============================================================
+
+interface TryoutOfferData {
+  email: string;
+  parentName: string;
+  playerName: string;
+  ageGroup: string;
+  sessionLabel?: string;
+}
+
+export async function sendTryoutOfferEmail(data: TryoutOfferData): Promise<void> {
+  const { email, parentName, playerName, ageGroup, sessionLabel } = data;
+
+  const subject = `${playerName} has been offered a spot - Northern Michigan Waves`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      ${emailHeader}
+      <div style="padding: 30px; background-color: #f5f5f5;">
+        <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+          <h2 style="color: #333; margin-top: 0;">Congratulations!</h2>
+          <p>Hi ${esc(parentName || 'Parent/Guardian')},</p>
+          <p>
+            We're excited to let you know that <strong>${esc(playerName)}</strong> has been
+            offered a spot with the Northern Michigan Waves in our
+            <strong>${esc(ageGroup || 'travel')}</strong> division for next season!
+          </p>
+          ${sessionLabel ? `<p style="color: #666; font-size: 13px;">Tryout session: ${esc(sessionLabel)}</p>` : ''}
+          <p>
+            To accept the offer, log in to your parent account (or reply to this email
+            and we'll get you set up):
+          </p>
+
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${SITE_URL}" style="display: inline-block; background-color: #1565c0; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+              Accept &amp; Get Started
+            </a>
+          </div>
+
+          <p style="color: #555;">
+            <strong>Next steps:</strong> once you accept, we'll follow up with registration
+            paperwork, uniform sizing, and fee details for the season.
+          </p>
+          <p style="color: #666; font-size: 13px;">
+            Questions? Just reply to this email or contact us at ${ORG_EMAIL}.
           </p>
         </div>
       </div>
@@ -320,24 +593,24 @@ interface PasswordResetData {
 export async function sendPasswordResetCustomEmail(data: PasswordResetData): Promise<void> {
   const { email, resetLink } = data;
 
-  const subject = `Password Reset - TC Waves Ball Club`;
+  const subject = `Set Your Password - Northern Michigan Waves`;
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       ${emailHeader}
       <div style="padding: 30px; background-color: #f5f5f5;">
         <div style="background-color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-          <h2 style="color: #333; margin-top: 0;">Password Reset Request</h2>
+          <h2 style="color: #333; margin-top: 0;">Set Your Password</h2>
           <p>Hi,</p>
-          <p>We received a request to reset the password for your TC Waves account. Click the button below to set a new password:</p>
+          <p>Use the button below to create (or reset) the password for your Northern Michigan Waves account:</p>
 
           <div style="text-align: center; margin: 24px 0;">
             <a href="${resetLink}" style="display: inline-block; background-color: #1565c0; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
-              Reset Your Password
+              Set Your Password
             </a>
           </div>
 
           <p style="color: #666; font-size: 13px;">
-            This link will expire in 48 hours. If you did not request a password reset,
+            This link will expire in 48 hours. If you did not request this,
             you can safely ignore this email.
           </p>
         </div>

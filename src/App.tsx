@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, CssBaseline } from '@mui/material';
+import { ConfirmProvider } from '@/components/common/ConfirmProvider';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './stores/authStore';
 import { theme } from './theme';
@@ -118,6 +119,16 @@ import HomepageManagerPage from './features/homepage-manager/pages/HomepageManag
 // Admin Pages
 import ZipUploadPage from './features/admin/pages/ZipUploadPage';
 import AdminSettingsPage from './features/admin/pages/AdminSettingsPage';
+import EmailParentsPage from './features/admin/pages/EmailParentsPage';
+import SurveysPage from './features/surveys/pages/SurveysPage';
+import SurveyAdminPage from './features/surveys/pages/SurveyAdminPage';
+import TryoutApplicantsPage from './features/tryouts/pages/TryoutApplicantsPage';
+import RegisterTryoutPage from './features/tryouts/pages/RegisterTryoutPage';
+import CoachApplicationPage from './features/public/pages/CoachApplicationPage';
+import CoachApplicationsPage from './features/admin/pages/CoachApplicationsPage';
+import EvaluationsPage from './features/evaluations/pages/EvaluationsPage';
+import EvaluationEventPage from './features/evaluations/pages/EvaluationEventPage';
+import GuestEvaluatePage from './features/evaluations/pages/GuestEvaluatePage';
 
 // Components
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -133,13 +144,16 @@ const queryClient = new QueryClient({
 });
 
 function App() {
-  const { initialize, initialized, loading } = useAuthStore();
+  const { initialize, initialized } = useAuthStore();
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
-  if (!initialized || loading) {
+  // Gate only on the initial auth resolution. Do NOT also gate on `loading`:
+  // signIn/signUp toggle it, and unmounting the whole router mid-submit tore
+  // down the login form (clearing it, dropping inline errors, breaking navigate).
+  if (!initialized) {
     return <LoadingScreen />;
   }
 
@@ -147,6 +161,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
+        <ConfirmProvider>
         <BrowserRouter>
           <Routes>
             {/* Public Routes */}
@@ -160,19 +175,24 @@ function App() {
               <Route path="/sponsors" element={<PublicSponsorsPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/tryouts" element={<TryoutRegistrationPage />} />
+              <Route path="/coach-application" element={<CoachApplicationPage />} />
               <Route path="/privacy" element={<PrivacyPolicyPage />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/sponsorship-packages" element={<SponsorshipPackagesPage />} />
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/staff" element={<StaffDirectoryPage />} />
               <Route path="/parent-resources" element={<ParentResourcesPage />} />
+              {/* Conversion page — render inside the public layout so visitors
+                  have the header/nav/footer to navigate from. */}
+              <Route path="/become-sponsor" element={<BecomeSponsorPage />} />
             </Route>
 
             {/* Public Payment Routes (no layout wrapper needed) */}
             <Route path="/pay/:token" element={<PublicPaymentPage />} />
+            {/* Guest evaluator link (no account needed) */}
+            <Route path="/evaluate/:token" element={<GuestEvaluatePage />} />
             <Route path="/pay/success" element={<PaymentSuccessPage />} />
             <Route path="/pay/cancel" element={<PaymentCancelPage />} />
-            <Route path="/become-sponsor" element={<BecomeSponsorPage />} />
 
             {/* Auth Routes */}
             <Route element={<AuthLayout />}>
@@ -199,6 +219,11 @@ function App() {
               <Route path="/my-invoices" element={<ParentInvoicesPage />} />
               <Route path="/tournaments" element={<TournamentsPage />} />
               <Route path="/stats" element={<TeamStatsPage />} />
+              <Route path="/surveys" element={<SurveysPage />} />
+              <Route path="/register-tryouts" element={<RegisterTryoutPage />} />
+              {/* Schedule is read-only for parents (all write controls are
+                  gated to coaches inside the page). */}
+              <Route path="/schedules" element={<SchedulesPage />} />
             </Route>
 
             {/* Protected Routes - Coach and above */}
@@ -206,12 +231,15 @@ function App() {
               <Route path="/teams" element={<TeamsPage />} />
               <Route path="/teams/:id" element={<TeamDetailsPage />} />
               <Route path="/players" element={<PlayersPage />} />
-              <Route path="/schedules" element={<SchedulesPage />} />
               <Route path="/volunteers" element={<VolunteersPage />} />
               <Route path="/equipment" element={<EquipmentPage />} />
               <Route path="/documents" element={<DocumentsPage />} />
               <Route path="/media" element={<MediaPage />} />
               <Route path="/metrics" element={<MetricsPage />} />
+              <Route path="/manage-surveys" element={<SurveyAdminPage />} />
+              <Route path="/tryout-signups" element={<TryoutApplicantsPage />} />
+              <Route path="/evaluations" element={<EvaluationsPage />} />
+              <Route path="/evaluations/:id" element={<EvaluationEventPage />} />
             </Route>
 
             {/* Protected Routes - Admin and above */}
@@ -246,6 +274,8 @@ function App() {
               <Route path="/homepage-manager" element={<HomepageManagerPage />} />
               <Route path="/admin/zip-upload" element={<ZipUploadPage />} />
               <Route path="/admin/settings" element={<AdminSettingsPage />} />
+              <Route path="/admin/email-parents" element={<EmailParentsPage />} />
+              <Route path="/coach-applications" element={<CoachApplicationsPage />} />
             </Route>
 
             {/* 404 - Redirect to public home */}
@@ -253,6 +283,7 @@ function App() {
           </Routes>
         </BrowserRouter>
         <Toaster position="top-right" />
+        </ConfirmProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

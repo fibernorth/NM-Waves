@@ -5,7 +5,7 @@ import cors from 'cors';
 import { sendPasswordResetCustomEmail } from './emails';
 
 const corsHandler = cors({ origin: true });
-const SITE_URL = functions.config().app?.site_url || 'https://nmwaves.com';
+const SITE_URL = process.env.SITE_URL || functions.config().app?.site_url || 'https://nmwaves.com';
 
 /**
  * HTTP function to set a user's password using a custom invite or reset token.
@@ -79,7 +79,21 @@ export const setAccountPassword = functions.https.onRequest((req, res) => {
         const pendingDoc = pendingQuery.docs[0];
         const pendingData = pendingDoc.data();
 
-        // Token is valid (invite tokens never expire)
+        // Reject an already-used invite (the token is single-use). Without this,
+        // an old invite email could reset the account password indefinitely.
+        if (pendingData.status === 'activated') {
+          res.status(400).json({ error: 'This invite link has already been used. Please use "Forgot password" to sign in.' });
+          return;
+        }
+
+        // Enforce a 30-day expiry on the invite token.
+        const issuedAt = pendingData.inviteTokenCreatedAt?.toDate?.();
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        if (issuedAt && Date.now() - issuedAt.getTime() > THIRTY_DAYS_MS) {
+          res.status(400).json({ error: 'This invite link has expired. Please contact your administrator for a new one.' });
+          return;
+        }
+
         // Find or verify the Firebase Auth user
         let authUser;
         try {
@@ -92,9 +106,11 @@ export const setAccountPassword = functions.https.onRequest((req, res) => {
         // Set the password
         await admin.auth().updateUser(authUser.uid, { password });
 
-        // Mark invite as completed
+        // Mark invite as completed and invalidate the token so the link can't be
+        // reused to take over the account later.
         await pendingDoc.ref.update({
           status: 'activated',
+          inviteToken: admin.firestore.FieldValue.delete(),
           activatedAt: admin.firestore.Timestamp.now(),
           updatedAt: admin.firestore.Timestamp.now(),
         });
@@ -184,14 +200,21 @@ export const sendCustomPasswordReset = functions.https.onRequest((req, res) => {
     const db = admin.firestore();
 
     try {
-      // Rate limiting: max 3 reset requests per email per hour
+      // Rate limiting: max 3 reset requests per email per hour.
+      // Query by email only (a single-field filter needs no composite index),
+      // then apply the 1-hour window in memory so this flow never depends on a
+      // composite index being built.
       const oneHourAgo = new Date();
       oneHourAgo.setHours(oneHourAgo.getHours() - 1);
-      const recentResets = await db.collection('passwordResets')
+      const byEmail = await db.collection('passwordResets')
         .where('email', '==', email)
-        .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(oneHourAgo))
         .get();
-      if (recentResets.size >= 3) {
+      const recentCount = byEmail.docs.filter((doc) => {
+        const c = doc.data().createdAt;
+        const created = c?.toDate ? c.toDate() : (c ? new Date(c) : null);
+        return created ? created >= oneHourAgo : false;
+      }).length;
+      if (recentCount >= 3) {
         // Return success message to avoid revealing rate limit as an enumeration signal
         res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
         return;

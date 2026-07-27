@@ -39,7 +39,7 @@ const CHARGE_FIELDS = Object.keys(CHARGE_LABELS).filter(k => k !== 'full_balance
  * Atomically increment the invoice counter and return a formatted invoice number.
  * Format: INV-YYYY-XXXX (year + zero-padded sequence)
  */
-async function getNextInvoiceNumber(): Promise<string> {
+export async function getNextInvoiceNumber(): Promise<string> {
   const counterRef = getDb().collection('appSettings').doc('invoiceCounter');
   const year = new Date().getFullYear();
 

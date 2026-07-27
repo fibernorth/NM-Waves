@@ -24,12 +24,8 @@ import SportsBaseballIcon from '@mui/icons-material/SportsBaseball';
 import PrintIcon from '@mui/icons-material/Print';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ShareIcon from '@mui/icons-material/Share';
-import LockIcon from '@mui/icons-material/Lock';
-import LoginIcon from '@mui/icons-material/Login';
-import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import { invoiceTokensApi } from '@/lib/api/invoiceTokens';
-import { playerFinancesApi } from '@/lib/api/finances';
 import { useAuthStore } from '@/stores/authStore';
 import { generateInvoiceHTML } from '@/lib/utils/invoicePrintTemplate';
 import StripeCheckoutButton from '@/components/common/StripeCheckoutButton';
@@ -65,18 +61,13 @@ const PublicPaymentPage = () => {
   const qrRef = useRef<HTMLDivElement>(null);
 
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
 
   const { data: invoiceToken, isLoading } = useQuery({
     queryKey: ['invoiceToken', token],
     queryFn: () => invoiceTokensApi.getByToken(token!),
     enabled: !!token,
-  });
-
-  // Fetch live finance record to get the current balance (not the stale snapshot)
-  const { data: liveFinance } = useQuery({
-    queryKey: ['playerFinance', invoiceToken?.financeId],
-    queryFn: () => playerFinancesApi.getById(invoiceToken!.financeId),
-    enabled: !!invoiceToken?.financeId && !invoiceToken?.used,
   });
 
   // --- Error / edge-case states ---
@@ -134,20 +125,28 @@ const PublicPaymentPage = () => {
   // --- Invoice data ---
   const isPerCharge = invoiceToken.chargeType && invoiceToken.chargeType !== 'full_balance';
 
-  // Use the live finance balance if available, otherwise fall back to the snapshot
-  const liveBalanceDue = liveFinance ? Math.max(0, liveFinance.balanceDue) : null;
-  const liveTotalPaid = liveFinance ? liveFinance.totalPaid : (invoiceToken.totalPaid || 0);
-  const liveScholarship = liveFinance ? liveFinance.scholarshipAmount : (invoiceToken.scholarshipAmount || 0);
+  // Live balance comes from the invoice callable (server-computed, works for
+  // anonymous payers) — no direct playerFinances read from the browser.
+  const liveBalanceDue = invoiceToken.liveBalanceDue != null ? Math.max(0, invoiceToken.liveBalanceDue) : null;
+  const liveTotalPaid = invoiceToken.totalPaid || 0;
+  const liveScholarship = invoiceToken.scholarshipAmount || 0;
 
-  // For full-balance invoices, use the live remaining balance
-  // For per-charge invoices, use the live balance (the whole account balance) since partial payments apply across charges
-  const effectiveAmountDue = liveBalanceDue !== null ? liveBalanceDue : invoiceToken.amountDue;
+  // Full-balance invoices default to the live remaining balance. Per-charge
+  // invoices default to that charge's amount (capped at the remaining balance),
+  // not the whole account balance.
+  const fullRemaining = liveBalanceDue !== null ? liveBalanceDue : invoiceToken.amountDue;
+  const effectiveAmountDue = isPerCharge
+    ? Math.min(invoiceToken.chargeAmount || fullRemaining, fullRemaining || (invoiceToken.chargeAmount || 0))
+    : fullRemaining;
 
   const amount = parseFloat(paymentAmount) || effectiveAmountDue;
   const isLoggedIn = !!user;
-  const payerName = user?.displayName || '';
-  const payerEmail = user?.email || '';
-  const canPay = isLoggedIn && amount >= 0.5;
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim());
+  const payerName = isLoggedIn ? (user?.displayName || '') : guestName.trim();
+  const payerEmail = isLoggedIn ? (user?.email || '') : guestEmail.trim();
+  // Anyone with the link can pay; guests just provide a name + email so the
+  // payment is attributed and receipted (the token is validated server-side).
+  const canPay = amount >= 0.5 && (isLoggedIn || (guestName.trim().length > 1 && emailOk));
   const invoiceNumber = invoiceToken.invoiceNumber || invoiceToken.token.substring(0, 8).toUpperCase();
   const pageUrl = window.location.href;
 
@@ -177,7 +176,7 @@ const PublicPaymentPage = () => {
   const handleShare = async () => {
     const shareData = {
       title: `Invoice: ${invoiceToken.chargeLabel || 'Payment'} - ${invoiceToken.playerName}`,
-      text: `TC Waves Ball Club invoice for ${invoiceToken.playerName}: ${invoiceToken.chargeLabel || 'Payment'} - ${fmt(effectiveAmountDue)}`,
+      text: `Northern Michigan Waves invoice for ${invoiceToken.playerName}: ${invoiceToken.chargeLabel || 'Payment'} - ${fmt(effectiveAmountDue)}`,
       url: pageUrl,
     };
     if (navigator.share) {
@@ -192,7 +191,7 @@ const PublicPaymentPage = () => {
       {/* ====== HEADER ====== */}
       <Box sx={{ textAlign: 'center', mb: 3 }}>
         <SportsBaseballIcon sx={{ fontSize: 44, color: 'primary.main', mb: 0.5 }} />
-        <Typography variant="h5" fontWeight={700}>TC Waves Ball Club</Typography>
+        <Typography variant="h5" fontWeight={700}>Northern Michigan Waves</Typography>
         <Typography variant="body2" color="text.secondary">Invoice #{invoiceNumber}</Typography>
       </Box>
 
@@ -337,69 +336,66 @@ const PublicPaymentPage = () => {
         <Typography variant="h6" gutterBottom>Pay Now</Typography>
 
         {isLoggedIn ? (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Paying as <strong>{payerName}</strong> ({payerEmail})
+          </Typography>
+        ) : (
           <>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Paying as <strong>{payerName}</strong> ({payerEmail})
+              Anyone can pay this invoice — just add your name and email so we can
+              send a receipt and record the payment.{' '}
+              <RouterLink to={`/login?returnTo=/pay/${token}`}>Have an account? Sign in</RouterLink>.
             </Typography>
-
-            <TextField
-              label="Payment Amount"
-              type="number"
-              value={paymentAmount}
-              onChange={(e) => setPaymentAmount(e.target.value)}
-              placeholder={effectiveAmountDue.toFixed(2)}
-              fullWidth
-              sx={{ mb: 2 }}
-              InputProps={{ startAdornment: '$' }}
-              inputProps={{ step: '0.01', min: '0.50' }}
-              helperText={`Leave blank to pay the remaining balance (${fmt(effectiveAmountDue)})`}
-            />
-
-            <Alert severity="info" sx={{ mb: 2 }}>
-              A processing fee (2.9% + $0.30) applies to card payments.
-            </Alert>
-
-            <StripeCheckoutButton
-              financeId={invoiceToken.financeId}
-              playerId={invoiceToken.playerId}
-              amount={amount}
-              invoiceToken={invoiceToken.token}
-              payerName={payerName}
-              payerEmail={payerEmail}
-              label={`Pay ${fmt(amount)}`}
-              disabled={!canPay}
-              fullWidth
-            />
-          </>
-        ) : (
-          <Box sx={{ textAlign: 'center', py: 2 }}>
-            <LockIcon sx={{ fontSize: 40, color: 'text.secondary', mb: 1 }} />
-            <Typography variant="body1" sx={{ mb: 1 }}>
-              Sign in or create an account to make a payment
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              We require an account so your payment is properly recorded.
-            </Typography>
-            <Stack direction="row" spacing={2} justifyContent="center">
-              <Button
-                variant="contained"
-                startIcon={<LoginIcon />}
-                component={RouterLink}
-                to={`/login?returnTo=/pay/${token}`}
-              >
-                Log In to Pay
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<PersonAddIcon />}
-                component={RouterLink}
-                to={`/signup?returnTo=/pay/${token}`}
-              >
-                Create Account
-              </Button>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
+              <TextField
+                label="Your Name"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                fullWidth
+                required
+              />
+              <TextField
+                label="Your Email"
+                type="email"
+                value={guestEmail}
+                onChange={(e) => setGuestEmail(e.target.value)}
+                fullWidth
+                required
+                error={!!guestEmail && !emailOk}
+                helperText={guestEmail && !emailOk ? 'Enter a valid email' : ' '}
+              />
             </Stack>
-          </Box>
+          </>
         )}
+
+        <TextField
+          label="Payment Amount"
+          type="number"
+          value={paymentAmount}
+          onChange={(e) => setPaymentAmount(e.target.value)}
+          placeholder={effectiveAmountDue.toFixed(2)}
+          fullWidth
+          sx={{ mb: 2 }}
+          InputProps={{ startAdornment: '$' }}
+          inputProps={{ step: '0.01', min: '0.50' }}
+          helperText={`Leave blank to pay ${isPerCharge ? `this charge (${fmt(effectiveAmountDue)})` : `the remaining balance (${fmt(effectiveAmountDue)})`}`}
+        />
+
+        <Alert severity="info" sx={{ mb: 2 }}>
+          A card processing fee applies to card payments.
+        </Alert>
+
+        <StripeCheckoutButton
+          financeId={invoiceToken.financeId}
+          playerId={invoiceToken.playerId}
+          amount={amount}
+          invoiceToken={invoiceToken.token}
+          payerName={payerName}
+          payerEmail={payerEmail}
+          label={`Pay ${fmt(amount)}`}
+          disabled={!canPay}
+          fullWidth
+        />
       </Paper>
 
       {/* Hidden QR code for print template */}

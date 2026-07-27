@@ -1,0 +1,400 @@
+import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
+
+const getDb = () => admin.firestore();
+
+interface ContactInput {
+  name?: string;
+  relationship?: string;
+  email?: string;
+  phone?: string;
+  isPrimaryContact?: boolean;
+  isFinancialParty?: boolean;
+}
+
+interface UpdateLinkedPlayerContactInput {
+  playerId: string;
+  parentName?: string;
+  parentEmail?: string;
+  parentPhone?: string;
+  emergencyContact?: string;
+  emergencyPhone?: string;
+  medicalNotes?: string;
+  contacts?: ContactInput[];
+}
+
+/**
+ * Lets a parent update the contact / emergency / medical fields on a player
+ * they are linked to. Parents cannot write the /players collection directly
+ * (that is coach-only), so onboarding "Save & Continue" used to always fail
+ * with a permissions error. This callable enforces that the caller is a parent
+ * linked to the player and writes ONLY the allowed fields — never roster,
+ * financial, or team assignment fields.
+ */
+export const updateLinkedPlayerContact = functions.https.onCall(
+  async (data: UpdateLinkedPlayerContactInput, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+    }
+    const { playerId } = data;
+    if (!playerId) {
+      throw new functions.https.HttpsError('invalid-argument', 'playerId is required');
+    }
+
+    const userDoc = await getDb().collection('users').doc(context.auth.uid).get();
+    if (!userDoc.exists) {
+      throw new functions.https.HttpsError('permission-denied', 'Unknown user');
+    }
+    const userData = userDoc.data()!;
+    const roles: string[] = userData.roles || (userData.role ? [userData.role] : []);
+    const linkedPlayerIds: string[] = userData.linkedPlayerIds || [];
+
+    const isParent = roles.includes('parent');
+    const isLinked = linkedPlayerIds.includes(playerId);
+    if (!isParent || !isLinked) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'You can only update a child linked to your account'
+      );
+    }
+
+    // Whitelist of fields a parent may update — nothing else is written.
+    const allowed: Record<string, any> = { updatedAt: admin.firestore.Timestamp.now() };
+    if (data.parentName !== undefined) allowed.parentName = data.parentName;
+    if (data.parentEmail !== undefined) allowed.parentEmail = data.parentEmail;
+    if (data.parentPhone !== undefined) allowed.parentPhone = data.parentPhone;
+    if (data.emergencyContact !== undefined) allowed.emergencyContact = data.emergencyContact;
+    if (data.emergencyPhone !== undefined) allowed.emergencyPhone = data.emergencyPhone;
+    if (data.medicalNotes !== undefined) allowed.medicalNotes = data.medicalNotes;
+    if (Array.isArray(data.contacts)) {
+      allowed.contacts = data.contacts.map((c) => ({
+        name: c.name || '',
+        relationship: c.relationship || '',
+        email: c.email || '',
+        phone: c.phone || '',
+        isPrimaryContact: c.isPrimaryContact || false,
+        isFinancialParty: c.isFinancialParty || false,
+      }));
+    }
+
+    await getDb().collection('players').doc(playerId).update(allowed);
+    return { success: true };
+  }
+);
+
+/**
+ * Search for players a parent can link, returning ONLY non-sensitive fields
+ * (id, name, team) plus a server-computed emailMatch flag. Parents can no
+ * longer read the players collection directly, so this replaces the old client
+ * roster dump — no DOB, medical notes, contacts, or emails cross the wire.
+ * Email matching is done server-side against the caller's own auth email.
+ */
+/** Last-10-digits phone comparison, tolerant of formatting. */
+const phoneDigits = (v?: string): string => (v || '').replace(/\D/g, '').slice(-10);
+
+/** Does this player already have a parent/guardian attached? */
+const playerHasParent = (p: any): boolean =>
+  !!(p.parentEmail && String(p.parentEmail).trim()) ||
+  (Array.isArray(p.contacts) && p.contacts.some((c: any) => (c.email || '').trim() || (c.phone || '').trim())) ||
+  (Array.isArray(p.linkedUserIds) && p.linkedUserIds.length > 0);
+
+export const searchLinkablePlayers = functions.https.onCall(
+  async (data: { search?: string; phone?: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+    }
+    const callerEmail = (context.auth.token.email || '').toLowerCase();
+    const search = (data?.search || '').toLowerCase().trim();
+    const callerPhone = phoneDigits(data?.phone);
+
+    const snapshot = await getDb()
+      .collection('players')
+      .where('active', '==', true)
+      .get();
+
+    const results = snapshot.docs
+      .map((doc) => {
+        const p = doc.data();
+        const emailMatch =
+          !!callerEmail &&
+          ((p.parentEmail || '').toLowerCase() === callerEmail ||
+            (p.contacts || []).some((c: any) => (c.email || '').toLowerCase() === callerEmail));
+        // Phone match against parent/contact phones (server-verified value the
+        // parent typed — only actioned for players with no parent yet).
+        const phoneMatch =
+          callerPhone.length === 10 &&
+          (phoneDigits(p.parentPhone) === callerPhone ||
+            (p.contacts || []).some((c: any) => phoneDigits(c.phone) === callerPhone));
+        const hasParent = playerHasParent(p);
+        const isMine = emailMatch || phoneMatch;
+        const fullLast = p.lastName || '';
+        return {
+          id: doc.id,
+          firstName: p.firstName || '',
+          // Full last name is revealed ONLY for the caller's own email/phone
+          // matches; for everyone else it's reduced to an initial so the search
+          // can't be used to harvest a full roster of minors' names.
+          lastName: isMine ? fullLast : (fullLast ? `${fullLast[0]}.` : ''),
+          teamName: p.teamName || '',
+          emailMatch,
+          phoneMatch: phoneMatch && !emailMatch,
+          // A player with no parent yet can be claimed (writes the parent on).
+          claimable: !hasParent,
+          _name: `${p.firstName || ''} ${fullLast}`.toLowerCase(),
+        };
+      })
+      // Always surface email/phone matches. Otherwise only on a 2+ char name
+      // search, and unclaimed players are prioritized in the UI.
+      .filter(
+        (p) =>
+          p.emailMatch ||
+          p.phoneMatch ||
+          (search.length >= 2 && p._name.includes(search))
+      )
+      .map(({ _name, ...rest }) => rest);
+
+    // Cap unrelated name-search results so the endpoint can't be paged through
+    // to enumerate the whole roster; own matches are always kept.
+    const mine = results.filter((p) => p.emailMatch || p.phoneMatch);
+    const others = results.filter((p) => !p.emailMatch && !p.phoneMatch).slice(0, 25);
+    return { players: [...mine, ...others] };
+  }
+);
+
+/**
+ * Link a child to the calling parent account. Access to a player's sensitive
+ * data flows entirely from this link, so linking is verified server-side: the
+ * caller's auth email must match the player's parentEmail or a contact email.
+ * If it does not, the parent must be linked by an administrator. Because the
+ * Firestore rules now freeze linkedPlayerIds against client writes, this
+ * callable (Admin SDK) is the only self-service path to a link.
+ */
+export const linkChild = functions.https.onCall(
+  async (
+    data: {
+      playerId: string;
+      phone?: string;
+      parentName?: string;
+      parentEmail?: string;
+    },
+    context
+  ) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+    }
+    // Linking grants access to a minor's PII/finances, so the account's email
+    // must be verified — otherwise anyone could register under a family's known
+    // email and claim their child.
+    if (context.auth.token.email_verified !== true) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Please verify your email address first — check your inbox for the verification link, then try again.'
+      );
+    }
+    const { playerId } = data;
+    if (!playerId) {
+      throw new functions.https.HttpsError('invalid-argument', 'playerId is required');
+    }
+    const callerEmail = (context.auth.token.email || '').toLowerCase();
+    const callerPhone = phoneDigits(data?.phone);
+
+    const playerRef = getDb().collection('players').doc(playerId);
+    const playerDoc = await playerRef.get();
+    if (!playerDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Player not found');
+    }
+    const p = playerDoc.data()!;
+    const emailMatch =
+      !!callerEmail &&
+      ((p.parentEmail || '').toLowerCase() === callerEmail ||
+        (p.contacts || []).some((c: any) => (c.email || '').toLowerCase() === callerEmail));
+
+    // Phone claim is only allowed for players with no parent attached yet, and
+    // only when the parent's typed phone matches a number already on the player
+    // record. This lets a family self-attach without an admin, while a player
+    // that already has a guardian can never be claimed by phone.
+    const hasParent = playerHasParent(p);
+    const phoneClaim =
+      !emailMatch &&
+      !hasParent &&
+      callerPhone.length === 10 &&
+      (phoneDigits(p.parentPhone) === callerPhone ||
+        (p.contacts || []).some((c: any) => phoneDigits(c.phone) === callerPhone));
+
+    if (!emailMatch && !phoneClaim) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        "We couldn't verify this player belongs to you. Please ask your club administrator to link your account."
+      );
+    }
+
+    // On a phone claim, write the parent's contact details onto the player so
+    // the family is properly attached (name/email/phone), mirroring what an
+    // admin link would produce. Never overwrite an existing parent.
+    if (phoneClaim) {
+      const parentName = (data.parentName || context.auth.token.name || '').trim();
+      const parentEmail = (data.parentEmail || callerEmail || '').trim().toLowerCase();
+      const parentPhone = data.phone || '';
+      const playerUpdate: Record<string, any> = {
+        updatedAt: admin.firestore.Timestamp.now(),
+      };
+      if (!p.parentName && parentName) playerUpdate.parentName = parentName;
+      if (!p.parentEmail && parentEmail) playerUpdate.parentEmail = parentEmail;
+      if (!p.parentPhone && parentPhone) playerUpdate.parentPhone = parentPhone;
+
+      const contacts = Array.isArray(p.contacts) ? [...p.contacts] : [];
+      const alreadyListed = contacts.some(
+        (c: any) =>
+          (parentEmail && (c.email || '').toLowerCase() === parentEmail) ||
+          (callerPhone && phoneDigits(c.phone) === callerPhone)
+      );
+      if (!alreadyListed && (parentName || parentEmail || parentPhone)) {
+        contacts.push({
+          name: parentName,
+          relationship: 'Parent/Guardian',
+          email: parentEmail,
+          phone: parentPhone,
+          isPrimaryContact: contacts.length === 0,
+          isFinancialParty: contacts.length === 0,
+        });
+      }
+      playerUpdate.contacts = contacts;
+      playerUpdate.linkedUserIds = admin.firestore.FieldValue.arrayUnion(context.auth.uid);
+      await playerRef.update(playerUpdate);
+    } else {
+      // Email match: still record the link on the player side for consistency.
+      await playerRef.update({
+        linkedUserIds: admin.firestore.FieldValue.arrayUnion(context.auth.uid),
+        updatedAt: admin.firestore.Timestamp.now(),
+      });
+    }
+
+    // Attach the parent to the child's team as well, so team-scoped surfaces
+    // (schedule, roster, team communications) include them. teamIds only grants
+    // access when paired with a coach/admin role, so this never escalates a
+    // parent — it just records the association.
+    const userUpdate: Record<string, any> = {
+      linkedPlayerIds: admin.firestore.FieldValue.arrayUnion(playerId),
+      updatedAt: admin.firestore.Timestamp.now(),
+    };
+    if (p.teamId) {
+      userUpdate.teamIds = admin.firestore.FieldValue.arrayUnion(p.teamId);
+    }
+    await getDb().collection('users').doc(context.auth.uid).update(userUpdate);
+
+    return { success: true, method: phoneClaim ? 'phone' : 'email' };
+  }
+);
+
+/**
+ * Add a player's current team to every linked parent's teamIds, so a parent
+ * stays "on" their child's team even when the child is placed (or moved) AFTER
+ * the parent linked. Callable by coaches/admins from the placement flow. Uses
+ * the Admin SDK, so it can update the parents' user docs (which coaches cannot
+ * write directly), and is idempotent via arrayUnion. teamIds only confers
+ * access alongside a coach/admin role, so this never escalates a parent.
+ */
+export const syncLinkedParentTeams = functions.https.onCall(
+  async (data: { playerId: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+    }
+    const callerDoc = await getDb().collection('users').doc(context.auth.uid).get();
+    const callerRoles: string[] = callerDoc.exists
+      ? callerDoc.data()!.roles || (callerDoc.data()!.role ? [callerDoc.data()!.role] : [])
+      : [];
+    const isCoachOrAdmin = callerRoles.some((r) =>
+      ['coach', 'admin', 'master-admin'].includes(r)
+    );
+    if (!isCoachOrAdmin) {
+      throw new functions.https.HttpsError('permission-denied', 'Coach or admin only');
+    }
+
+    const { playerId } = data;
+    if (!playerId) {
+      throw new functions.https.HttpsError('invalid-argument', 'playerId is required');
+    }
+
+    const playerDoc = await getDb().collection('players').doc(playerId).get();
+    if (!playerDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Player not found');
+    }
+    const p = playerDoc.data()!;
+    const teamId: string = p.teamId || '';
+    const linkedUserIds: string[] = Array.isArray(p.linkedUserIds) ? p.linkedUserIds : [];
+    if (!teamId || linkedUserIds.length === 0) {
+      return { updated: 0 };
+    }
+
+    const batch = getDb().batch();
+    for (const uid of linkedUserIds) {
+      batch.update(getDb().collection('users').doc(uid), {
+        teamIds: admin.firestore.FieldValue.arrayUnion(teamId),
+        updatedAt: admin.firestore.Timestamp.now(),
+      });
+    }
+    await batch.commit();
+    return { updated: linkedUserIds.length };
+  }
+);
+
+/**
+ * Returns a MINIMAL finance summary (name, team, season, balance due) for a
+ * player, to any authenticated user. Used by the sponsor "pay a player" flow so
+ * a sponsor can see the outstanding balance of the player they want to fund —
+ * without granting sponsors read access to the full playerFinances documents
+ * (which contain every payer's name/email and the whole payment history).
+ */
+export const getPlayerFinanceSummary = functions.https.onCall(
+  async (data: { playerId: string }, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be signed in');
+    }
+    // Sponsor "pay a player" flow only — restrict to sponsors/coaches/admins so
+    // an arbitrary account can't enumerate every player's name + balance.
+    const callerDoc = await getDb().collection('users').doc(context.auth.uid).get();
+    const callerRoles: string[] = callerDoc.exists
+      ? callerDoc.data()!.roles || (callerDoc.data()!.role ? [callerDoc.data()!.role] : [])
+      : [];
+    if (!callerRoles.some((r) => ['sponsor', 'coach', 'admin', 'master-admin'].includes(r))) {
+      throw new functions.https.HttpsError('permission-denied', 'Not authorized');
+    }
+    const { playerId } = data;
+    if (!playerId) {
+      throw new functions.https.HttpsError('invalid-argument', 'playerId is required');
+    }
+
+    const snapshot = await getDb()
+      .collection('playerFinances')
+      .where('playerId', '==', playerId)
+      .orderBy('season', 'desc')
+      .get();
+
+    if (snapshot.empty) return { summary: null };
+
+    const docSnap = snapshot.docs[0];
+    const d = docSnap.data();
+    const totalOwed =
+      (d.registrationFee || 0) +
+      (d.uniformCost || 0) +
+      (d.tournamentFees || 0) +
+      (d.facilityFees || 0) +
+      (d.equipmentFees || 0) +
+      (d.otherFees || 0);
+    const totalPaid = (d.payments || []).reduce(
+      (s: number, p: any) => s + (p.amount || 0),
+      0
+    );
+    const balanceDue = Math.max(0, totalOwed - totalPaid - (d.scholarshipAmount || 0));
+
+    return {
+      summary: {
+        playerName: d.playerName || '',
+        teamName: d.teamName || '',
+        season: d.season || '',
+        balanceDue,
+        financeId: docSnap.id,
+      },
+    };
+  }
+);

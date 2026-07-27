@@ -9,17 +9,17 @@ import {
   Grid,
   Card,
   CardContent,
-  Divider,
   Alert,
 } from '@mui/material';
 import { useParams, Link as RouterLink } from 'react-router-dom';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { Button } from '@mui/material';
 import GroupsIcon from '@mui/icons-material/Groups';
 import SportsIcon from '@mui/icons-material/Sports';
 import PersonIcon from '@mui/icons-material/Person';
 import { teamsApi } from '@/lib/api/teams';
-import { playersApi } from '@/lib/api/players';
+import { getPublicRoster } from '@/lib/api/publicData';
 import type { Team } from '@/types/models';
 import SponsorBanner from '@/components/common/SponsorBanner';
 
@@ -77,24 +77,8 @@ const PublicTeamDetailPage = () => {
       }
 
       try {
-        const fullPlayers = await playersApi.getByTeam(id);
-        const playersData: PublicPlayer[] = fullPlayers
-          .map((p) => ({
-            firstName: p.firstName || '',
-            lastInitial: p.lastName ? p.lastName.charAt(0) + '.' : '',
-            jerseyNumber: p.jerseyNumber,
-            positions: p.positions || [],
-          }))
-          .sort((a, b) => {
-            // Sort by jersey number first (if available), then by first name
-            if (a.jerseyNumber != null && b.jerseyNumber != null) {
-              return a.jerseyNumber - b.jerseyNumber;
-            }
-            if (a.jerseyNumber != null) return -1;
-            if (b.jerseyNumber != null) return 1;
-            return a.firstName.localeCompare(b.firstName);
-          });
-
+        // Sanitized roster from Cloud Function (safe fields only, already sorted).
+        const playersData = await getPublicRoster(id);
         setPlayers(playersData);
       } catch (err) {
         console.error('Error fetching players:', err);
@@ -200,7 +184,8 @@ const PublicTeamDetailPage = () => {
           Back to All Teams
         </Button>
 
-        {/* GameChanger Scoreboard Widget */}
+        {/* GameChanger — link out (GameChanger blocks iframe embedding, so we
+            open the team's live schedule/stats on GameChanger in a new tab). */}
         {team.gcTeamId && (
           <Paper elevation={2} sx={{ mb: 4, overflow: 'hidden' }}>
             <Box
@@ -213,47 +198,36 @@ const PublicTeamDetailPage = () => {
               }}
             >
               <Typography variant="h6" fontWeight={600}>
-                Schedule & Scores
+                Schedule &amp; Scores
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Powered by GameChanger
               </Typography>
             </Box>
-            <Box sx={{ width: '100%' }}>
-              <iframe
-                src={`https://web.gc.com/teams/${team.gcTeamId}/schedule`}
-                width="100%"
-                height="600"
-                style={{ border: 'none', display: 'block' }}
-                title={`${team.name} Schedule`}
-                loading="lazy"
-                allowFullScreen
-              />
-            </Box>
-            <Divider />
-            <Box sx={{ width: '100%' }}>
-              <Box
-                sx={{
-                  backgroundColor: 'grey.100',
-                  px: 3,
-                  py: 2,
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                }}
+            <Box sx={{ p: 3, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1, minWidth: 200 }}>
+                View {team.name}'s live schedule, scores, and stats on GameChanger.
+              </Typography>
+              <Button
+                variant="contained"
+                color="primary"
+                endIcon={<OpenInNewIcon />}
+                href={`https://web.gc.com/teams/${team.gcTeamId}/schedule`}
+                target="_blank"
+                rel="noopener noreferrer"
               >
-                <Typography variant="h6" fontWeight={600}>
-                  Standings & Stats
-                </Typography>
-              </Box>
-              <iframe
-                src={`https://web.gc.com/teams/${team.gcTeamId}/stats`}
-                width="100%"
-                height="400"
-                style={{ border: 'none', display: 'block' }}
-                title={`${team.name} Stats`}
-                loading="lazy"
-                allowFullScreen
-              />
+                Schedule &amp; Scores
+              </Button>
+              <Button
+                variant="outlined"
+                color="primary"
+                endIcon={<OpenInNewIcon />}
+                href={`https://web.gc.com/teams/${team.gcTeamId}/stats`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Standings &amp; Stats
+              </Button>
             </Box>
           </Paper>
         )}

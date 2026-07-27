@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { incomeApi } from '@/lib/api/accounting';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
@@ -86,6 +87,7 @@ const PAYMENT_METHODS = [
 
 const IncomePage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
 
@@ -218,7 +220,7 @@ const IncomePage = () => {
   // ---------------------------------------------------------------------------
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this income record?')) {
+    if (await confirm({ title: 'Delete income record?', message: 'This removes the income record.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

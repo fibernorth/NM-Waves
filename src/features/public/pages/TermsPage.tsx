@@ -42,7 +42,7 @@ const TermsPage = () => {
           </Typography>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
-            By accessing the TC Waves website or registering for our programs, you agree to be
+            By accessing the Northern Michigan Waves website or registering for our programs, you agree to be
             bound by these Terms of Service. If you do not agree to these terms, please do not use
             our services.
           </Typography>
@@ -62,7 +62,7 @@ const TermsPage = () => {
             All information provided during registration must be accurate and up to date.
           </Typography>
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            Players and families agree to follow the TC Waves code of conduct.
+            Players and families agree to follow the Northern Michigan Waves code of conduct.
           </Typography>
           <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
             Medical clearance may be required for participation in certain activities.
@@ -121,7 +121,7 @@ const TermsPage = () => {
             parents or guardians acknowledge and accept these risks.
           </Typography>
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            TC Waves Ball Club carries liability insurance for its programs and activities.
+            Northern Michigan Waves carries liability insurance for its programs and activities.
           </Typography>
           <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
             Medical expenses resulting from injuries are the responsibility of the parent or
@@ -136,13 +136,13 @@ const TermsPage = () => {
           </Typography>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            TC Waves may photograph or video record events for promotional and organizational use.
+            Northern Michigan Waves may photograph or video record events for promotional and organizational use.
           </Typography>
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            Parents or guardians may opt out of media release by notifying TC Waves in writing.
+            Parents or guardians may opt out of media release by notifying Northern Michigan Waves in writing.
           </Typography>
           <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
-            Photos and videos may appear on the TC Waves website and social media channels.
+            Photos and videos may appear on the Northern Michigan Waves website and social media channels.
           </Typography>
         </Paper>
 
@@ -153,14 +153,14 @@ const TermsPage = () => {
           </Typography>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            TC Waves Ball Club is not liable for injuries sustained during activities beyond what
+            Northern Michigan Waves is not liable for injuries sustained during activities beyond what
             is covered by our insurance policy.
           </Typography>
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            TC Waves is not responsible for loss or damage to personal equipment or belongings.
+            Northern Michigan Waves is not responsible for loss or damage to personal equipment or belongings.
           </Typography>
           <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
-            TC Waves is not liable for weather-related cancellations or schedule changes.
+            Northern Michigan Waves is not liable for weather-related cancellations or schedule changes.
           </Typography>
         </Paper>
 
@@ -171,10 +171,10 @@ const TermsPage = () => {
           </Typography>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            The TC Waves name, logo, and branding are the property of TC Waves Ball Club, Inc.
+            The Northern Michigan Waves name, logo, and branding are the property of Northern Michigan Waves, Inc.
           </Typography>
           <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
-            Unauthorized use of TC Waves intellectual property is prohibited.
+            Unauthorized use of Northern Michigan Waves intellectual property is prohibited.
           </Typography>
         </Paper>
 
@@ -185,7 +185,7 @@ const TermsPage = () => {
           </Typography>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            TC Waves reserves the right to update these Terms of Service at any time.
+            Northern Michigan Waves reserves the right to update these Terms of Service at any time.
           </Typography>
           <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
             Continued use of our website and services following any changes constitutes acceptance
@@ -200,7 +200,7 @@ const TermsPage = () => {
           </Typography>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            TC Waves Ball Club, Inc.
+            Northern Michigan Waves, Inc.
           </Typography>
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
             Traverse City, Michigan

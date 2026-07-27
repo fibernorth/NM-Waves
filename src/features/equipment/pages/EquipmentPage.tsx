@@ -21,6 +21,7 @@ import { equipmentApi } from '@/lib/api/equipment';
 import { teamsApi } from '@/lib/api/teams';
 import { Equipment } from '@/types/models';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import toast from 'react-hot-toast';
 import EquipmentFormDialog from '../components/EquipmentFormDialog';
@@ -71,6 +72,7 @@ const conditionColors: Record<string, 'success' | 'info' | 'warning' | 'error'> 
 const EquipmentPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const confirm = useConfirm();
   const isAdmin = checkIsAdmin(user);
 
   const [formDialogOpen, setFormDialogOpen] = useState(false);
@@ -124,8 +126,8 @@ const EquipmentPage = () => {
     setAssignDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this equipment?')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ title: 'Delete equipment?', message: 'This removes the equipment record.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

@@ -7,6 +7,17 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    // Block content types that execute inline when served from Storage
+    // (HTML / SVG / XML) to prevent stored-XSS via uploaded "documents".
+    function safeDocType(ct) {
+      return ct != null
+             && !ct.matches('(?i)text/html.*')
+             && ct != 'image/svg+xml'
+             && !ct.matches('(?i).*xhtml.*')
+             && !ct.matches('(?i)application/xml.*')
+             && !ct.matches('(?i)text/xml.*');
+    }
+
     // Media uploads - authenticated users can upload images/videos
     match /media/{allPaths=**} {
       allow read: if true;
@@ -15,18 +26,29 @@ service firebase.storage {
                    && request.resource.contentType.matches('image/.*|video/.*');
     }
 
-    // Player documents - coaches+ can upload
+    // Player documents. Two path prefixes are in use: the older `players/…`
+    // and `player-documents/…` written by the player-documents feature — the
+    // latter previously matched no rule and fell through to deny, so every
+    // birth-certificate / medical / waiver upload and download was blocked.
     match /players/{allPaths=**} {
       allow read: if isAuth();
       allow write: if isAuth()
-                   && request.resource.size < 20 * 1024 * 1024;
+                   && request.resource.size < 20 * 1024 * 1024
+                   && safeDocType(request.resource.contentType);
+    }
+    match /player-documents/{allPaths=**} {
+      allow read: if isAuth();
+      allow write: if isAuth()
+                   && request.resource.size < 20 * 1024 * 1024
+                   && safeDocType(request.resource.contentType);
     }
 
     // Organization documents
     match /documents/{allPaths=**} {
       allow read: if isAuth();
       allow write: if isAuth()
-                   && request.resource.size < 20 * 1024 * 1024;
+                   && request.resource.size < 20 * 1024 * 1024
+                   && safeDocType(request.resource.contentType);
     }
 
     // Homepage post images
@@ -43,6 +65,15 @@ service firebase.storage {
       allow write: if isAuth()
                    && request.resource.size < 5 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
+    }
+
+    // Guest evaluator media. Direct client writes are DENIED — guests upload
+    // through a short-lived signed URL minted by the getEvalUploadUrl callable
+    // only after their invite token is validated (Admin SDK signed URLs bypass
+    // these rules). Reads stay public so URLs surface in coach report cards.
+    match /evalMedia/{token}/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
     }
 
     // Default deny

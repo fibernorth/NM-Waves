@@ -44,7 +44,7 @@ const Navbar = ({ drawerWidth, onMenuClick }: NavbarProps) => {
           <MenuIcon />
         </IconButton>
         <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-          TC Waves - Club Management
+          Northern Michigan Waves - Club Management
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Typography variant="body2">{user?.displayName}</Typography>

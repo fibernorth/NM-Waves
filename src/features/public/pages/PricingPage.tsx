@@ -51,7 +51,7 @@ const buildFeeCategories = (costs: GlobalCostAssumptions | null | undefined) => 
       title: 'Uniforms & Equipment',
       icon: <CheckroomIcon sx={{ fontSize: 32, color: 'primary.main' }} />,
       description:
-        'Includes team jersey, pants, socks, helmet, belt, and equipment bag with TC Waves branding. Some items are player-owned and carry over between seasons.',
+        'Includes team jersey, pants, socks, helmet, belt, and equipment bag with Northern Michigan Waves branding. Some items are player-owned and carry over between seasons.',
       range: hasData
         ? `${fmt(costs.uniformCost + costs.equipmentFeePerSeason)} per player`
         : '$200 - $350 per player',
@@ -167,7 +167,7 @@ const PricingPage = () => {
             </Typography>
           </Box>
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            TC Waves strives to keep costs affordable while maintaining competitive programs. The
+            Northern Michigan Waves strives to keep costs affordable while maintaining competitive programs. The
             total cost per player is approximately {totalEstimate || '$1,000'} per season, depending on the number of
             tournaments, age group, and equipment needs. This covers registration, uniforms, facility
             access, coaching, and tournament entry fees.
@@ -241,7 +241,7 @@ const PricingPage = () => {
           </Typography>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            TC Waves accepts payments via our secure online portal. Payment plans are available for
+            Northern Michigan Waves accepts payments via our secure online portal. Payment plans are available for
             families who need flexibility.
           </Typography>
           <List>
@@ -273,7 +273,7 @@ const PricingPage = () => {
           </Typography>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            At TC Waves, no player is turned away due to financial hardship. We believe every young
+            At Northern Michigan Waves, no player is turned away due to financial hardship. We believe every young
             athlete deserves the opportunity to compete, grow, and be part of a team. Scholarship
             funds are available to help offset costs for families in need.
           </Typography>

@@ -286,7 +286,7 @@ export function generateInvoiceHTML(token: InvoiceToken, qrDataUrl: string): str
   <!-- Header -->
   <div class="header">
     <div class="brand">
-      <h1>TC Waves Ball Club</h1>
+      <h1>Northern Michigan Waves</h1>
       <p>Traverse City, Michigan<br>tcwavessoftball@gmail.com</p>
     </div>
     <div class="invoice-title">
@@ -346,7 +346,7 @@ export function generateInvoiceHTML(token: InvoiceToken, qrDataUrl: string): str
   <!-- Footer -->
   <div class="footer">
     <div class="thanks">Thank you for your prompt payment!</div>
-    <p>TC Waves Ball Club &bull; Traverse City, Michigan</p>
+    <p>Northern Michigan Waves &bull; Traverse City, Michigan</p>
   </div>
 
   <script>window.onload = function() { window.print(); }</script>

@@ -209,6 +209,8 @@ export interface InvoiceToken {
   usedAt?: Date;
   usedBy?: string;
   paidByUserId?: string;
+  /** Live remaining balance computed server-side (null if no finance record). */
+  liveBalanceDue?: number | null;
 }
 
 // Announcement Model
@@ -1113,4 +1115,55 @@ export interface BankReconciliation {
   createdBy: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// ============================================================
+// SURVEYS (private parent surveys — results hidden from coaches)
+// ============================================================
+
+export type SurveyQuestionType = 'text' | 'multiple_choice' | 'rating' | 'checkbox' | 'yes_no' | 'ranking';
+
+export interface SurveyQuestion {
+  id: string;
+  text: string;
+  type: SurveyQuestionType;
+  options?: string[]; // for multiple_choice / checkbox / ranking
+  required?: boolean;
+  visibleToCoaches?: boolean; // if true, the survey's creator (a coach) may see answers to this question
+  maxSelections?: number; // checkbox only: hard cap, e.g. "select up to 3"
+}
+
+export interface Survey {
+  id: string;
+  title: string;
+  description?: string;
+  questions: SurveyQuestion[];
+  active: boolean;
+  anonymous: boolean; // if true, responses store no identifying info
+  closesAt?: Date | null; // optional deadline; survey auto-closes for parents after this
+  // Audience: empty both = everyone; otherwise players on assignedTeamIds OR in assignedPlayerIds.
+  assignedTeamIds: string[];
+  assignedPlayerIds: string[];
+  // Coach visibility (denormalized at save time so security rules can check it):
+  // coaches of these teams may read coach-visible answers; true = every coach.
+  audienceTeamIds?: string[];
+  audienceAllCoaches?: boolean;
+  createdBy: string;
+  createdByRole?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SurveyAnswer {
+  questionId: string;
+  questionText: string;
+  value: string; // free text, chosen option, or rating as string
+}
+
+export interface SurveyResponse {
+  id: string;
+  surveyId: string;
+  answers: SurveyAnswer[];
+  submittedAt: Date;
+  surveyCreatedBy?: string; // present only on coach-visible projection docs
 }

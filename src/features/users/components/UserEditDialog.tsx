@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -11,7 +11,11 @@ import {
   Box,
   Typography,
   Autocomplete,
+  InputAdornment,
+  IconButton,
 } from '@mui/material';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -19,6 +23,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { usersApi } from '@/lib/api/users';
 import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
+import { useAuthStore } from '@/stores/authStore';
 import type { User, UserRole } from '@/types/models';
 import toast from 'react-hot-toast';
 
@@ -32,6 +37,10 @@ const ROLES: { value: UserRole; label: string }[] = [
 ];
 
 const userEditSchema = z.object({
+  email: z.string().email('Enter a valid email address'),
+  newPassword: z
+    .string()
+    .refine((v) => v === '' || v.length >= 6, 'Password must be at least 6 characters'),
   roles: z.array(z.enum(['visitor', 'parent', 'coach', 'admin', 'master-admin', 'sponsor'])).min(1, 'At least one role is required'),
   canEditRosters: z.boolean(),
   canViewFinancials: z.boolean(),
@@ -51,6 +60,7 @@ interface UserEditDialogProps {
 
 const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuthStore();
 
   const { data: teams = [] } = useQuery({
     queryKey: ['teams'],
@@ -72,6 +82,8 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
   } = useForm<UserEditFormData>({
     resolver: zodResolver(userEditSchema),
     defaultValues: {
+      email: '',
+      newPassword: '',
       roles: ['visitor'],
       canEditRosters: false,
       canViewFinancials: false,
@@ -85,6 +97,8 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
   useEffect(() => {
     if (user) {
       reset({
+        email: user.email || '',
+        newPassword: '',
         roles: user.roles?.length ? user.roles : ['visitor'],
         canEditRosters: user.permissions?.canEditRosters ?? false,
         canViewFinancials: user.permissions?.canViewFinancials ?? false,
@@ -95,6 +109,8 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
       });
     } else {
       reset({
+        email: '',
+        newPassword: '',
         roles: ['visitor'],
         canEditRosters: false,
         canViewFinancials: false,
@@ -107,8 +123,20 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
   }, [user, reset]);
 
   const updateMutation = useMutation({
-    mutationFn: (data: UserEditFormData) => {
-      return usersApi.update(user!.uid, {
+    mutationFn: async (data: UserEditFormData) => {
+      // Email and password are Firebase Auth changes — routed through the
+      // admin callable. Only call it when something actually changed.
+      const emailChanged =
+        data.email.trim().toLowerCase() !== (user!.email || '').trim().toLowerCase();
+      const settingPassword = data.newPassword.trim().length > 0;
+      if (emailChanged || settingPassword) {
+        await usersApi.updateAuth(user!.uid, {
+          email: emailChanged ? data.email.trim() : undefined,
+          password: settingPassword ? data.newPassword : undefined,
+        });
+      }
+
+      await usersApi.update(user!.uid, {
         roles: data.roles,
         permissions: {
           canEditRosters: data.canEditRosters,
@@ -136,6 +164,20 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
 
   const isSubmitting = updateMutation.isPending;
 
+  // Password reset is offered only for parent (non-admin) accounts — admins and
+  // master-admins reset their own passwords from the sign-in page, and the
+  // backend refuses to change them here.
+  const targetRoles = user?.roles || [];
+  const targetIsAdmin = targetRoles.includes('admin') || targetRoles.includes('master-admin');
+  const canManagePassword = targetRoles.includes('parent') && !targetIsAdmin;
+
+  // The backend only lets a master-admin change an admin's login email; lock the
+  // field (rather than let the save fail) when that isn't allowed.
+  const callerIsMaster = (currentUser?.roles || []).includes('master-admin');
+  const emailLocked = targetIsAdmin && !callerIsMaster;
+
+  const [showPassword, setShowPassword] = useState(false);
+
   const teamOptions = teams.map(t => ({ id: t.id, label: `${t.name} (${t.ageGroup})` }));
   const playerOptions = players.map(p => ({ id: p.id, label: `${p.firstName} ${p.lastName}${p.teamName ? ` (${p.teamName})` : ''}` }));
 
@@ -152,12 +194,60 @@ const UserEditDialog = ({ open, onClose, user }: UserEditDialogProps) => {
               <Typography variant="body1">{user?.displayName || '-'}</Typography>
             </Box>
 
-            <Box>
-              <Typography variant="subtitle2" color="text.secondary">
-                Email
-              </Typography>
-              <Typography variant="body1">{user?.email || '-'}</Typography>
-            </Box>
+            <Controller
+              name="email"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label="Login Email"
+                  type="email"
+                  fullWidth
+                  disabled={emailLocked}
+                  error={!!errors.email}
+                  helperText={
+                    emailLocked
+                      ? "Only a master admin can change an admin account's login email"
+                      : errors.email?.message || 'Changing this updates the account they sign in with'
+                  }
+                />
+              )}
+            />
+
+            {canManagePassword && (
+              <Controller
+                name="newPassword"
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    label="Set New Password"
+                    type={showPassword ? 'text' : 'password'}
+                    fullWidth
+                    autoComplete="new-password"
+                    error={!!errors.newPassword}
+                    helperText={
+                      errors.newPassword?.message ||
+                      'Optional — enter to set this parent a new password (leave blank to keep current)'
+                    }
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            onClick={() => setShowPassword((s) => !s)}
+                            edge="end"
+                            tabIndex={-1}
+                          >
+                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                )}
+              />
+            )}
 
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>

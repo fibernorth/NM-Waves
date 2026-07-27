@@ -121,7 +121,7 @@ const PublicSchedulePage = () => {
     const lines = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//TC Waves Ball Club//Schedule//EN',
+      'PRODID:-//Northern Michigan Waves//Schedule//EN',
       'CALSCALE:GREGORIAN',
     ];
 

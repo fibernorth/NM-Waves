@@ -9,6 +9,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -22,6 +23,7 @@ import ScholarshipFormDialog from '../components/ScholarshipFormDialog';
 
 const ScholarshipsPage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
   const [openDialog, setOpenDialog] = useState(false);
@@ -55,8 +57,8 @@ const ScholarshipsPage = () => {
     setOpenDialog(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this scholarship?')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this scholarship?', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

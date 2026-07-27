@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.moderateMedia = void 0;
+exports.runModeration = runModeration;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const vision_1 = require("@google-cloud/vision");
@@ -43,11 +44,13 @@ const getDb = () => admin.firestore();
  * Calls Cloud Vision SafeSearch on new image uploads.
  * Flagged images get moderationStatus: 'rejected'.
  */
-exports.moderateMedia = functions.firestore
-    .document('media/{mediaId}')
-    .onCreate(async (snap, context) => {
+/**
+ * Moderate a single media document. Called by analyzeMedia's onCreate trigger
+ * rather than having its own separate trigger (avoids race condition from
+ * two onCreate triggers writing to the same document simultaneously).
+ */
+async function runModeration(snap, mediaId) {
     const data = snap.data();
-    const mediaId = context.params.mediaId;
     // Only moderate images, skip videos
     if (data.mediaType === 'video') {
         return;
@@ -61,7 +64,6 @@ exports.moderateMedia = functions.firestore
         const [result] = await client.safeSearchDetection(data.fileUrl);
         const safeSearch = result.safeSearchAnnotation;
         if (!safeSearch) {
-            // No annotation returned; default to approved
             await snap.ref.update({
                 moderationStatus: 'approved',
                 moderationReviewedAt: admin.firestore.Timestamp.now(),
@@ -75,7 +77,8 @@ exports.moderateMedia = functions.firestore
         };
         const FLAGGED_LEVELS = ['LIKELY', 'VERY_LIKELY'];
         const isRejected = FLAGGED_LEVELS.includes(labels.adult) ||
-            FLAGGED_LEVELS.includes(labels.violence);
+            FLAGGED_LEVELS.includes(labels.violence) ||
+            FLAGGED_LEVELS.includes(labels.racy);
         const moderationStatus = isRejected ? 'rejected' : 'approved';
         await snap.ref.update({
             moderationStatus,
@@ -100,11 +103,37 @@ exports.moderateMedia = functions.firestore
     }
     catch (error) {
         console.error(`Moderation error for ${mediaId}:`, error);
-        // On error, default to approved so uploads aren't blocked
+        // Fail SAFE: if we couldn't scan the image, mark it 'rejected' so it is
+        // hidden from the public gallery (which only excludes 'rejected'), and
+        // notify admins to review/approve. Previously this wrote 'pending_review',
+        // a value no UI handles, so un-scanned images were shown to everyone.
         await snap.ref.update({
-            moderationStatus: 'approved',
+            moderationStatus: 'rejected',
+            moderationError: true,
             moderationReviewedAt: admin.firestore.Timestamp.now(),
         });
+        await getDb().collection('adminNotifications').add({
+            type: 'content_moderation',
+            mediaId,
+            fileName: data.fileName || '',
+            uploadedBy: data.uploadedBy || '',
+            uploadedByName: data.uploadedByName || '',
+            message: `Image "${data.fileName || mediaId}" could not be auto-scanned and was hidden pending your review.`,
+            read: false,
+            createdAt: admin.firestore.Timestamp.now(),
+        });
     }
+}
+/**
+ * Firestore onCreate trigger on media/{mediaId}.
+ * Kept as a thin wrapper for backward compatibility — calls runModeration.
+ */
+exports.moderateMedia = functions.firestore
+    .document('media/{mediaId}')
+    .onCreate(async (snap, context) => {
+    // This trigger is now disabled — moderation is called from analyzeMedia
+    // to prevent race conditions. Keeping the export so the function doesn't
+    // get deleted on deploy (which would require manual cleanup).
+    console.log(`moderateMedia trigger fired for ${context.params.mediaId} — skipping (handled by analyzeMedia)`);
 });
 //# sourceMappingURL=moderation.js.map

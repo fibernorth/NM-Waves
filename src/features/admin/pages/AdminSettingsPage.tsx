@@ -340,6 +340,22 @@ const SeasonSettingsTab = () => {
           </TextField>
         </Grid>
 
+        <Grid item xs={12} sm={6}>
+          <TextField
+            label="Tryout Season"
+            value={form.tryoutSeason || ''}
+            onChange={(e) => setForm({ ...form, tryoutSeason: e.target.value })}
+            fullWidth
+            select
+            SelectProps={{ native: true }}
+            helperText="New tryout registrations file under this season and match prospects to its teams"
+          >
+            {form.seasons.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </TextField>
+        </Grid>
+
         <Grid item xs={12}>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>All Seasons</Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
@@ -577,7 +593,7 @@ const SwagStoreSettingsTab = () => {
             value={form.label}
             onChange={(e) => setForm({ ...form, label: e.target.value })}
             fullWidth
-            placeholder="Shop TC Waves Gear!"
+            placeholder="Shop Northern Michigan Waves Gear!"
             helperText="Text shown on the public homepage banner"
           />
         </Grid>

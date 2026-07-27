@@ -9,14 +9,9 @@ import {
   Typography,
   Link,
   Alert,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
 } from '@mui/material';
 import SportsBaseballIcon from '@mui/icons-material/SportsBaseball';
 import { useAuthStore } from '@/stores/authStore';
-import { UserRole } from '@/types/models';
 import toast from 'react-hot-toast';
 
 const SignupPage = () => {
@@ -29,7 +24,6 @@ const SignupPage = () => {
     password: '',
     confirmPassword: '',
     displayName: '',
-    role: 'parent' as UserRole,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -55,12 +49,13 @@ const SignupPage = () => {
     setLoading(true);
 
     try {
-      await signUp(formData.email, formData.password, formData.displayName, formData.role);
-      toast.success('Account created successfully');
+      await signUp(formData.email, formData.password, formData.displayName, 'parent');
+      toast.success('Account created — check your email to verify it, then you can link your child.');
       if (returnTo && returnTo.startsWith('/')) {
         navigate(returnTo);
       } else {
-        navigate('/dashboard');
+        // Send new parents straight into linking their child (by email or phone).
+        navigate('/dashboard?link=1');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
@@ -79,7 +74,7 @@ const SignupPage = () => {
             Create Account
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Join TC Waves Ball Club
+            Join Northern Michigan Waves
           </Typography>
         </Box>
 
@@ -129,18 +124,9 @@ const SignupPage = () => {
             required
             autoComplete="new-password"
           />
-          <FormControl fullWidth margin="normal">
-            <InputLabel>Role</InputLabel>
-            <Select
-              value={formData.role}
-              label="Role"
-              onChange={(e) => handleChange('role', e.target.value)}
-            >
-              <MenuItem value="visitor">Visitor</MenuItem>
-              <MenuItem value="parent">Parent</MenuItem>
-              <MenuItem value="coach">Coach</MenuItem>
-            </Select>
-          </FormControl>
+          {/* Public signups are always parents. Coach/admin/sponsor accounts are
+              provisioned by an administrator (User Management) — never self-assigned,
+              which previously let anyone grant themselves roster/PII access. */}
           <Button
             type="submit"
             variant="contained"

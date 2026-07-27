@@ -1,3 +1,4 @@
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -84,7 +85,7 @@ const PublicSponsorsPage = () => {
             Our Sponsors
           </Typography>
           <Typography variant="h6" sx={{ mt: 1, opacity: 0.9, fontWeight: 300 }}>
-            Thank you to the businesses that support TC Waves
+            Thank you to the businesses that support Northern Michigan Waves
           </Typography>
         </Container>
       </Box>
@@ -98,7 +99,7 @@ const PublicSponsorsPage = () => {
           <Alert severity="error">{error}</Alert>
         ) : sponsors.length === 0 ? (
           <Alert severity="info">
-            Sponsor information coming soon! Interested in sponsoring TC Waves? Visit our
+            Sponsor information coming soon! Interested in sponsoring Northern Michigan Waves? Visit our
             Contact page to get in touch.
           </Alert>
         ) : (
@@ -168,13 +169,13 @@ const PublicSponsorsPage = () => {
             }}
           >
             <Typography variant="h5" fontWeight={600} gutterBottom>
-              Interested in Sponsoring TC Waves?
+              Interested in Sponsoring Northern Michigan Waves?
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
               Contact us to learn about sponsorship opportunities and how your business can
               support youth athletics in Traverse City.
             </Typography>
-            <Button variant="contained" href="/become-sponsor">
+            <Button variant="contained" component={RouterLink} to="/become-sponsor">
               Become a Sponsor
             </Button>
           </Box>

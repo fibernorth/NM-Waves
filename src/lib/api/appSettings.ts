@@ -37,6 +37,8 @@ export interface NotificationSettings {
 export interface SeasonSettings {
   currentSeason: string;
   seasons: string[];
+  /** Season new tryout registrations are filed under (and prospect matching). */
+  tryoutSeason: string;
 }
 
 /** Strip undefined values from an object before writing to Firestore */
@@ -54,14 +56,14 @@ const NOTIFICATIONS_DOC = 'appSettings/notifications';
 const SEASON_DOC = 'appSettings/season';
 
 const DEFAULT_ORG: OrgSettings = {
-  orgName: 'TC Waves Ball Club',
-  tagline: 'Work as a Team, Win as a Team, Better Every Time',
+  orgName: 'Northern Michigan Waves',
+  tagline: 'Work as a team, Win as a team, Better every time',
   email: 'tcwavessoftball@gmail.com',
   phone: '',
-  address: '',
+  address: '555 S Rusch Rd',
   city: 'Traverse City',
   state: 'MI',
-  zip: '',
+  zip: '49696',
   ein: '',
   logoUrl: '/images/logo.png',
   websiteUrl: '',
@@ -75,7 +77,7 @@ const DEFAULT_NOTIFICATIONS: NotificationSettings = {
   sendAnnouncementEmails: false,
   sendReminderEmails: false,
   reminderDaysBefore: 7,
-  emailFromName: 'TC Waves Ball Club',
+  emailFromName: 'Northern Michigan Waves',
   emailReplyTo: 'tcwavessoftball@gmail.com',
 };
 
@@ -118,7 +120,11 @@ export const appSettingsApi = {
   getSeason: async (): Promise<SeasonSettings> => {
     const docRef = doc(db, SEASON_DOC);
     const snap = await getDoc(docRef);
-    const defaults: SeasonSettings = { currentSeason: 'Spring 2026', seasons: ['Spring 2026'] };
+    const defaults: SeasonSettings = {
+      currentSeason: 'Spring 2026',
+      seasons: ['Spring 2026', '2026-2027'],
+      tryoutSeason: '2026-2027',
+    };
     return snap.exists() ? { ...defaults, ...(snap.data() as Partial<SeasonSettings>) } : defaults;
   },
 

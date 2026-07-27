@@ -6,7 +6,7 @@ const SWAG_STORE_DOC = 'siteSettings/swagStore';
 
 const DEFAULT_SWAG_STORE: SwagStoreSettings = {
   url: '',
-  label: 'Shop TC Waves Gear!',
+  label: 'Shop Northern Michigan Waves Gear!',
   closesAt: null,
   active: false,
   updatedBy: '',
@@ -16,7 +16,7 @@ const DEFAULT_SWAG_STORE: SwagStoreSettings = {
 /** Convert Firestore Timestamps to JS Dates */
 const fromFirestore = (data: Record<string, unknown>): SwagStoreSettings => ({
   url: (data.url as string) || '',
-  label: (data.label as string) || 'Shop TC Waves Gear!',
+  label: (data.label as string) || 'Shop Northern Michigan Waves Gear!',
   closesAt: data.closesAt instanceof Timestamp ? data.closesAt.toDate() : (data.closesAt as Date | null) ?? null,
   active: (data.active as boolean) ?? false,
   updatedBy: (data.updatedBy as string) || '',

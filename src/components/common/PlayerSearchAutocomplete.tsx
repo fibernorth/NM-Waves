@@ -1,8 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Autocomplete, TextField, Box, Typography, Chip } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
-import Fuse from 'fuse.js';
-import { playersApi } from '@/lib/api/players';
+import { searchLinkablePlayers } from '@/lib/api/parentActions';
 
 interface PlayerOption {
   id: string;
@@ -30,38 +29,26 @@ const PlayerSearchAutocomplete = ({
 }: PlayerSearchAutocompleteProps) => {
   const [inputValue, setInputValue] = useState('');
 
-  const { data: players = [] } = useQuery({
-    queryKey: ['players', 'active'],
-    queryFn: () => playersApi.getActive(),
+  // Search via Cloud Function (sanitized, safe fields only). The players
+  // collection is not directly readable by non-coach roles, so this replaces
+  // the previous full-roster load + client-side fuzzy search.
+  const { data: results = [] } = useQuery({
+    queryKey: ['linkablePlayers', inputValue],
+    queryFn: () => searchLinkablePlayers(inputValue),
+    enabled: inputValue.trim().length >= 2,
   });
 
-  const playerOptions: PlayerOption[] = useMemo(
+  const filteredOptions: PlayerOption[] = useMemo(
     () =>
-      players.map((p) => ({
+      results.map((p) => ({
         id: p.id,
         firstName: p.firstName,
         lastName: p.lastName,
         fullName: `${p.firstName} ${p.lastName}`,
         teamName: p.teamName,
-        teamId: p.teamId,
       })),
-    [players]
+    [results]
   );
-
-  const fuse = useMemo(
-    () =>
-      new Fuse(playerOptions, {
-        keys: ['fullName', 'firstName', 'lastName'],
-        threshold: 0.4,
-        includeScore: true,
-      }),
-    [playerOptions]
-  );
-
-  const filteredOptions = useMemo(() => {
-    if (!inputValue.trim()) return playerOptions.slice(0, 20);
-    return fuse.search(inputValue).slice(0, 10).map((r) => r.item);
-  }, [inputValue, fuse, playerOptions]);
 
   return (
     <Autocomplete
@@ -86,7 +73,7 @@ const PlayerSearchAutocomplete = ({
       renderInput={(params) => (
         <TextField {...params} label={label} placeholder={placeholder} fullWidth />
       )}
-      noOptionsText="No players found"
+      noOptionsText={inputValue.trim().length < 2 ? 'Type at least 2 characters…' : 'No players found'}
     />
   );
 };

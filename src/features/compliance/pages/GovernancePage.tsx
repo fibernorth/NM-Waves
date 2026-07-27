@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import AddIcon from '@mui/icons-material/Add';
@@ -139,6 +140,7 @@ const defaultDocForm: DocFormState = {
 
 const GovernancePage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
 
@@ -351,8 +353,8 @@ const GovernancePage = () => {
     }
   };
 
-  const handleDeleteMeeting = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this meeting?')) {
+  const handleDeleteMeeting = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this meeting?', confirmText: 'Delete', destructive: true })) {
       deleteMeetingMutation.mutate(id);
     }
   };
@@ -422,8 +424,8 @@ const GovernancePage = () => {
     }
   };
 
-  const handleDeleteDoc = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this document?')) {
+  const handleDeleteDoc = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this document?', confirmText: 'Delete', destructive: true })) {
       deleteDocMutation.mutate(id);
     }
   };
@@ -628,7 +630,7 @@ const GovernancePage = () => {
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4">Governance & Board</Typography>
         <Typography variant="body2" color="text.secondary">
-          Manage board meetings, minutes, and governance documents for TC Waves Ball Club.
+          Manage board meetings, minutes, and governance documents for Northern Michigan Waves.
         </Typography>
       </Box>
 

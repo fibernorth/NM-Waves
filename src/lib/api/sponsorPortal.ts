@@ -5,7 +5,8 @@ import {
   where,
   orderBy,
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '@/lib/firebase/config';
 import Fuse from 'fuse.js';
 import type { Sponsor, Income } from '@/types/models';
 
@@ -152,39 +153,21 @@ export async function getPlayerFinanceSummary(playerId: string): Promise<{
   balanceDue: number;
   financeId: string;
 } | null> {
-  const q = query(
-    collection(db, 'playerFinances'),
-    where('playerId', '==', playerId),
-    orderBy('season', 'desc')
-  );
-  const snapshot = await getDocs(q);
-
-  if (snapshot.empty) return null;
-
-  // Use the most recent season
-  const docSnap = snapshot.docs[0];
-  const data = docSnap.data();
-
-  const totalOwed =
-    (data.registrationFee || 0) +
-    (data.uniformCost || 0) +
-    (data.tournamentFees || 0) +
-    (data.facilityFees || 0) +
-    (data.equipmentFees || 0) +
-    (data.otherFees || 0);
-
-  const totalPaid = (data.payments || []).reduce(
-    (sum: number, p: any) => sum + (p.amount || 0),
-    0
-  );
-
-  const balanceDue = Math.max(0, totalOwed - totalPaid - (data.scholarshipAmount || 0));
-
-  return {
-    playerName: data.playerName || '',
-    teamName: data.teamName || '',
-    season: data.season || '',
-    balanceDue,
-    financeId: docSnap.id,
-  };
+  // Resolved via Cloud Function: sponsors no longer have direct read access to
+  // the full playerFinances documents (payment history, other payers' details).
+  // The function returns only the minimal balance summary needed to pay.
+  const callable = httpsCallable<
+    { playerId: string },
+    {
+      summary: {
+        playerName: string;
+        teamName: string;
+        season: string;
+        balanceDue: number;
+        financeId: string;
+      } | null;
+    }
+  >(functions, 'getPlayerFinanceSummary');
+  const result = await callable({ playerId });
+  return result.data?.summary ?? null;
 }

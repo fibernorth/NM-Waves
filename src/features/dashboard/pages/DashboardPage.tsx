@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -16,7 +16,7 @@ import {
   CircularProgress,
   Skeleton,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { teamsApi } from '@/lib/api/teams';
 import { playersApi } from '@/lib/api/players';
@@ -46,6 +46,12 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { format } from 'date-fns';
 import LinkChildDialog from '@/features/players/components/LinkChildDialog';
 import ParentOnboardingDialog from '../components/ParentOnboardingDialog';
+import ParentAttentionCard from '../components/ParentAttentionCard';
+import UnassignedPlayersCard from '../components/UnassignedPlayersCard';
+import { googleCalendarUrl, downloadIcs, type CalendarEvent } from '@/lib/utils/calendarLinks';
+import { IconButton, Tooltip } from '@mui/material';
+import GoogleIcon from '@mui/icons-material/Google';
+import DownloadIcon from '@mui/icons-material/Download';
 import {
   collection,
   doc,
@@ -69,6 +75,7 @@ const eventTypeIcons: Record<string, JSX.Element> = {
 
 const DashboardPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
   const isParent = checkIsParent(user);
@@ -78,6 +85,16 @@ const DashboardPage = () => {
 
   const [linkChildOpen, setLinkChildOpen] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+
+  // A fresh parent signup lands here with ?link=1 — auto-open the link dialog
+  // so they immediately attach their child by email or phone, then clean the URL.
+  useEffect(() => {
+    if (searchParams.get('link') === '1') {
+      setLinkChildOpen(true);
+      searchParams.delete('link');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const linkedPlayerIds = user?.linkedPlayerIds || [];
   const coachTeamIds = user?.teamIds || [];
@@ -108,9 +125,12 @@ const DashboardPage = () => {
     ? activeTeams.filter(t => coachTeamIds.includes(t.id))
     : activeTeams;
 
+  // Only coaches/admins may read the full roster; parents would be denied by
+  // the players read rule, so skip the query for parent-only users.
   const { data: allPlayers = [], isLoading: playersLoading, isError: playersError } = useQuery({
     queryKey: ['players'],
     queryFn: () => playersApi.getAll(),
+    enabled: isCoachOrAbove,
   });
   const activePlayers = allPlayers.filter(p => p.active);
   // For coaches (non-admin), only show players on their teams
@@ -142,14 +162,14 @@ const DashboardPage = () => {
     },
   });
 
-  const { data: upcomingEvents = [], isLoading: eventsLoading } = useQuery({
+  const { data: rawEvents = [], isLoading: eventsLoading } = useQuery({
     queryKey: ['dashboard-events'],
     queryFn: async () => {
       const q = query(
         collection(db, 'schedules'),
         where('startTime', '>=', Timestamp.now()),
         orderBy('startTime'),
-        limit(5)
+        limit(20)
       );
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({
@@ -157,7 +177,7 @@ const DashboardPage = () => {
         ...doc.data(),
         startTime: doc.data().startTime?.toDate() || new Date(),
         endTime: doc.data().endTime?.toDate() || new Date(),
-      }));
+      })) as any[];
     },
   });
 
@@ -184,6 +204,28 @@ const DashboardPage = () => {
     enabled: isParent && linkedPlayerIds.length > 0,
   });
 
+  // Parents see only their children's teams' events; a coach (non-admin) sees
+  // only their own teams' events; admins see everything. Club-wide events with
+  // no team attached always show.
+  const childTeamIdsForEvents = linkedChildren.map((c) => c.teamId).filter(Boolean) as string[];
+  const scopeEvents = (teamIds: string[]) =>
+    rawEvents.filter((e: any) => !e.teamId || teamIds.includes(e.teamId));
+  const upcomingEvents = (
+    isParent && !isCoachOrAbove
+      ? scopeEvents(childTeamIdsForEvents)
+      : isCoachOnly
+        ? scopeEvents(coachTeamIds)
+        : rawEvents
+  ).slice(0, 6);
+
+  const toCalEvent = (e: any): CalendarEvent => ({
+    title: e.title || 'NM Waves event',
+    start: e.startTime,
+    end: e.endTime && e.endTime > e.startTime ? e.endTime : new Date(e.startTime.getTime() + 2 * 60 * 60 * 1000),
+    location: e.location || undefined,
+    description: e.teamName ? `${e.teamName} — Northern Michigan Waves` : 'Northern Michigan Waves',
+  });
+
   // Admin financial stats - use balanceDue for scholarship-accurate outstanding balance
   const totalPaid = finances.reduce((sum, f) => sum + f.totalPaid, 0);
   const totalOutstanding = finances.reduce(
@@ -194,20 +236,26 @@ const DashboardPage = () => {
   const statsLoading = teamsLoading || playersLoading || (isAdmin && financesLoading);
 
   const stats = [
-    {
-      title: isCoachOnly ? 'My Teams' : 'Active Teams',
-      value: teams.length,
-      icon: <GroupsIcon sx={{ fontSize: 40 }} />,
-      color: 'primary.main',
-      action: () => navigate('/teams'),
-    },
-    {
-      title: isCoachOnly ? 'My Players' : 'Active Players',
-      value: players.length,
-      icon: <PersonIcon sx={{ fontSize: 40 }} />,
-      color: 'success.main',
-      action: () => navigate('/players'),
-    },
+    // Club-wide team/player counts link to coach/admin-only pages, so only show
+    // them to coaches and admins. Parents get their children summary section below.
+    ...(isCoachOrAbove
+      ? [
+          {
+            title: isCoachOnly ? 'My Teams' : 'Active Teams',
+            value: teams.length,
+            icon: <GroupsIcon sx={{ fontSize: 40 }} />,
+            color: 'primary.main',
+            action: () => navigate('/teams'),
+          },
+          {
+            title: isCoachOnly ? 'My Players' : 'Active Players',
+            value: players.length,
+            icon: <PersonIcon sx={{ fontSize: 40 }} />,
+            color: 'success.main',
+            action: () => navigate('/players'),
+          },
+        ]
+      : []),
     ...(isAdmin
       ? [
           {
@@ -234,7 +282,7 @@ const DashboardPage = () => {
   const getSubtitle = () => {
     if (isParent && !isCoachOrAbove) return "Here's an overview of your children's activity";
     if (isCoachOnly) return "Here's an overview of your teams and upcoming events";
-    return "Here's an overview of the TC Waves organization";
+    return "Here's an overview of the Northern Michigan Waves organization";
   };
 
   return (
@@ -248,6 +296,12 @@ const DashboardPage = () => {
       <Typography variant="body1" color="text.secondary" gutterBottom sx={{ mb: 4 }}>
         {getSubtitle()}
       </Typography>
+
+      {/* Parent: surveys / tryout status that needs action */}
+      {isParent && <ParentAttentionCard linkedChildren={linkedChildren} />}
+
+      {/* Coach/admin: active players not yet assigned to a team */}
+      {isCoachOrAbove && <UnassignedPlayersCard />}
 
       {/* Parent: Children Cards */}
       {isParent && (
@@ -473,7 +527,20 @@ const DashboardPage = () => {
                   <CalendarMonthIcon color="primary" />
                   <Typography variant="h6">Upcoming Events</Typography>
                 </Box>
-                <Button size="small" onClick={() => navigate('/schedules')}>View All</Button>
+                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                  {upcomingEvents.length > 0 && (
+                    <Tooltip title="Download these events (.ics) — opens in Google Calendar, Apple Calendar, or Outlook">
+                      <Button
+                        size="small"
+                        startIcon={<DownloadIcon />}
+                        onClick={() => downloadIcs(upcomingEvents.map(toCalEvent))}
+                      >
+                        Sync
+                      </Button>
+                    </Tooltip>
+                  )}
+                  <Button size="small" onClick={() => navigate('/schedules')}>View All</Button>
+                </Box>
               </Box>
               {eventsLoading ? (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -486,7 +553,23 @@ const DashboardPage = () => {
               ) : (
                 <List dense disablePadding>
                   {upcomingEvents.map((e: any) => (
-                    <ListItem key={e.id} sx={{ px: 0 }}>
+                    <ListItem
+                      key={e.id}
+                      sx={{ px: 0 }}
+                      secondaryAction={
+                        <Tooltip title="Add to Google Calendar">
+                          <IconButton
+                            size="small"
+                            component="a"
+                            href={googleCalendarUrl(toCalEvent(e))}
+                            target="_blank"
+                            rel="noopener"
+                          >
+                            <GoogleIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      }
+                    >
                       <ListItemIcon sx={{ minWidth: 32 }}>
                         {eventTypeIcons[e.eventType] || eventTypeIcons.other}
                       </ListItemIcon>
@@ -517,13 +600,23 @@ const DashboardPage = () => {
                     My Invoices & Payments
                   </Button>
                 )}
-                <Button variant="outlined" fullWidth onClick={() => navigate('/teams')}>
-                  {isAdmin ? 'Manage Teams' : 'View Teams'}
-                </Button>
-                <Button variant="outlined" fullWidth onClick={() => navigate('/players')}>
-                  {isAdmin ? 'Manage Players' : 'View Players'}
-                </Button>
-                <Button variant="outlined" fullWidth onClick={() => navigate('/schedules')}>
+                {/* Teams/Players pages are coach/admin-only; showing them to
+                    parents produced dead buttons that silently bounced back. */}
+                {isCoachOrAbove && (
+                  <>
+                    <Button variant="outlined" fullWidth onClick={() => navigate('/teams')}>
+                      {isAdmin ? 'Manage Teams' : 'View Teams'}
+                    </Button>
+                    <Button variant="outlined" fullWidth onClick={() => navigate('/players')}>
+                      {isAdmin ? 'Manage Players' : 'View Players'}
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  onClick={() => navigate('/schedules')}
+                >
                   View Schedule
                 </Button>
                 {isAdmin && (

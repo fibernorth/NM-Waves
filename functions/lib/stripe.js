@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.stripeWebhook = exports.createCheckoutSession = void 0;
 const functions = __importStar(require("firebase-functions"));
@@ -42,11 +43,54 @@ const admin = __importStar(require("firebase-admin"));
 const stripe_1 = __importDefault(require("stripe"));
 const emails_1 = require("./emails");
 const getDb = () => admin.firestore();
+const SITE_URL = process.env.SITE_URL || ((_a = functions.config().app) === null || _a === void 0 ? void 0 : _a.site_url) || 'https://nmwaves.com';
+/**
+ * Compute fee total from a player finance document.
+ * Must match the formula in src/lib/api/finances.ts → computeFeeTotal.
+ */
+const computeFeeTotal = (data) => (data.registrationFee || 0) +
+    (data.uniformCost || 0) +
+    (data.tournamentFees || 0) +
+    (data.facilityFees || 0) +
+    (data.equipmentFees || 0) +
+    (data.otherFees || 0);
+/**
+ * Records a webhook event whose processing failed, so a charged payment is
+ * never silently lost. Writes a dead-letter document plus a high-severity admin
+ * notification for manual reconciliation/replay.
+ */
+async function recordFailedWebhook(event, error) {
+    const now = admin.firestore.Timestamp.now();
+    try {
+        await getDb().collection('failedStripeWebhookEvents').doc(event.id).set({
+            eventId: event.id,
+            eventType: event.type,
+            error: String(error),
+            payload: JSON.stringify(event.data.object).slice(0, 8000),
+            resolved: false,
+            createdAt: now,
+        });
+        await getDb().collection('adminNotifications').add({
+            type: 'webhook_processing_failure',
+            severity: 'high',
+            message: `Stripe webhook ${event.type} (${event.id}) failed to process. A payment may need manual reconciliation.`,
+            eventId: event.id,
+            createdAt: now,
+            read: false,
+        });
+    }
+    catch (writeErr) {
+        console.error('Failed to record dead-letter webhook event:', writeErr);
+    }
+}
 function getStripe() {
     var _a;
-    const secretKey = ((_a = functions.config().stripe) === null || _a === void 0 ? void 0 : _a.secret_key) || process.env.STRIPE_SECRET_KEY;
+    // STRIPE_SECRET_KEY is bound from Google Secret Manager via .runWith({ secrets })
+    // on each Stripe function, so it arrives in process.env at runtime. The legacy
+    // functions.config() fallback remains only for older deploys not yet migrated.
+    const secretKey = process.env.STRIPE_SECRET_KEY || ((_a = functions.config().stripe) === null || _a === void 0 ? void 0 : _a.secret_key);
     if (!secretKey) {
-        throw new Error('Stripe secret key not configured');
+        throw new Error('Stripe secret key not configured (set STRIPE_SECRET_KEY)');
     }
     return new stripe_1.default(secretKey, { apiVersion: '2023-10-16' });
 }
@@ -54,8 +98,10 @@ function getStripe() {
  * Creates a Stripe Checkout Session for a payment.
  * Called by the client to initiate Stripe Checkout.
  */
-exports.createCheckoutSession = functions.https.onCall(async (data, context) => {
-    var _a, _b;
+exports.createCheckoutSession = functions
+    .runWith({ secrets: ['STRIPE_SECRET_KEY'] })
+    .https.onCall(async (data, context) => {
+    var _a, _b, _c;
     const { financeId, playerId, amount, sponsorId, isAnonymous, invoiceToken, returnUrl, payerEmail, payerName, sponsorBusinessName, sponsorshipTarget, sponsorNotes } = data;
     const isSponsorPayment = !financeId && !playerId && !!sponsorBusinessName;
     if (!isSponsorPayment && (!financeId || !playerId)) {
@@ -80,6 +126,31 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
     if (amount < 0.5) {
         throw new functions.https.HttpsError('invalid-argument', 'Amount must be at least $0.50');
     }
+    if (amount > 10000) {
+        throw new functions.https.HttpsError('invalid-argument', 'Amount cannot exceed $10,000. Contact admin for larger payments.');
+    }
+    // Server-side invoice token validation (if provided)
+    if (invoiceToken) {
+        const tokenQuery = await getDb().collection('invoiceTokens')
+            .where('token', '==', invoiceToken)
+            .limit(1)
+            .get();
+        if (tokenQuery.empty) {
+            throw new functions.https.HttpsError('not-found', 'Invalid invoice token');
+        }
+        const tokenData = tokenQuery.docs[0].data();
+        if (tokenData.used) {
+            throw new functions.https.HttpsError('failed-precondition', 'This invoice has already been paid');
+        }
+        if (((_a = tokenData.expiresAt) === null || _a === void 0 ? void 0 : _a.toDate()) < new Date()) {
+            throw new functions.https.HttpsError('failed-precondition', 'This invoice has expired');
+        }
+        // The token must belong to the finance record being paid, otherwise a
+        // token for player A could be consumed while crediting player B.
+        if (tokenData.financeId && financeId && tokenData.financeId !== financeId) {
+            throw new functions.https.HttpsError('failed-precondition', 'Invoice token does not match this account');
+        }
+    }
     const stripe = getStripe();
     const metadata = {};
     let productName;
@@ -94,7 +165,7 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
             metadata.sponsorNotes = sponsorNotes;
         if (payerName)
             metadata.payerName = payerName;
-        if ((_a = context.auth) === null || _a === void 0 ? void 0 : _a.uid)
+        if ((_b = context.auth) === null || _b === void 0 ? void 0 : _b.uid)
             metadata.userId = context.auth.uid;
         productName = `Sponsorship from ${sponsorBusinessName}`;
         const targetLabel = sponsorshipTarget === 'player' ? 'Player Sponsorship' :
@@ -121,7 +192,7 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
             metadata.invoiceToken = invoiceToken;
         if (payerName)
             metadata.payerName = payerName;
-        if ((_b = context.auth) === null || _b === void 0 ? void 0 : _b.uid)
+        if ((_c = context.auth) === null || _c === void 0 ? void 0 : _c.uid)
             metadata.userId = context.auth.uid;
         productName = `Payment for ${financeData.playerName}`;
         productDescription = `${financeData.teamName} - ${financeData.season}`;
@@ -163,14 +234,16 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
 /**
  * Stripe webhook handler for processing completed payments.
  */
-exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+exports.stripeWebhook = functions
+    .runWith({ secrets: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'] })
+    .https.onRequest(async (req, res) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
     if (req.method !== 'POST') {
         res.status(405).send('Method Not Allowed');
         return;
     }
     const stripe = getStripe();
-    const webhookSecret = ((_a = functions.config().stripe) === null || _a === void 0 ? void 0 : _a.webhook_secret) || process.env.STRIPE_WEBHOOK_SECRET;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || ((_a = functions.config().stripe) === null || _a === void 0 ? void 0 : _a.webhook_secret);
     let event = undefined;
     // Try signature verification first (works with legacy webhook endpoints).
     // If it fails, fall back to parsing the body and verifying via the Stripe API
@@ -196,9 +269,23 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                 res.status(400).send('Invalid payload');
                 return;
             }
-            // Fetch the event directly from Stripe to confirm it's real
+            // Fetch the event directly from Stripe to confirm it's real. This
+            // authenticates the event (an attacker can't forge Stripe's own API
+            // response), and idempotency guards below protect against replay of a
+            // real event id — but it does mean signature verification is degraded.
             event = await stripe.events.retrieve(body.id);
             console.log(`Webhook verified via API retrieval: ${event.id} (${event.type})`);
+            // Surface the degraded state so the signing secret gets fixed.
+            try {
+                await getDb().collection('adminNotifications').add({
+                    type: 'webhook_signature_degraded',
+                    severity: 'medium',
+                    message: `A Stripe webhook (${event.type}) was accepted via API re-fetch because signature verification failed. Check that STRIPE_WEBHOOK_SECRET matches this endpoint's signing secret.`,
+                    read: false,
+                    createdAt: admin.firestore.Timestamp.now(),
+                });
+            }
+            catch (_) { /* notification is best-effort */ }
         }
         catch (err) {
             console.error('Webhook verification failed (both methods):', err.message);
@@ -211,7 +298,26 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
         const metadata = session.metadata || {};
         try {
             const amount = (session.amount_total || 0) / 100;
-            const processingFee = Math.round((amount * 0.029 + 0.30) * 100) / 100;
+            // Default to the standard-pricing estimate, then replace with the ACTUAL
+            // fee Stripe deducted (read from the charge's balance transaction) so the
+            // books match Stripe's real deposit exactly — card type, international
+            // surcharges, etc. all get captured rather than assumed.
+            let processingFee = Math.round((amount * 0.029 + 0.30) * 100) / 100;
+            try {
+                if (session.payment_intent) {
+                    const pi = await stripe.paymentIntents.retrieve(String(session.payment_intent), {
+                        expand: ['latest_charge.balance_transaction'],
+                    });
+                    const charge = pi.latest_charge;
+                    const bt = charge && typeof charge !== 'string' ? charge.balance_transaction : null;
+                    if (bt && typeof bt !== 'string' && typeof bt.fee === 'number') {
+                        processingFee = bt.fee / 100;
+                    }
+                }
+            }
+            catch (feeErr) {
+                console.error('Could not read actual Stripe fee, using estimate:', feeErr === null || feeErr === void 0 ? void 0 : feeErr.message);
+            }
             const paymentDate = admin.firestore.Timestamp.now();
             const paymentId = `stripe_${session.id}`;
             // === SPONSOR-ONLY PAYMENT (no financeId) ===
@@ -219,6 +325,17 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                 const businessName = metadata.sponsorBusinessName || ((_b = session.customer_details) === null || _b === void 0 ? void 0 : _b.name) || 'Unknown Sponsor';
                 const target = metadata.sponsorshipTarget || 'organization';
                 const notes = metadata.sponsorNotes || '';
+                // Idempotency check: see if this session was already processed
+                const existingSponsorIncome = await getDb().collection('income')
+                    .where('referenceNumber', '==', session.id)
+                    .where('category', '==', 'sponsorships')
+                    .limit(1)
+                    .get();
+                if (!existingSponsorIncome.empty) {
+                    console.log(`Sponsor payment already processed for session ${session.id}, skipping`);
+                    res.status(200).json({ received: true });
+                    return;
+                }
                 // 1. Create sponsor record
                 const sponsorRef = await getDb().collection('sponsors').add({
                     businessName,
@@ -270,7 +387,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                     paymentMethod: 'other',
                     isPaid: true,
                     paidDate: paymentDate,
-                    notes: `Stripe fee (2.9% + $0.30) on session ${session.id}`,
+                    notes: `Stripe processing fee (actual) on session ${session.id}`,
                     recordedBy: 'stripe_webhook',
                     createdAt: paymentDate,
                     updatedAt: paymentDate,
@@ -305,7 +422,18 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                     await glBatch.commit();
                 }
                 catch (glErr) {
-                    console.warn('GL posting failed for sponsor payment (non-fatal):', glErr);
+                    console.error('GL posting failed for sponsor payment:', glErr);
+                    // Write admin notification so failed GL postings are visible
+                    await getDb().collection('adminNotifications').add({
+                        type: 'gl_posting_failure',
+                        severity: 'high',
+                        message: `GL posting failed for sponsor payment from ${businessName} ($${amount.toFixed(2)}). Session: ${session.id}`,
+                        sourceType: 'income',
+                        sourceId: sponsorIncomeRef.id,
+                        error: String(glErr),
+                        createdAt: paymentDate,
+                        read: false,
+                    });
                 }
                 console.log(`Sponsor payment processed: $${amount} from ${businessName} (${target}), sponsor doc: ${sponsorRef.id}`);
                 res.status(200).json({ received: true });
@@ -314,8 +442,21 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
             // === PLAYER PAYMENT (has financeId) ===
             const { financeId, playerId, playerName, teamName, season, sponsorId, isAnonymous, invoiceToken, payerName, userId, } = metadata;
             if (!financeId || !playerId) {
-                console.error('Missing financeId or playerId in session metadata');
-                res.status(400).send('Missing metadata');
+                console.error('Missing financeId or playerId in session metadata — skipping (not retryable)');
+                res.status(200).json({ received: true, skipped: 'missing metadata' });
+                return;
+            }
+            // Session-level idempotency. The per-finance-doc guard below only runs
+            // when the finance doc exists; if it was deleted/renamed, a Stripe retry
+            // would otherwise re-post income + fee + GL. Keying on the session id in
+            // the income collection covers both cases (mirrors the sponsor branch).
+            const existingPlayerIncome = await getDb().collection('income')
+                .where('referenceNumber', '==', session.id)
+                .limit(1)
+                .get();
+            if (!existingPlayerIncome.empty) {
+                console.log(`Player payment already processed for session ${session.id}, skipping`);
+                res.status(200).json({ received: true });
                 return;
             }
             // 1. Record payment on player's finance record
@@ -404,7 +545,7 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                 season: season || '',
                 isPaid: true,
                 paidDate: paymentDate,
-                notes: `Stripe fee (2.9% + $0.30) on session ${session.id}`,
+                notes: `Stripe processing fee (actual) on session ${session.id}`,
                 recordedBy: 'stripe_webhook',
                 createdAt: paymentDate,
                 updatedAt: paymentDate,
@@ -470,7 +611,17 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                 await glBatch.commit();
             }
             catch (glErr) {
-                console.warn('GL posting failed for Stripe payment (non-fatal):', glErr);
+                console.error('GL posting failed for player payment:', glErr);
+                await getDb().collection('adminNotifications').add({
+                    type: 'gl_posting_failure',
+                    severity: 'high',
+                    message: `GL posting failed for player payment ($${amount.toFixed(2)}) - ${playerName || 'unknown'}. Session: ${session.id}`,
+                    sourceType: 'income',
+                    sourceId: incomeRef.id,
+                    error: String(glErr),
+                    createdAt: paymentDate,
+                    read: false,
+                });
             }
             // 3. If sponsor: update sponsor record
             if (sponsorId) {
@@ -492,7 +643,11 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                     });
                 }
             }
-            // 4. Mark invoice token as used (if applicable)
+            // 4. Mark invoice token as used — but ONLY when the payment actually
+            //    satisfies the invoice. Previously the token was marked used on any
+            //    payment, so a $0.50 payment permanently locked a $1,500 invoice as
+            //    "paid". For a per-charge token the payment must cover the charge
+            //    amount; for a full-balance token the account balance must reach ~0.
             if (invoiceToken) {
                 const tokenQuery = await getDb()
                     .collection('invoiceTokens')
@@ -500,20 +655,66 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                     .limit(1)
                     .get();
                 if (!tokenQuery.empty) {
-                    const tokenUpdate = {
-                        used: true,
-                        usedAt: paymentDate,
-                        usedBy: ((_k = session.customer_details) === null || _k === void 0 ? void 0 : _k.email) || 'stripe',
-                    };
-                    if (userId) {
-                        tokenUpdate.paidByUserId = userId;
+                    const tokenData = tokenQuery.docs[0].data();
+                    const EPSILON = 0.005; // half a cent, to absorb rounding
+                    let invoiceSatisfied;
+                    if (tokenData.chargeType && tokenData.chargeType !== 'full_balance') {
+                        const chargeAmount = tokenData.chargeAmount || tokenData.amountDue || 0;
+                        invoiceSatisfied = amount >= chargeAmount - EPSILON;
                     }
-                    await tokenQuery.docs[0].ref.update(tokenUpdate);
+                    else {
+                        // Recompute the live balance from the just-updated finance record.
+                        const freshFinance = await financeRef.get();
+                        if (freshFinance.exists) {
+                            const fData = freshFinance.data();
+                            const owed = computeFeeTotal(fData) - (fData.scholarshipAmount || 0);
+                            const paid = (fData.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+                            invoiceSatisfied = paid >= owed - EPSILON;
+                        }
+                        else {
+                            invoiceSatisfied = false;
+                        }
+                    }
+                    if (invoiceSatisfied) {
+                        const tokenUpdate = {
+                            used: true,
+                            usedAt: paymentDate,
+                            usedBy: ((_k = session.customer_details) === null || _k === void 0 ? void 0 : _k.email) || 'stripe',
+                        };
+                        if (userId) {
+                            tokenUpdate.paidByUserId = userId;
+                        }
+                        await tokenQuery.docs[0].ref.update(tokenUpdate);
+                    }
+                    else {
+                        console.log(`Invoice token ${invoiceToken} left open — payment of $${amount} did not fully satisfy the invoice`);
+                    }
                 }
             }
-            // 5. Send payment receipt email
+            // 5. Send payment receipt email — include the up-to-date account balance
+            //    (computed from the freshly-updated finance record) so the payer sees
+            //    what, if anything, remains owed right in the receipt.
             const recipientEmail = ((_l = session.customer_details) === null || _l === void 0 ? void 0 : _l.email) || '';
             if (recipientEmail) {
+                let balanceDue;
+                let receiptPayUrl;
+                try {
+                    const freshFinance = await financeRef.get();
+                    if (freshFinance.exists) {
+                        const fData = freshFinance.data();
+                        const owed = computeFeeTotal(fData) - (fData.scholarshipAmount || 0);
+                        const paid = (fData.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+                        balanceDue = Math.max(0, owed - paid);
+                        // If a balance remains and this checkout carried an invoice token
+                        // (left open because it wasn't fully satisfied), reuse it as a pay link.
+                        if (balanceDue > 0.005 && invoiceToken) {
+                            receiptPayUrl = `${SITE_URL}/pay/${invoiceToken}`;
+                        }
+                    }
+                }
+                catch (balErr) {
+                    console.error('Failed to compute receipt balance:', balErr);
+                }
                 try {
                     await (0, emails_1.sendPaymentReceipt)({
                         email: recipientEmail,
@@ -524,6 +725,8 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
                         date: new Date(),
                         sponsorBusinessName: sponsorId ? (_m = (await getDb().collection('sponsors').doc(sponsorId).get()).data()) === null || _m === void 0 ? void 0 : _m.businessName : undefined,
                         stripeSessionId: session.id,
+                        balanceDue,
+                        paymentUrl: receiptPayUrl,
                     });
                 }
                 catch (emailErr) {
@@ -535,8 +738,209 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
         }
         catch (error) {
             console.error('Error processing webhook:', error);
-            res.status(500).send('Internal error processing payment');
+            // A card was charged but processing failed. Return 200 (so Stripe does not
+            // retry against non-idempotent writes) but record a dead-letter + admin
+            // alert so the payment is never silently lost and can be reconciled.
+            await recordFailedWebhook(event, error);
+            res.status(200).json({ received: true, error: 'Processing failed — recorded for review' });
             return;
+        }
+    }
+    // === REFUND HANDLING ===
+    if (event.type === 'charge.refunded') {
+        try {
+            const charge = event.data.object;
+            const refundDate = admin.firestore.Timestamp.now();
+            // Income records store referenceNumber = the Checkout Session id (cs_...),
+            // but the charge only carries the PaymentIntent id (pi_...). Recover the
+            // Checkout Session id from the PaymentIntent so the lookup can match.
+            let sessionId = null;
+            try {
+                if (charge.payment_intent) {
+                    const sessions = await stripe.checkout.sessions.list({
+                        payment_intent: charge.payment_intent,
+                        limit: 1,
+                    });
+                    if (sessions.data.length)
+                        sessionId = sessions.data[0].id;
+                }
+            }
+            catch (lookupErr) {
+                console.warn(`Refund: could not resolve session for charge ${charge.id}:`, lookupErr);
+            }
+            let incomeDoc = null;
+            if (sessionId) {
+                const incomeQuery = await getDb().collection('income')
+                    .where('referenceNumber', '==', sessionId)
+                    .limit(1)
+                    .get();
+                if (!incomeQuery.empty)
+                    incomeDoc = incomeQuery.docs[0];
+            }
+            if (!incomeDoc) {
+                console.warn(`Refund: No income record found for charge ${charge.id} (session ${sessionId !== null && sessionId !== void 0 ? sessionId : 'unknown'})`);
+                res.status(200).json({ received: true, skipped: 'no matching income record' });
+                return;
+            }
+            const incomeData = incomeDoc.data();
+            const revenueAccount = incomeData.category === 'sponsorships' ? '4100' : '4000';
+            // Process each INDIVIDUAL refund on this charge. Idempotency is keyed on
+            // the refund id (not the charge), so a second/partial refund is recorded
+            // for its own delta instead of being skipped as a "duplicate charge".
+            let refunds = ((_o = charge.refunds) === null || _o === void 0 ? void 0 : _o.data) || [];
+            if (refunds.length === 0 && charge.id) {
+                try {
+                    const list = await stripe.refunds.list({ charge: charge.id, limit: 100 });
+                    refunds = list.data;
+                }
+                catch (listErr) {
+                    console.warn(`Refund: could not list refunds for charge ${charge.id}:`, listErr);
+                }
+            }
+            let processedAny = false;
+            let newlyRefunded = 0;
+            for (const refund of refunds) {
+                const existingRefund = await getDb().collection('income')
+                    .where('referenceNumber', '==', `refund_${refund.id}`)
+                    .limit(1)
+                    .get();
+                if (!existingRefund.empty)
+                    continue; // this refund already recorded
+                const amt = (refund.amount || 0) / 100;
+                processedAny = true;
+                newlyRefunded += amt;
+                // 1. Negative income record for THIS refund
+                const refundIncomeRef = await getDb().collection('income').add({
+                    date: refundDate,
+                    category: incomeData.category || 'player_payments',
+                    amount: -amt,
+                    source: incomeData.source || 'Stripe Refund',
+                    description: `Refund: ${incomeData.description || 'Stripe payment'}`,
+                    payerName: incomeData.payerName || '',
+                    paymentMethod: 'credit_card',
+                    referenceNumber: `refund_${refund.id}`,
+                    playerId: incomeData.playerId || '',
+                    teamId: incomeData.teamId || '',
+                    season: incomeData.season || '',
+                    notes: `Stripe refund ${refund.id} on charge ${charge.id}. Original income: ${incomeDoc.id}`,
+                    sourcePaymentId: incomeData.sourcePaymentId || '',
+                    sourceFinanceId: incomeData.sourceFinanceId || '',
+                    reconciled: false,
+                    recordedBy: 'stripe_webhook',
+                    createdAt: refundDate,
+                    updatedAt: refundDate,
+                });
+                // 2. Reversing GL entries (debit Revenue, credit Cash) for THIS refund
+                try {
+                    const glBatch = getDb().batch();
+                    glBatch.set(getDb().collection('generalLedger').doc(), {
+                        date: refundDate,
+                        accountNumber: revenueAccount,
+                        accountName: revenueAccount === '4100' ? 'Sponsorship Revenue' : 'Player Payment Revenue',
+                        type: 'debit',
+                        amount: amt,
+                        description: `Refund reversal: ${incomeData.description || 'payment'}`,
+                        sourceType: 'income',
+                        sourceId: refundIncomeRef.id,
+                        createdBy: 'stripe_webhook',
+                        createdAt: refundDate,
+                    });
+                    glBatch.set(getDb().collection('generalLedger').doc(), {
+                        date: refundDate,
+                        accountNumber: '1000',
+                        accountName: 'Cash - Checking',
+                        type: 'credit',
+                        amount: amt,
+                        description: `Refund reversal: ${incomeData.description || 'payment'}`,
+                        sourceType: 'income',
+                        sourceId: refundIncomeRef.id,
+                        createdBy: 'stripe_webhook',
+                        createdAt: refundDate,
+                    });
+                    await glBatch.commit();
+                }
+                catch (glErr) {
+                    console.error('GL posting failed for refund:', glErr);
+                    await getDb().collection('adminNotifications').add({
+                        type: 'gl_posting_failure',
+                        severity: 'high',
+                        message: `GL posting failed for refund of $${amt.toFixed(2)}. Charge: ${charge.id}, Refund: ${refund.id}`,
+                        sourceType: 'income',
+                        sourceId: refundIncomeRef.id,
+                        error: String(glErr),
+                        createdAt: refundDate,
+                        read: false,
+                    });
+                }
+            }
+            if (!processedAny) {
+                console.log(`All refunds already processed for charge ${charge.id}, skipping`);
+                res.status(200).json({ received: true });
+                return;
+            }
+            // 3. Update the player finance record: record the CUMULATIVE amount
+            // refunded on this charge, and only flag the payment fully 'refunded'
+            // when the entire charge has been returned (a partial refund is not).
+            const cumulativeRefunded = (charge.amount_refunded || 0) / 100;
+            const fullyRefunded = (charge.amount_refunded || 0) >= (charge.amount || 0) && (charge.amount || 0) > 0;
+            if (incomeData.sourceFinanceId) {
+                const financeRef = getDb().collection('playerFinances').doc(incomeData.sourceFinanceId);
+                const financeDoc = await financeRef.get();
+                if (financeDoc.exists) {
+                    const payments = financeDoc.data().payments || [];
+                    const updatedPayments = payments.map((p) => {
+                        if (p.stripeSessionId === sessionId || p.reference === sessionId) {
+                            return {
+                                ...p,
+                                refunded: fullyRefunded,
+                                partialRefund: !fullyRefunded,
+                                refundAmount: cumulativeRefunded,
+                                refundDate,
+                                refundChargeId: charge.id,
+                            };
+                        }
+                        return p;
+                    });
+                    await financeRef.update({ payments: updatedPayments, updatedAt: refundDate });
+                }
+            }
+            // 4. Create admin notification
+            await getDb().collection('adminNotifications').add({
+                type: 'payment_refunded',
+                severity: 'medium',
+                message: `Refund of $${newlyRefunded.toFixed(2)} processed for ${incomeData.payerName || 'unknown payer'} ($${cumulativeRefunded.toFixed(2)} total on this charge${fullyRefunded ? ', fully refunded' : ', partial'}). Charge: ${charge.id}`,
+                createdAt: refundDate,
+                read: false,
+            });
+            console.log(`Refund processed: $${newlyRefunded} (cumulative $${cumulativeRefunded}) for charge ${charge.id}`);
+        }
+        catch (error) {
+            console.error('Error processing refund webhook:', error);
+            await recordFailedWebhook(event, error);
+            res.status(200).json({ received: true, error: 'Refund processing failed — recorded for review' });
+            return;
+        }
+    }
+    // === DISPUTE HANDLING ===
+    if (event.type === 'charge.dispute.created') {
+        try {
+            const dispute = event.data.object;
+            const disputeAmount = (dispute.amount || 0) / 100;
+            await getDb().collection('adminNotifications').add({
+                type: 'payment_dispute',
+                severity: 'critical',
+                message: `Chargeback dispute opened for $${disputeAmount.toFixed(2)}. Charge: ${dispute.charge}. Reason: ${dispute.reason}. Respond by ${new Date((((_p = dispute.evidence_details) === null || _p === void 0 ? void 0 : _p.due_by) || 0) * 1000).toLocaleDateString()}.`,
+                disputeId: dispute.id,
+                chargeId: dispute.charge,
+                amount: disputeAmount,
+                reason: dispute.reason,
+                createdAt: admin.firestore.Timestamp.now(),
+                read: false,
+            });
+            console.log(`Dispute notification created for charge ${dispute.charge}`);
+        }
+        catch (error) {
+            console.error('Error processing dispute webhook:', error);
         }
     }
     res.status(200).json({ received: true });

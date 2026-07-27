@@ -28,6 +28,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { playersApi } from '@/lib/api/players';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin, hasRole } from '@/lib/auth/roles';
@@ -71,6 +72,7 @@ interface PlayerDocumentsCardProps {
 
 const PlayerDocumentsCard = ({ player }: PlayerDocumentsCardProps) => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
   const isCoachOnly = hasRole(user, 'coach');
@@ -223,8 +225,8 @@ const PlayerDocumentsCard = ({ player }: PlayerDocumentsCardProps) => {
                         <IconButton
                           size="small"
                           color="error"
-                          onClick={() => {
-                            if (window.confirm(`Delete "${doc.label}"?`)) {
+                          onClick={async () => {
+                            if (await confirm({ message: `Delete "${doc.label}"?`, confirmText: 'Delete', destructive: true })) {
                               deleteMutation.mutate(doc);
                             }
                           }}

@@ -23,6 +23,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { announcementsApi } from '@/lib/api/announcements';
 import { teamsApi } from '@/lib/api/teams';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { isCoach as checkIsCoach } from '@/lib/auth/roles';
 import type { Announcement } from '@/types/models';
 import { format } from 'date-fns';
@@ -32,6 +33,7 @@ import AnnouncementFormDialog from '../components/AnnouncementFormDialog';
 const AnnouncementsPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const confirm = useConfirm();
   const isCoach = checkIsCoach(user);
 
   const [openDialog, setOpenDialog] = useState(false);
@@ -97,8 +99,8 @@ const AnnouncementsPage = () => {
     setOpenDialog(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this announcement?')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ title: 'Delete announcement?', message: 'This removes the announcement.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

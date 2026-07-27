@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import toast from 'react-hot-toast';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -31,6 +32,7 @@ import PrintIcon from '@mui/icons-material/Print';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import { donorsApi, donorReceiptsApi } from '@/lib/api/donors';
+import { appSettingsApi } from '@/lib/api/appSettings';
 import type { Donor, DonorReceipt } from '@/types/models';
 
 const donorTypeColors: Record<string, 'info' | 'success' | 'secondary' | 'warning'> = {
@@ -87,6 +89,7 @@ const emptyDonationForm: DonationFormState = {
 
 const DonorManagementPage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const isAdmin = checkIsAdmin(user);
 
@@ -108,6 +111,13 @@ const DonorManagementPage = () => {
   const { data: receipts = [], isLoading: receiptsLoading, isError: receiptsError } = useQuery({
     queryKey: ['donorReceipts', receiptYearFilter],
     queryFn: () => donorReceiptsApi.getByTaxYear(receiptYearFilter),
+  });
+
+  // Organization identity for tax receipts — read from Admin Settings so the
+  // EIN, legal name, and address are correct (not hardcoded).
+  const { data: org } = useQuery({
+    queryKey: ['orgSettings'],
+    queryFn: () => appSettingsApi.getOrg(),
   });
 
   // ---- Summary calculations ----
@@ -183,9 +193,13 @@ const DonorManagementPage = () => {
         goodsOrServicesValue: params.goodsOrServicesProvided
           ? params.goodsOrServicesValue
           : undefined,
-        orgName: 'TC Waves Ball Club',
-        orgEIN: '88-4060076',
-        orgAddress: 'Las Cruces, NM',
+        orgName: org?.orgName || 'Northern Michigan Waves',
+        orgEIN: org?.ein || '',
+        orgAddress: [
+          org?.address,
+          [org?.city, org?.state].filter(Boolean).join(', '),
+          org?.zip,
+        ].filter(Boolean).join(', ') || 'Traverse City, MI',
         createdBy: user?.uid || '',
       });
     },
@@ -252,8 +266,8 @@ const DonorManagementPage = () => {
     }
   };
 
-  const handleDeleteDonor = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this donor?')) {
+  const handleDeleteDonor = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this donor?', confirmText: 'Delete', destructive: true })) {
       deleteDonorMutation.mutate(id);
     }
   };
@@ -306,8 +320,8 @@ const DonorManagementPage = () => {
     }
   };
 
-  const handleDeleteReceipt = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this receipt?')) {
+  const handleDeleteReceipt = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this receipt?', confirmText: 'Delete', destructive: true })) {
       deleteReceiptMutation.mutate(id);
     }
   };
@@ -441,7 +455,7 @@ const DonorManagementPage = () => {
       <Box sx={{ mb: 3 }}>
         <Typography variant="h4">Donor Management</Typography>
         <Typography variant="body2" color="text.secondary">
-          Manage donors and generate IRS-compliant donation receipts for TC Waves Ball Club.
+          Manage donors and generate IRS-compliant donation receipts for Northern Michigan Waves.
         </Typography>
       </Box>
 

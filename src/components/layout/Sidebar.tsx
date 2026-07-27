@@ -29,6 +29,10 @@ import BusinessIcon from '@mui/icons-material/Business';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import ChatIcon from '@mui/icons-material/Chat';
+import EmailIcon from '@mui/icons-material/Email';
+import PollIcon from '@mui/icons-material/Poll';
+import HowToRegIcon from '@mui/icons-material/HowToReg';
+import SportsIcon from '@mui/icons-material/Sports';
 import PeopleIcon from '@mui/icons-material/People';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import FundraiseIcon from '@mui/icons-material/Paid';
@@ -95,10 +99,17 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard', roles: ['all'] },
     { text: 'Teams', icon: <GroupsIcon />, path: '/teams', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Players', icon: <PersonIcon />, path: '/players', roles: ['coach', 'admin', 'master-admin'] },
-    { text: 'Schedule', icon: <CalendarMonthIcon />, path: '/schedules', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Schedule', icon: <CalendarMonthIcon />, path: '/schedules', roles: ['parent', 'coach', 'admin', 'master-admin'] },
     { text: 'Announcements', icon: <CampaignIcon />, path: '/announcements', roles: ['all'] },
     { text: 'Messaging', icon: <ChatIcon />, path: '/messaging', roles: ['all'] },
-    { text: 'Stats', icon: <ScoreboardIcon />, path: '/stats', roles: ['all'] },
+    { text: 'Email Parents', icon: <EmailIcon />, path: '/admin/email-parents', roles: ['admin', 'master-admin'] },
+    { text: 'Surveys', icon: <PollIcon />, path: '/surveys', roles: ['parent'] },
+    { text: 'Register for Tryouts', icon: <HowToRegIcon />, path: '/register-tryouts', roles: ['parent'] },
+    { text: 'Manage Surveys', icon: <PollIcon />, path: '/manage-surveys', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Tryout Signups', icon: <HowToRegIcon />, path: '/tryout-signups', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Evaluations', icon: <AssessmentIcon />, path: '/evaluations', roles: ['coach', 'admin', 'master-admin'] },
+    { text: 'Coach Applications', icon: <SportsIcon />, path: '/coach-applications', roles: ['admin', 'master-admin'] },
+    { text: 'Stats', icon: <ScoreboardIcon />, path: '/stats', roles: ['coach', 'admin', 'master-admin'] },
     { text: 'Homepage Manager', icon: <WebIcon />, path: '/homepage-manager', roles: ['admin', 'master-admin'] },
   ];
 
@@ -180,7 +191,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
             />
           </ListItem>
           {visibleItems.map((item) => (
-            <ListItem key={item.text} disablePadding>
+            <ListItem key={item.path} disablePadding>
               <ListItemButton
                 selected={isSelected(item.path)}
                 onClick={() => {
@@ -204,7 +215,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
         <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'center' }}>
           <SportsBaseballIcon sx={{ mr: 1, color: 'primary.main' }} />
           <Box>
-            <Box sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>TC Waves</Box>
+            <Box sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>Northern Michigan Waves</Box>
             <Box sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>Ball Club</Box>
           </Box>
         </Box>
@@ -213,7 +224,7 @@ const Sidebar = ({ drawerWidth, mobileOpen, onDrawerToggle }: SidebarProps) => {
 
       <List>
         {menuItems.filter(item => hasAccess(item.roles)).map((item) => (
-          <ListItem key={item.text} disablePadding>
+          <ListItem key={item.path} disablePadding>
             <ListItemButton
               selected={isSelected(item.path)}
               onClick={() => {

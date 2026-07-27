@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User as FirebaseUser
@@ -20,6 +21,8 @@ interface AuthState {
   signOut: () => Promise<void>;
   initialize: () => void;
   refreshUser: () => Promise<void>;
+  /** Re-send the email-verification link to the current user. */
+  resendVerification: () => Promise<void>;
 }
 
 const defaultPermissions = {
@@ -36,6 +39,13 @@ async function loadUserProfile(uid: string, email: string, firebaseUser: Firebas
   const userDoc = await getDoc(doc(db, 'users', uid));
   if (userDoc.exists()) {
     const userData = userDoc.data();
+    // A disabled account must never load a session. The Auth account is also
+    // disabled server-side, but this guards the client immediately (and covers
+    // any doc flagged before the Auth change propagates).
+    if (userData.disabled === true) {
+      await firebaseSignOut(auth);
+      throw new Error('This account has been disabled. Please contact your club administrator.');
+    }
     return {
       user: {
         uid,
@@ -152,6 +162,13 @@ export const useAuthStore = create<AuthState>((set) => ({
         updatedAt: new Date(),
       });
 
+      // Send the verification email — linking a child requires a verified email.
+      try {
+        await sendEmailVerification(userCredential.user);
+      } catch (e) {
+        console.warn('Failed to send verification email:', e);
+      }
+
       set({
         user: newUser,
         firebaseUser: userCredential.user,
@@ -169,6 +186,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     await firebaseSignOut(auth);
     set({ user: null, firebaseUser: null });
+  },
+
+  resendVerification: async () => {
+    const current = auth.currentUser;
+    if (!current) throw new Error('You need to be signed in to resend the verification email.');
+    await sendEmailVerification(current);
   },
 
   refreshUser: async () => {

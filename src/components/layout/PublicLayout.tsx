@@ -27,7 +27,10 @@ const NAV_LINKS = [
   { label: 'Teams', path: '/teams-roster' },
   { label: 'Schedule', path: '/schedule' },
   { label: 'Gallery', path: '/gallery' },
+  { label: 'Fees', path: '/pricing' },
   { label: 'Sponsors', path: '/sponsors' },
+  { label: 'Tryouts', path: '/tryouts' },
+  { label: 'Coach With Us', path: '/coach-application' },
   { label: 'Contact', path: '/contact' },
 ];
 
@@ -47,11 +50,11 @@ const PublicLayout = () => {
         <Box
           component="img"
           src="/images/logo.png"
-          alt="TC Waves"
+          alt="Northern Michigan Waves"
           sx={{ height: 28, width: 'auto' }}
         />
         <Typography variant="h6" color="primary" fontWeight={700}>
-          TC Waves
+          Northern Michigan Waves
         </Typography>
       </Box>
       <Divider />
@@ -99,7 +102,7 @@ const PublicLayout = () => {
               <Box
                 component="img"
                 src="/images/logo.png"
-                alt="TC Waves"
+                alt="Northern Michigan Waves"
                 sx={{ height: 36, width: 'auto' }}
               />
               <Typography
@@ -107,7 +110,7 @@ const PublicLayout = () => {
                 noWrap
                 sx={{ fontWeight: 700, color: 'primary.main' }}
               >
-                TC Waves Ball Club
+                Northern Michigan Waves
               </Typography>
             </Box>
 
@@ -193,10 +196,10 @@ const PublicLayout = () => {
           >
             <Box sx={{ textAlign: { xs: 'center', md: 'left' } }}>
               <Typography variant="h6" fontWeight={700} gutterBottom>
-                TC Waves Ball Club
+                Northern Michigan Waves
               </Typography>
               <Typography variant="body2" sx={{ opacity: 0.85 }}>
-                Work as a Team, Win as a Team, Better Every Time
+                Work as a team, Win as a team, Better every time
               </Typography>
             </Box>
             <Box sx={{ textAlign: { xs: 'center', md: 'right' } }}>
@@ -211,6 +214,8 @@ const PublicLayout = () => {
           <Divider sx={{ my: 2, borderColor: 'rgba(255,255,255,0.2)' }} />
           <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, flexWrap: 'wrap', mb: 2 }}>
             {[
+              { label: 'Coaching Staff', path: '/staff' },
+              { label: 'Parent Resources', path: '/parent-resources' },
               { label: 'Privacy Policy', path: '/privacy' },
               { label: 'Terms of Service', path: '/terms' },
               { label: 'Sponsorship Packages', path: '/sponsorship-packages' },
@@ -228,7 +233,7 @@ const PublicLayout = () => {
           </Box>
           <SponsorBanner mode="footer" />
           <Typography variant="body2" align="center" sx={{ opacity: 0.7, mt: 2 }}>
-            &copy; {new Date().getFullYear()} TC Waves Ball Club, Inc. All rights reserved.
+            &copy; {new Date().getFullYear()} Northern Michigan Waves, Inc. All rights reserved.
           </Typography>
           <Typography variant="caption" align="center" display="block" sx={{ opacity: 0.45, mt: 0.5 }}>
             Developed by KSA08 Enterprises

@@ -116,7 +116,7 @@ const StaffDirectoryPage = () => {
             Our Coaching Staff
           </Typography>
           <Typography variant="h6" sx={{ mt: 1, opacity: 0.9, fontWeight: 300 }}>
-            Meet the dedicated coaches behind TC Waves
+            Meet the dedicated coaches behind Northern Michigan Waves
           </Typography>
         </Container>
       </Box>
@@ -227,7 +227,7 @@ const StaffDirectoryPage = () => {
           </Typography>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            Interested in coaching with TC Waves? We're always looking for dedicated
+            Interested in coaching with Northern Michigan Waves? We're always looking for dedicated
             individuals who share our passion for developing young athletes.
           </Typography>
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>

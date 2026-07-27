@@ -164,7 +164,7 @@ const PrivacyPolicyPage = () => {
           </Typography>
           <Divider sx={{ mb: 3 }} />
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-            TC Waves Ball Club, Inc.
+            Northern Michigan Waves, Inc.
           </Typography>
           <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
             Traverse City, Michigan

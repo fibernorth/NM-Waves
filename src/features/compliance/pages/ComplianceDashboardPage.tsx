@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { useAuthStore } from '@/stores/authStore';
 import { isAdmin as checkIsAdmin } from '@/lib/auth/roles';
 import { volunteerHoursApi, backgroundChecksApi, form990Api } from '@/lib/api/compliance';
@@ -85,7 +86,7 @@ const defaultBackgroundCheckForm = {
 const defaultForm990Form = {
   taxYear: currentYear,
   formType: '990-N' as Form990Data['formType'],
-  orgName: 'TC Waves Ball Club',
+  orgName: 'Northern Michigan Waves',
   orgEIN: '88-4060076',
   orgAddress: '',
   orgPhone: '',
@@ -109,6 +110,7 @@ const defaultForm990Form = {
 
 const ComplianceDashboardPage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const admin = checkIsAdmin(user);
 
@@ -344,8 +346,8 @@ const ComplianceDashboardPage = () => {
     }
   };
 
-  const handleDeleteVolunteerHours = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this volunteer hour log?')) {
+  const handleDeleteVolunteerHours = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this volunteer hour log?', confirmText: 'Delete', destructive: true })) {
       deleteVolunteerMutation.mutate(id);
     }
   };
@@ -398,8 +400,8 @@ const ComplianceDashboardPage = () => {
     }
   };
 
-  const handleDeleteBgCheck = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this background check?')) {
+  const handleDeleteBgCheck = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this background check?', confirmText: 'Delete', destructive: true })) {
       deleteBgCheckMutation.mutate(id);
     }
   };
@@ -479,8 +481,8 @@ const ComplianceDashboardPage = () => {
     }
   };
 
-  const handleDeleteForm990 = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this Form 990 record?')) {
+  const handleDeleteForm990 = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this Form 990 record?', confirmText: 'Delete', destructive: true })) {
       deleteForm990Mutation.mutate(id);
     }
   };
@@ -743,7 +745,7 @@ const ComplianceDashboardPage = () => {
           Compliance Dashboard
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Track volunteer hours, background checks, and Form 990 data for TC Waves Ball Club.
+          Track volunteer hours, background checks, and Form 990 data for Northern Michigan Waves.
         </Typography>
       </Box>
 

@@ -20,6 +20,7 @@ import { Player } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { isAdmin as checkIsAdmin, isCoach as checkIsCoach } from '@/lib/auth/roles';
 import PlayerFormDialog from '../components/PlayerFormDialog';
 
@@ -27,6 +28,7 @@ const PlayersPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const confirm = useConfirm();
   const isAdmin = checkIsAdmin(user);
   const isCoach = checkIsCoach(user);
   const [openDialog, setOpenDialog] = useState(false);
@@ -95,15 +97,18 @@ const PlayersPage = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this player?')) {
+    if (await confirm({ title: 'Delete player?', message: 'This permanently removes the player record. This cannot be undone.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };
 
   const chargeMutation = useMutation({
     mutationFn: async ({ playerId, feeField, amount }: { playerId: string; feeField: string; amount: number }) => {
-      // Find existing finance record for this player/season
-      const existing = allFinances.find(f => f.playerId === playerId);
+      // Fetch the player's finance record directly — `allFinances` is only
+      // loaded for admins, so relying on it made every coach charge create a
+      // duplicate record instead of updating the existing one.
+      const existingList = await playerFinancesApi.getByPlayer(playerId);
+      const existing = existingList[0];
       if (existing) {
         const currentVal = (existing as any)[feeField] || 0;
         await playerFinancesApi.update(existing.id, { [feeField]: currentVal + amount });

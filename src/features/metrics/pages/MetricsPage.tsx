@@ -9,6 +9,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -23,6 +24,7 @@ import MetricFormDialog from '../components/MetricFormDialog';
 
 const MetricsPage = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const isCoachOrAdmin = checkIsCoach(user);
   const [openDialog, setOpenDialog] = useState(false);
@@ -55,8 +57,8 @@ const MetricsPage = () => {
     setOpenDialog(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Are you sure you want to delete this metric?')) {
+  const handleDelete = async (id: string) => {
+    if (await confirm({ message: 'Are you sure you want to delete this metric?', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(id);
     }
   };

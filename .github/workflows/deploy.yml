@@ -1,0 +1,56 @@
+name: Deploy to Firebase
+
+# Auto-deploy on merge: every push to main (i.e. when a PR merges) builds the
+# app and deploys hosting, functions, Firestore rules/indexes, and Storage
+# rules to the live Firebase project. Manual runs are allowed too.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two deploys at once; a newer merge supersedes an in-flight deploy.
+concurrency:
+  group: firebase-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # The Vite client build reads Firebase web config from .env at build time.
+      # These values are public (they ship in the browser bundle); we store them
+      # as one secret to keep setup simple.
+      - name: Write build environment
+        run: printf '%s' "${{ secrets.DOTENV }}" > .env
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Install function dependencies
+        run: npm ci --prefix functions
+
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
+      # Longer discovery timeout avoids the "Cannot determine backend
+      # specification. Timeout after 10000" error on functions analysis.
+      - name: Deploy
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          FUNCTIONS_DISCOVERY_TIMEOUT: '120'
+        run: >
+          firebase deploy
+          --only hosting,functions,firestore:rules,firestore:indexes,storage
+          --project tcw-website-builder
+          --force
+          --non-interactive
+          --token "$FIREBASE_TOKEN"

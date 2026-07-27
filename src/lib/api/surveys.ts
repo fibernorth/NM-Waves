@@ -1,0 +1,353 @@
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  getCountFromServer,
+  addDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  Timestamp,
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
+import type { Survey, SurveyResponse, SurveyQuestion, SurveyAnswer } from '@/types/models';
+
+const SURVEYS = 'surveys';
+const RESPONSES = 'surveyResponses';
+const COACH_RESPONSES = 'surveyResponsesCoach';
+const RESPONSE_IDENTITIES = 'surveyResponseIdentities';
+
+/** Who submitted a response — readable ONLY by master-admins (see rules). */
+export interface SurveyResponseIdentity {
+  responseId: string;
+  surveyId: string;
+  submittedBy: string;
+  submittedByName: string;
+  submittedByEmail: string;
+}
+
+/**
+ * Multi-value answers (checkbox selections, ranking order) are stored as a
+ * single string joined with this separator. Ranking answers are joined in
+ * chosen order (first = rank 1).
+ */
+export const ANSWER_SEPARATOR = ' | ';
+
+/** Has this survey's deadline passed? (No deadline = never closes.) */
+export const surveyIsClosed = (s: Survey): boolean =>
+  !!s.closesAt && s.closesAt.getTime() < Date.now();
+
+/**
+ * Responses are anonymous, so completion can't be tracked server-side without
+ * defeating that. "Already took this" is remembered locally per account so a
+ * refresh doesn't re-offer a submitted survey. Shared by the Surveys page and
+ * the dashboard's "needs your attention" card.
+ */
+const completedKey = (uid: string) => `nmw-surveys-completed-${uid}`;
+export const loadCompletedSurveys = (uid: string): Set<string> => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(completedKey(uid)) || '[]'));
+  } catch {
+    return new Set();
+  }
+};
+export const saveCompletedSurveys = (uid: string, ids: Set<string>): void => {
+  try {
+    localStorage.setItem(completedKey(uid), JSON.stringify([...ids]));
+  } catch {
+    /* storage unavailable — in-memory tracking still applies */
+  }
+};
+
+const cleanData = <T extends Record<string, unknown>>(obj: T): T => {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) if (v !== undefined) out[k] = v;
+  return out as T;
+};
+
+/**
+ * Deep-strip undefined from plain data (arrays/objects of JSON-safe values).
+ * Firestore rejects undefined ANYWHERE in a document — including inside array
+ * elements like survey questions — which the shallow cleaner can't reach.
+ */
+const deepClean = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+
+const convertSurvey = (id: string, data: any): Survey => ({
+  id,
+  title: data.title || '',
+  description: data.description || '',
+  questions: (data.questions || []) as SurveyQuestion[],
+  active: data.active ?? false,
+  anonymous: data.anonymous ?? true,
+  closesAt: data.closesAt?.toDate?.() || null,
+  assignedTeamIds: data.assignedTeamIds || [],
+  assignedPlayerIds: data.assignedPlayerIds || [],
+  audienceTeamIds: data.audienceTeamIds || [],
+  audienceAllCoaches: data.audienceAllCoaches ?? undefined,
+  createdBy: data.createdBy || '',
+  createdByRole: data.createdByRole,
+  createdAt: data.createdAt?.toDate?.() || new Date(),
+  updatedAt: data.updatedAt?.toDate?.() || new Date(),
+});
+
+const convertResponse = (id: string, data: any): SurveyResponse => ({
+  id,
+  surveyId: data.surveyId,
+  answers: (data.answers || []) as SurveyAnswer[],
+  submittedAt: data.submittedAt?.toDate?.() || new Date(),
+  surveyCreatedBy: data.surveyCreatedBy,
+});
+
+/** Is this survey targeted at a parent whose children are on these teams / are these player ids? */
+export const surveyMatchesAudience = (
+  s: Survey,
+  childTeamIds: string[],
+  childPlayerIds: string[]
+): boolean => {
+  if ((s.assignedTeamIds?.length || 0) === 0 && (s.assignedPlayerIds?.length || 0) === 0) return true;
+  if (s.assignedTeamIds?.some((t) => childTeamIds.includes(t))) return true;
+  if (s.assignedPlayerIds?.some((p) => childPlayerIds.includes(p))) return true;
+  return false;
+};
+
+/**
+ * Team ids a family belongs to, for audience matching. Player records in this
+ * app often carry a stale teamId while the teamName is correct (other code
+ * even auto-heals this), so a child counts as being on a team when EITHER the
+ * id or the name matches — otherwise team-targeted surveys silently vanish
+ * for exactly the families they were meant for.
+ */
+export const effectiveTeamIdsForChildren = (
+  children: Array<{ teamId?: string; teamName?: string }>,
+  teams: Array<{ id: string; name: string }>
+): string[] => {
+  const ids = new Set<string>();
+  for (const c of children) {
+    if (c.teamId) ids.add(c.teamId);
+    if (c.teamName) {
+      const byName = teams.find(
+        (t) => t.name.trim().toLowerCase() === c.teamName!.trim().toLowerCase()
+      );
+      if (byName) ids.add(byName.id);
+    }
+  }
+  return [...ids];
+};
+
+export const surveysApi = {
+  getAll: async (): Promise<Survey[]> => {
+    const q = query(collection(db, SURVEYS), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => convertSurvey(d.id, d.data()));
+  },
+
+  getActive: async (): Promise<Survey[]> => {
+    const q = query(collection(db, SURVEYS), where('active', '==', true), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => convertSurvey(d.id, d.data()));
+  },
+
+  getById: async (id: string): Promise<Survey | null> => {
+    const snap = await getDoc(doc(db, SURVEYS, id));
+    return snap.exists() ? convertSurvey(snap.id, snap.data()) : null;
+  },
+
+  create: async (data: Omit<Survey, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+    const ref = await addDoc(collection(db, SURVEYS), cleanData({
+      ...data,
+      questions: deepClean(data.questions || []),
+      closesAt: data.closesAt ? Timestamp.fromDate(data.closesAt) : null,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    }));
+    return ref.id;
+  },
+
+  update: async (id: string, data: Partial<Survey>): Promise<void> => {
+    const patch: Record<string, unknown> = { ...data, updatedAt: Timestamp.now() };
+    if (data.questions) patch.questions = deepClean(data.questions);
+    if ('closesAt' in data) {
+      patch.closesAt = data.closesAt ? Timestamp.fromDate(data.closesAt) : null;
+    }
+    await updateDoc(doc(db, SURVEYS, id), cleanData(patch as any));
+  },
+
+  remove: async (id: string): Promise<void> => {
+    await deleteDoc(doc(db, SURVEYS, id));
+  },
+};
+
+export const surveyResponsesApi = {
+  /**
+   * Submit a response. Writes the full answer set to the admin-only collection,
+   * and (if the survey has any coach-visible questions) a projection with only
+   * those answers to the coach-visible collection, tagged with the survey's
+   * creator so that creator (a coach) may read it.
+   */
+  submit: async (
+    survey: Survey,
+    answers: SurveyAnswer[],
+    identity?: { uid: string; name: string; email: string }
+  ): Promise<void> => {
+    // The admin-visible document is the source of truth: once this write
+    // succeeds, the submission has succeeded.
+    const responseRef = await addDoc(collection(db, RESPONSES), {
+      surveyId: survey.id,
+      answers,
+      submittedAt: Timestamp.now(),
+    });
+
+    // Who submitted, stored in a SEPARATE master-admin-only collection: the
+    // response doc itself is readable by all admins and rules can't hide
+    // individual fields, so identity must never live on it. Best-effort —
+    // a failure here must not fail (or duplicate) the submission.
+    if (identity?.uid) {
+      try {
+        await setDoc(doc(db, RESPONSE_IDENTITIES, responseRef.id), {
+          responseId: responseRef.id,
+          surveyId: survey.id,
+          submittedBy: identity.uid,
+          submittedByName: identity.name || '',
+          submittedByEmail: identity.email || '',
+          submittedAt: Timestamp.now(),
+        });
+      } catch (err) {
+        console.warn('[surveys] identity record write failed (response saved):', err);
+      }
+    }
+
+    // The coach projection is best-effort. If it fails we must NOT surface an
+    // error — the parent would resubmit and create a DUPLICATE response in the
+    // admin collection, silently skewing every admin-side aggregate.
+    try {
+      const coachVisibleIds = new Set(
+        survey.questions.filter((q) => q.visibleToCoaches).map((q) => q.id)
+      );
+      if (coachVisibleIds.size > 0) {
+        const coachAnswers = answers.filter((a) => coachVisibleIds.has(a.questionId));
+        // Tag the doc with the survey's coach audience so the rules can grant
+        // read access to every coach whose players received the survey — not
+        // just the creator. Older surveys without the denormalized fields fall
+        // back to their team assignment (everyone-surveys → all coaches).
+        const noAssignment =
+          (survey.assignedTeamIds?.length || 0) === 0 && (survey.assignedPlayerIds?.length || 0) === 0;
+        const audienceAllCoaches = survey.audienceAllCoaches ?? noAssignment;
+        const audienceTeamIds =
+          survey.audienceTeamIds && survey.audienceTeamIds.length > 0
+            ? survey.audienceTeamIds
+            : survey.assignedTeamIds || [];
+        await addDoc(collection(db, COACH_RESPONSES), {
+          surveyId: survey.id,
+          surveyCreatedBy: survey.createdBy,
+          audienceAllCoaches,
+          audienceTeamIds,
+          answers: coachAnswers,
+          submittedAt: Timestamp.now(),
+        });
+      }
+    } catch (err) {
+      console.warn('[surveys] coach-visible projection write failed (admin copy saved):', err);
+    }
+  },
+
+  // Admin only (Firestore rules): full responses.
+  getBySurvey: async (surveyId: string): Promise<SurveyResponse[]> => {
+    const q = query(collection(db, RESPONSES), where('surveyId', '==', surveyId));
+    const snap = await getDocs(q);
+    return snap.docs
+      .map((d) => convertResponse(d.id, d.data()))
+      .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+  },
+
+  /**
+   * Coach-visible projection. A coach may read a survey's coach-visible
+   * answers when the survey's audience covers one of their teams (rules check
+   * the denormalized audience tags per document), or when they created it.
+   * The broad surveyId query works for tagged (new) responses; if it's denied
+   * — e.g. legacy untagged docs — fall back to the creator-only query.
+   */
+  getCoachVisibleBySurvey: async (surveyId: string, coachUid?: string): Promise<SurveyResponse[]> => {
+    const run = async (creatorOnly: boolean) => {
+      const q = creatorOnly && coachUid
+        ? query(
+            collection(db, COACH_RESPONSES),
+            where('surveyId', '==', surveyId),
+            where('surveyCreatedBy', '==', coachUid)
+          )
+        : query(collection(db, COACH_RESPONSES), where('surveyId', '==', surveyId));
+      const snap = await getDocs(q);
+      return snap.docs
+        .map((d) => convertResponse(d.id, d.data()))
+        .sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+    };
+    try {
+      return await run(false);
+    } catch {
+      if (!coachUid) return [];
+      return run(true);
+    }
+  },
+
+  /**
+   * Response count for a survey without downloading the responses. Admins
+   * count the full collection; coaches count their own coach-visible docs
+   * (the extra surveyCreatedBy filter is what the security rules allow).
+   */
+  /**
+   * Master-admin only (enforced by rules): who submitted each response,
+   * keyed by response id. Returns an empty map for anyone else.
+   */
+  getIdentitiesBySurvey: async (surveyId: string): Promise<Record<string, SurveyResponseIdentity>> => {
+    try {
+      const q = query(collection(db, RESPONSE_IDENTITIES), where('surveyId', '==', surveyId));
+      const snap = await getDocs(q);
+      const out: Record<string, SurveyResponseIdentity> = {};
+      for (const d of snap.docs) {
+        const data = d.data();
+        out[data.responseId || d.id] = {
+          responseId: data.responseId || d.id,
+          surveyId: data.surveyId || surveyId,
+          submittedBy: data.submittedBy || '',
+          submittedByName: data.submittedByName || '',
+          submittedByEmail: data.submittedByEmail || '',
+        };
+      }
+      return out;
+    } catch {
+      return {};
+    }
+  },
+
+  countBySurvey: async (surveyId: string, isAdmin: boolean, coachUid?: string): Promise<number> => {
+    try {
+      if (isAdmin) {
+        const snap = await getCountFromServer(
+          query(collection(db, RESPONSES), where('surveyId', '==', surveyId))
+        );
+        return snap.data().count;
+      }
+      // Coach: audience-based count first, creator-only fallback for legacy docs.
+      try {
+        const snap = await getCountFromServer(
+          query(collection(db, COACH_RESPONSES), where('surveyId', '==', surveyId))
+        );
+        return snap.data().count;
+      } catch {
+        const snap = await getCountFromServer(
+          query(
+            collection(db, COACH_RESPONSES),
+            where('surveyId', '==', surveyId),
+            where('surveyCreatedBy', '==', coachUid || '')
+          )
+        );
+        return snap.data().count;
+      }
+    } catch {
+      return 0;
+    }
+  },
+};

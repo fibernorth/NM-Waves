@@ -45,11 +45,13 @@ import { MediaItem } from '@/types/models';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { isAdmin as checkIsAdmin, isCoach as checkIsCoach } from '@/lib/auth/roles';
 
 const MediaPage = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
+  const confirm = useConfirm();
   const theme = useTheme();
   const isSmDown = useMediaQuery(theme.breakpoints.down('sm'));
   const isMdDown = useMediaQuery(theme.breakpoints.down('md'));
@@ -241,8 +243,8 @@ const MediaPage = () => {
     return false;
   };
 
-  const handleDelete = (item: MediaItem) => {
-    if (window.confirm('Are you sure you want to delete this media item?')) {
+  const handleDelete = async (item: MediaItem) => {
+    if (await confirm({ title: 'Delete media?', message: 'This permanently removes the photo/video.', confirmText: 'Delete', destructive: true })) {
       deleteMutation.mutate(item);
     }
   };

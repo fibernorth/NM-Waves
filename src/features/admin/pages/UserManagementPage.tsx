@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmProvider';
 import { collection, getDocs, doc, updateDoc, query, orderBy, Timestamp } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase/config';
 import { userProvisioningApi } from '@/lib/api/userProvisioning';
@@ -34,6 +35,7 @@ import toast from 'react-hot-toast';
 const UserManagementPage = () => {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const isAdmin = checkIsAdmin(user);
 
   const [provisioning, setProvisioning] = useState(false);
@@ -94,7 +96,7 @@ const UserManagementPage = () => {
   const [resettingPw, setResettingPw] = useState<string | null>(null);
 
   const handleResetPassword = async (email: string) => {
-    if (!window.confirm(`Send password reset email to ${email}?`)) return;
+    if (!(await confirm({ title: 'Send password reset?', message: `Send a password reset email to ${email}?`, confirmText: 'Send' }))) return;
     setResettingPw(email);
     try {
       const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;

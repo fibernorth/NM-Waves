@@ -12,6 +12,8 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import type { Team } from '@/types/models';
+import { tryoutApplicantsApi } from '@/lib/api/tryoutApplicants';
+import { eligibleApplicantsForTeam } from '@/lib/utils/prospects';
 
 const COLLECTION = 'teams';
 
@@ -74,7 +76,36 @@ export const teamsApi = {
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     }));
+    // Attach any existing tryout prospects that fit this new team (age band +
+    // one up, same season). Handles families who tried out before the team
+    // existed. Best-effort — never fails the team creation.
+    try {
+      await teamsApi.syncProspects(docRef.id);
+    } catch (err) {
+      console.warn('Prospect sync after team create failed:', err);
+    }
     return docRef.id;
+  },
+
+  /**
+   * Attach every eligible tryout prospect to a team. Additive and idempotent:
+   * adds the team to each matching applicant's prospectTeamIds (own division
+   * band + one up, same season); never removes, so a coach's manual changes to
+   * other applicants are preserved. Returns how many were newly attached.
+   */
+  syncProspects: async (teamId: string): Promise<number> => {
+    const teamSnap = await getDoc(doc(db, COLLECTION, teamId));
+    if (!teamSnap.exists()) return 0;
+    const team = convertTeam(teamSnap.id, teamSnap.data());
+    const applicants = await tryoutApplicantsApi.getAll();
+    const eligible = eligibleApplicantsForTeam(team, applicants).filter(
+      // Skip those already converted/declined or already attached.
+      (a) => a.status !== 'converted' && a.status !== 'declined' && !(a.prospectTeamIds || []).includes(teamId)
+    );
+    for (const a of eligible) {
+      await tryoutApplicantsApi.addProspectTeam(a.id, teamId);
+    }
+    return eligible.length;
   },
 
   // Update team

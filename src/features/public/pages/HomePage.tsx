@@ -108,7 +108,7 @@ const ScoreCard = ({ post }: { post: HomepagePost }) => (
         {post.gameDate ? format(post.gameDate, 'MMM d, yyyy') : ''}
       </Typography>
       <Typography variant="subtitle2" sx={{ mt: 0.5 }}>
-        {post.teamName || 'TC Waves'}
+        {post.teamName || 'Northern Michigan Waves'}
       </Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, my: 1 }}>
         <Typography variant="h4" fontWeight={700} color={post.result === 'W' ? 'success.main' : post.result === 'L' ? 'error.main' : 'text.primary'}>
@@ -143,6 +143,7 @@ const MediaCard = ({ post }: { post: HomepagePost }) => {
             component="iframe"
             src={embedUrl}
             title={post.title}
+            loading="lazy"
             sx={{
               position: 'absolute',
               top: 0,
@@ -286,7 +287,7 @@ const SwagStoreBanner = ({ settings }: { settings: SwagStoreSettings }) => {
 const ORG_SCHEMA = JSON.stringify({
   '@context': 'https://schema.org',
   '@type': 'SportsOrganization',
-  name: 'TC Waves Ball Club',
+  name: 'Northern Michigan Waves',
   description: 'Youth travel softball organization in Traverse City, Michigan',
   url: window.location.origin,
   logo: `${window.location.origin}/images/logo.png`,
@@ -357,7 +358,9 @@ const HomePage = () => {
       {/* Hero Section */}
       <Box
         sx={{
-          background: 'linear-gradient(135deg, #001240 0%, #001f5b 50%, #9bcbeb 100%)',
+          // End on a mid navy (not the very light #9bcbeb) so white hero text
+          // keeps sufficient contrast (WCAG AA) across the whole gradient.
+          background: 'linear-gradient(135deg, #001240 0%, #001f5b 55%, #2f6fb0 100%)',
           color: 'white',
           py: { xs: 6, md: 10 },
           textAlign: 'center',
@@ -367,7 +370,7 @@ const HomePage = () => {
           <Box
             component="img"
             src="/images/logo.png"
-            alt="TC Waves Logo"
+            alt="Northern Michigan Waves Logo"
             sx={{
               width: { xs: 120, md: 160 },
               height: 'auto',
@@ -382,7 +385,7 @@ const HomePage = () => {
             gutterBottom
             sx={{ fontSize: { xs: '2rem', md: '3rem' } }}
           >
-            TC Waves Ball Club
+            Northern Michigan Waves
           </Typography>
           <Typography
             variant="h5"
@@ -394,7 +397,7 @@ const HomePage = () => {
               fontStyle: 'italic',
             }}
           >
-            Work as a Team, Win as a Team, Better Every Time
+            Work as a team, Win as a team, Better every time
           </Typography>
           <Typography
             variant="h6"
@@ -428,6 +431,24 @@ const HomePage = () => {
               }}
             >
               Register for Tryouts
+            </Button>
+            <Button
+              component={RouterLink}
+              to="/coach-application"
+              variant="contained"
+              size="large"
+              sx={{
+                backgroundColor: 'rgba(255,255,255,0.15)',
+                color: 'white',
+                fontWeight: 600,
+                px: 4,
+                border: '1px solid rgba(255,255,255,0.6)',
+                '&:hover': {
+                  backgroundColor: 'rgba(255,255,255,0.25)',
+                },
+              }}
+            >
+              Coach With Us
             </Button>
             <Button
               component={RouterLink}
@@ -670,7 +691,9 @@ const HomePage = () => {
                   height="200"
                   image={photo.src}
                   alt={photo.label}
-                  sx={{ objectFit: 'cover' }}
+                  loading="lazy"
+                  onError={(e: any) => { e.currentTarget.style.display = 'none'; }}
+                  sx={{ objectFit: 'cover', bgcolor: 'grey.100' }}
                 />
                 <CardContent sx={{ py: 1, px: 2 }}>
                   <Typography variant="body2" color="text.secondary" align="center">
@@ -724,7 +747,7 @@ const HomePage = () => {
             gutterBottom
             sx={{ fontSize: { xs: '1.75rem', md: '2.25rem' }, mb: 1 }}
           >
-            Why Join TC Waves?
+            Why Join Northern Michigan Waves?
           </Typography>
           <Typography
             variant="body1"

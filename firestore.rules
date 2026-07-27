@@ -38,6 +38,12 @@ service cloud.firestore {
       return isAuth() && hasRole('sponsor');
     }
 
+    // Roles as a list, tolerant of the legacy single `role` string and of docs
+    // missing the field entirely — used by the users update rule below.
+    function rolesList(data) {
+      return ('roles' in data) ? data.roles : (('role' in data) ? [data.role] : []);
+    }
+
     // SITE SETTINGS (org name, logo, etc.)
     match /siteSettings/{docId} {
       allow read: if true;
@@ -50,11 +56,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // PLAYERS — public read for roster pages (public pages only expose safe fields:
-    // firstName, lastInitial, jerseyNumber, positions). PII fields like contacts
-    // and medical info should be filtered at the application level.
+    // PLAYERS — sensitive minor PII (DOB, medical notes, emergency contacts).
+    // Readable ONLY by coaches/admins and by a parent for their own linked
+    // children — not by arbitrary logged-in users. Public roster pages use the
+    // getPublicRoster Cloud Function (safe fields only); the child-link search
+    // uses searchLinkablePlayers (no PII). linkedPlayerIds is verified and
+    // frozen against client writes (see users rule below), so it is trustworthy.
     match /players/{playerId} {
-      allow read: if true;
+      allow read: if isCoach() || (
+        isAuth() && hasRole('parent') &&
+        playerId in getUserData(request.auth.uid).linkedPlayerIds
+      );
       allow write: if isCoach();
     }
 
@@ -74,14 +86,42 @@ service cloud.firestore {
     }
 
     // USER DATA
+    // Self-signup may ONLY create a parent (or role-less) account. Any privileged
+    // role — coach, admin, master-admin, sponsor — must be granted by an admin
+    // via provisioning; it can never be self-assigned at signup. This closes the
+    // escalation where anyone could register as 'coach' and gain roster/PII access.
     match /users/{userId} {
-      allow read: if isAuth();
-      allow create: if (isAuth() && request.auth.uid == userId && !('roles' in request.resource.data && request.resource.data.roles.hasAny(['admin', 'master-admin']))) || isAdmin();
-      // Users can update their own profile, but ONLY admins can change roles
-      allow update: if isAdmin() || (
+      // Adult PII (emails, phones, links). A signed-in user may read only their
+      // OWN doc; coaches/admins may read the directory (roster/provisioning/
+      // user management). This closes the leak where any account — including a
+      // fresh self-signup parent — could read every user's contact details.
+      allow read: if isAuth() && (isUser(userId) || isCoach());
+      allow create: if isAdmin() || (
+        isAuth() && request.auth.uid == userId &&
+        (!('roles' in request.resource.data) || request.resource.data.roles == ['parent']) &&
+        (!('role' in request.resource.data) || request.resource.data.role == 'parent')
+      );
+      // Update paths:
+      //  • master-admin: unrestricted.
+      //  • admin: may edit OTHER users, but cannot grant master-admin, cannot
+      //    edit an existing master-admin, and cannot change their OWN roles —
+      //    this closes the self-escalation where an admin promotes themselves.
+      //  • self: profile fields only. roles/role/linkedPlayerIds/teamIds are all
+      //    frozen — links and team membership are written only by the verified
+      //    Admin-SDK callables (linkChild / syncLinkedParentTeams), never by a
+      //    client writing its own doc, so a coach can't self-grant a team (which
+      //    would leak other teams' data) and linkedPlayerIds stays trustworthy.
+      allow update: if isMasterAdmin() || (
+        isAdmin() &&
+        !('master-admin' in rolesList(request.resource.data)) &&
+        !('master-admin' in rolesList(resource.data)) &&
+        (request.auth.uid != userId || rolesList(request.resource.data) == rolesList(resource.data))
+      ) || (
         isUser(userId) &&
         (!('roles' in request.resource.data) || request.resource.data.roles == resource.data.roles) &&
-        (!('role' in request.resource.data) || request.resource.data.role == resource.data.role)
+        (!('role' in request.resource.data) || request.resource.data.role == resource.data.role) &&
+        (!('linkedPlayerIds' in request.resource.data) || request.resource.data.linkedPlayerIds == resource.data.linkedPlayerIds) &&
+        (!('teamIds' in request.resource.data) || request.resource.data.teamIds == resource.data.teamIds)
       );
       allow delete: if isMasterAdmin();
     }
@@ -92,14 +132,53 @@ service cloud.firestore {
     }
 
     // TRYOUTS
+    // Coaches read/manage everything. A signed-in parent may read and edit the
+    // registrations they submitted, matched on their verified sign-in email
+    // (list queries must filter email == their own). Public may create.
     match /tryout-applicants/{applicantId} {
-      allow read: if isCoach();
+      // Email match requires a VERIFIED email — otherwise anyone who registers
+      // an (unverified) account under a family's known email could read/edit
+      // their tryout application.
+      allow read: if isCoach() || (
+        isAuth() && request.auth.token.email_verified == true &&
+        resource.data.email == request.auth.token.email
+      );
       allow create: if true;
-      allow update: if isCoach();
+      allow update: if isCoach() || (
+        isAuth() && request.auth.token.email_verified == true &&
+        resource.data.email == request.auth.token.email &&
+        // Parents may edit details but never the review pipeline fields.
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.email == resource.data.email
+      );
 
       match /evaluations/{evaluationId} {
         allow read, write: if isCoach();
       }
+    }
+
+    // TRYOUT SESSIONS (dates/locations offered) — public so the tryout signup
+    // page can show them; coaches/admins manage them.
+    match /tryoutSessions/{docId} {
+      allow read: if true;
+      allow write: if isCoach();
+    }
+
+    // EVALUATIONS (templates, events, scores) — coach/admin tooling. Guest
+    // evaluators never touch these directly; they go through the tokened
+    // Cloud Functions (getEvalEventByToken / submitEvalScoreByToken).
+    match /evalTemplates/{docId} {
+      allow read, write: if isCoach();
+    }
+    match /evalEvents/{docId} {
+      allow read, write: if isCoach();
+    }
+    match /evalScores/{docId} {
+      allow read, write: if isCoach();
+    }
+    // Evaluator invite tokens — coach-managed; token lookup happens server-side.
+    match /evalInvites/{docId} {
+      allow read, write: if isCoach();
     }
 
     // COMMUNICATIONS
@@ -111,7 +190,14 @@ service cloud.firestore {
 
     // SPONSORS
     match /sponsors/{docId} {
-      allow read: if true;
+      // Sponsor docs carry contact email + donation history. Only sponsors who
+      // opted into public display are anonymously readable; admins and the
+      // owning sponsor can always read. (Field-level projection for the public
+      // page — hiding email/contributions on displayed sponsors — is a
+      // follow-up via a sanitizing Cloud Function.)
+      allow read: if ('displayOnPublicSite' in resource.data && resource.data.displayOnPublicSite == true)
+                  || isAdmin()
+                  || (isSponsor() && resource.data.userId == request.auth.uid);
       // Only admins and sponsor-role users can create; webhook creates via Admin SDK
       allow create: if isAdmin() || isSponsor();
       allow update: if isAdmin() || (isSponsor() && resource.data.userId == request.auth.uid);
@@ -178,9 +264,12 @@ service cloud.firestore {
     }
 
     // PLAYER FINANCES
-    // Parents can read finance records for their linked children; sponsors can read for sponsored players
+    // Coaches/admins read all; parents read their linked children's records.
+    // Sponsors no longer get blanket read of every player's finances — the
+    // sponsor "pay a player" flow uses the getPlayerFinanceSummary Cloud
+    // Function, which returns only a minimal balance summary.
     match /playerFinances/{docId} {
-      allow read: if isCoach() || isSponsor() || (
+      allow read: if isCoach() || (
         isAuth() && hasRole('parent') &&
         resource.data.playerId in getUserData(request.auth.uid).linkedPlayerIds
       );
@@ -251,10 +340,15 @@ service cloud.firestore {
     }
 
     // INVOICE TOKENS (QR code payments)
-    // Public read so payment page works; only admins and cloud functions can create/update.
-    // The markUsed call is done by cloud function (stripe webhook), not client-side.
+    // NOT publicly listable — the docs hold every child's name, fee breakdown,
+    // scholarship amount, and the secret payment token. The public payment page
+    // resolves a single invoice via the getInvoiceByToken Cloud Function.
+    // Parents may read their linked children's invoices; admins read all.
     match /invoiceTokens/{docId} {
-      allow read: if true;
+      allow read: if isAdmin() || (
+        isAuth() && hasRole('parent') &&
+        resource.data.playerId in getUserData(request.auth.uid).linkedPlayerIds
+      );
       allow create: if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
@@ -278,15 +372,92 @@ service cloud.firestore {
       allow create: if true;
     }
 
+    // COACH APPLICATIONS — public can apply; only admins review/update.
+    match /coachApplications/{docId} {
+      allow create: if true;
+      allow read, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
     // APP SETTINGS
     match /appSettings/{docId} {
-      allow read: if isAuth();
+      // The season doc (just non-sensitive season labels) is public so the
+      // unauthenticated tryout registration page can file a signup under the
+      // current tryout season. Everything else requires sign-in.
+      allow read: if isAuth() || docId == 'season';
       allow write: if isAdmin();
     }
 
     // ADMIN NOTIFICATIONS (content moderation alerts)
     match /adminNotifications/{docId} {
       allow read, write: if isAdmin();
+    }
+
+    // FAILED STRIPE WEBHOOK EVENTS (dead-letter; written by Cloud Function via
+    // Admin SDK). Admins read/update to reconcile; no client create.
+    match /failedStripeWebhookEvents/{docId} {
+      allow read, update: if isAdmin();
+      allow create, delete: if false;
+    }
+
+    // SURVEYS — questions are readable by any signed-in user (so parents can
+    // fill them out). Coaches and admins can create surveys; a survey can be
+    // edited/deleted by an admin or by the coach who created it.
+    match /surveys/{docId} {
+      allow read: if isAuth();
+      allow create: if isCoach();
+      allow update, delete: if isAdmin() || (isCoach() && resource.data.createdBy == request.auth.uid);
+    }
+
+    // SURVEY RESPONSES (full) — private. Any signed-in user may SUBMIT (create),
+    // but the complete answer set is readable ONLY by admins/master-admins.
+    // Immutable once submitted.
+    match /surveyResponses/{docId} {
+      allow create: if isAuth();
+      allow read: if isAdmin();
+      allow update: if false;
+      allow delete: if isMasterAdmin();
+    }
+
+    // SURVEY RESPONSES (coach-visible projection) — contains only the answers
+    // to questions marked visible-to-coaches. Readable by admins, the coach
+    // who created the survey, and any coach whose team is in the survey's
+    // audience (denormalized onto each doc as audienceAllCoaches /
+    // audienceTeamIds at submit time). Coaches never see the full/admin-only
+    // answers, which live in surveyResponses.
+    // SURVEY RESPONSE IDENTITIES — who submitted each response. Deliberately a
+    // separate collection: response docs are readable by ALL admins and rules
+    // cannot hide fields, so identity lives here where ONLY master-admins can
+    // read it. Coaches and regular admins never see who said what.
+    match /surveyResponseIdentities/{docId} {
+      allow create: if isAuth();
+      allow read: if isMasterAdmin();
+      allow update: if false;
+      allow delete: if isMasterAdmin();
+    }
+
+    // Legacy fallback for coach-response docs written before audience tagging:
+    // consult the survey's own assignment. Everyone-surveys open to all
+    // coaches; team surveys to coaches of the assigned teams.
+    function legacySurveyAllowsCoach(surveyId) {
+      let s = get(/databases/$(database)/documents/surveys/$(surveyId)).data;
+      let u = getUserData(request.auth.uid);
+      return (s.assignedTeamIds.size() == 0 && s.assignedPlayerIds.size() == 0) ||
+             ('teamIds' in u && s.assignedTeamIds.hasAny(u.teamIds));
+    }
+
+    match /surveyResponsesCoach/{docId} {
+      allow create: if isAuth();
+      allow read: if isAdmin() || (isCoach() && (
+        resource.data.surveyCreatedBy == request.auth.uid ||
+        ('audienceAllCoaches' in resource.data && resource.data.audienceAllCoaches == true) ||
+        ('audienceTeamIds' in resource.data &&
+         'teamIds' in getUserData(request.auth.uid) &&
+         resource.data.audienceTeamIds.hasAny(getUserData(request.auth.uid).teamIds)) ||
+        (!('audienceTeamIds' in resource.data) && legacySurveyAllowsCoach(resource.data.surveyId))
+      ));
+      allow update: if false;
+      allow delete: if isAdmin();
     }
 
     // HOMEPAGE POSTS (public-facing content)

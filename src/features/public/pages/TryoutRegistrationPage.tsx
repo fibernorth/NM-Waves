@@ -15,10 +15,13 @@ import {
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useQuery } from '@tanstack/react-query';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { tryoutApplicantsApi } from '@/lib/api/tryoutApplicants';
+import { createTryoutRegistration } from '@/lib/api/prospectAssignment';
+import { tryoutSessionsApi, sessionLabel } from '@/lib/api/tryoutSessions';
+import { format } from 'date-fns';
 
-const AGE_GROUPS = ['8U', '10U', '12U', '14U', '16U', '18U'];
+const AGE_GROUPS = ['8U', '9U', '10U', '11U', '12U', '13U', '14U', '16U', '18U'];
 
 const POSITIONS = [
   'Pitcher',
@@ -38,6 +41,7 @@ const tryoutSchema = z.object({
   playerLastName: z.string().min(1, 'Player last name is required').max(50),
   dateOfBirth: z.string().min(1, 'Date of birth is required'),
   ageGroup: z.string().min(1, 'Age group is required'),
+  location: z.string().min(1, 'City/town is required').max(100),
   parentName: z.string().min(1, 'Parent/guardian name is required').max(100),
   email: z.string().min(1, 'Email is required').email('Please enter a valid email address'),
   phone: z.string().min(1, 'Phone number is required').max(20),
@@ -52,6 +56,12 @@ const TryoutRegistrationPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState('');
+
+  const { data: sessions = [] } = useQuery({
+    queryKey: ['tryoutSessionsUpcoming'],
+    queryFn: () => tryoutSessionsApi.getUpcoming(),
+  });
 
   const {
     control,
@@ -65,6 +75,7 @@ const TryoutRegistrationPage = () => {
       playerLastName: '',
       dateOfBirth: '',
       ageGroup: '',
+      location: '',
       parentName: '',
       email: '',
       phone: '',
@@ -78,19 +89,24 @@ const TryoutRegistrationPage = () => {
     setSubmitting(true);
 
     try {
-      await tryoutApplicantsApi.create({
+      const chosen = sessions.find((s) => s.id === sessionId);
+      await createTryoutRegistration({
         playerFirstName: data.playerFirstName.trim(),
         playerLastName: data.playerLastName.trim(),
         dateOfBirth: data.dateOfBirth,
         ageGroup: data.ageGroup,
+        location: data.location.trim(),
         parentName: data.parentName.trim(),
         email: data.email.trim(),
         phone: data.phone.trim(),
         positionsInterested: data.positionsInterested,
         priorExperience: data.priorExperience?.trim() || '',
+        sessionId: chosen?.id,
+        sessionLabel: chosen ? sessionLabel(chosen) : undefined,
       });
       setSubmitted(true);
       reset();
+      setSessionId('');
     } catch (err) {
       console.error('Error submitting tryout registration:', err);
       setSubmitError('There was an error submitting your registration. Please try again later.');
@@ -120,7 +136,7 @@ const TryoutRegistrationPage = () => {
             Tryout Registration
           </Typography>
           <Typography variant="h6" sx={{ mt: 1, opacity: 0.9, fontWeight: 300 }}>
-            Register your player for TC Waves tryouts
+            Register your player for Northern Michigan Waves tryouts
           </Typography>
         </Container>
       </Box>
@@ -153,6 +169,19 @@ const TryoutRegistrationPage = () => {
             </Box>
           ) : (
             <>
+              {sessions.length > 0 && (
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" fontWeight={600} gutterBottom>Tryout dates & locations</Typography>
+                  {sessions.map((s) => (
+                    <Typography key={s.id} variant="body2">
+                      • {format(s.date, 'EEEE, MMMM d, yyyy')}
+                      {s.startTime ? ` — ${s.startTime}${s.endTime ? `–${s.endTime}` : ''}` : ''}
+                      {s.location ? ` @ ${s.location}` : ''}
+                      {s.ageGroups.length > 0 ? ` (${s.ageGroups.join(', ')})` : ''}
+                    </Typography>
+                  ))}
+                </Alert>
+              )}
               <Typography variant="h5" fontWeight={600} gutterBottom>
                 Player Information
               </Typography>
@@ -240,6 +269,24 @@ const TryoutRegistrationPage = () => {
                             </MenuItem>
                           ))}
                         </TextField>
+                      )}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="location"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          label="City / Town"
+                          placeholder="e.g. Traverse City"
+                          error={!!errors.location}
+                          helperText={errors.location?.message || 'Where the player lives (for travel distance)'}
+                          required
+                        />
                       )}
                     />
                   </Grid>
@@ -351,6 +398,24 @@ const TryoutRegistrationPage = () => {
                       )}
                     />
                   </Grid>
+
+                  {sessions.length > 0 && (
+                    <Grid item xs={12}>
+                      <TextField
+                        select
+                        fullWidth
+                        label="Which tryout date will you attend?"
+                        value={sessionId}
+                        onChange={(e) => setSessionId(e.target.value)}
+                        helperText="Optional — you can decide later"
+                      >
+                        <MenuItem value="">Not sure yet</MenuItem>
+                        {sessions.map((s) => (
+                          <MenuItem key={s.id} value={s.id}>{sessionLabel(s)}</MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                  )}
 
                   {/* Submit */}
                   <Grid item xs={12}>
