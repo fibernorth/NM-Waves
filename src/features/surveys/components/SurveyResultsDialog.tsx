@@ -160,7 +160,14 @@ const QuestionSummary = ({ q, responses }: { q: SurveyQuestion; responses: Surve
   );
 };
 
-const csvEscape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+// Quote for CSV, and neutralize spreadsheet formula injection: a value that
+// starts with = + - @ (or a control char) is prefixed with a quote so Excel /
+// Sheets treat it as text rather than executing it as a formula.
+const csvEscape = (v: string) => {
+  const s = String(v ?? '');
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return `"${safe.replace(/"/g, '""')}"`;
+};
 
 const SurveyResultsDialog = ({ survey, isAdmin, onClose }: Props) => {
   const [tab, setTab] = useState(0);

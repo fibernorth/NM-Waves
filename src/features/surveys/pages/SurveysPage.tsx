@@ -28,6 +28,8 @@ import {
   DialogActions,
   ToggleButton,
   ToggleButtonGroup,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import PollIcon from '@mui/icons-material/Poll';
 import LockIcon from '@mui/icons-material/Lock';
@@ -66,6 +68,8 @@ const isAnswered = (q: SurveyQuestion, value: string | undefined): boolean => {
 
 const SurveysPage = () => {
   const { user } = useAuthStore();
+  const theme = useTheme();
+  const fullScreenDialog = useMediaQuery(theme.breakpoints.down('sm'));
   const uid = user?.uid || 'anon';
   const linkedPlayerIds = user?.linkedPlayerIds || [];
 
@@ -347,7 +351,7 @@ const SurveysPage = () => {
         onClose={() => !submitMutation.isPending && setActive(null)}
         maxWidth="sm"
         fullWidth
-        fullScreen={typeof window !== 'undefined' && window.innerWidth < 600}
+        fullScreen={fullScreenDialog}
       >
         <DialogTitle sx={{ pb: 1 }}>
           {active?.title}

@@ -50,7 +50,7 @@ const ContactPage = () => {
           <Grid item xs={12} md={7}>
             <Paper sx={{ p: { xs: 3, md: 4 } }}>
               <Typography variant="h5" fontWeight={600} gutterBottom>
-                Send Us a Message
+                Email Us
               </Typography>
               <Divider sx={{ mb: 3 }} />
 

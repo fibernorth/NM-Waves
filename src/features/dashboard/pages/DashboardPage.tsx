@@ -204,13 +204,18 @@ const DashboardPage = () => {
     enabled: isParent && linkedPlayerIds.length > 0,
   });
 
-  // Parents see only their children's teams' events (club-wide events with no
-  // team attached still show); everyone else sees the full upcoming list.
+  // Parents see only their children's teams' events; a coach (non-admin) sees
+  // only their own teams' events; admins see everything. Club-wide events with
+  // no team attached always show.
   const childTeamIdsForEvents = linkedChildren.map((c) => c.teamId).filter(Boolean) as string[];
+  const scopeEvents = (teamIds: string[]) =>
+    rawEvents.filter((e: any) => !e.teamId || teamIds.includes(e.teamId));
   const upcomingEvents = (
     isParent && !isCoachOrAbove
-      ? rawEvents.filter((e: any) => !e.teamId || childTeamIdsForEvents.includes(e.teamId))
-      : rawEvents
+      ? scopeEvents(childTeamIdsForEvents)
+      : isCoachOnly
+        ? scopeEvents(coachTeamIds)
+        : rawEvents
   ).slice(0, 6);
 
   const toCalEvent = (e: any): CalendarEvent => ({
